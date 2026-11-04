@@ -1,4 +1,8 @@
-"""uibin_tab.py: adds Outfit Manager's tab header to the game's compiled UI (ui/bin__/*.uibinary). Since the 10-30 game
+"""REFERENCE ONLY since 0.3.3: the plugin does this in memory (plugin/src/uibin_patch.cpp, the same steps; tested byte
+for byte against this script's output on the 20261104 files), onto whatever copy of the files the game loads, and the
+mod ships none of them. Kept to compare with and to inspect files.
+
+uibin_tab.py: adds Outfit Manager's tab header to the game's compiled UI (ui/bin__/*.uibinary). Since the 10-30 game
 update the screens are built from these files, not from the .thtml, so the mod's quickslotitem.thtml merge alone adds no
 tab (OM logs "headers=4 ... no Outfits tab injected"). A copy of QuickSlotHeader8's element goes in right after it, as
 QuickSlotHeaderOutfits, and the parent's child count goes up by one; "!cpp-none" keeps it hidden until OM shows it.

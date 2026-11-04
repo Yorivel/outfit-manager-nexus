@@ -1,4 +1,4 @@
-# Outfit Manager 0.3.2: source
+# Outfit Manager 0.3.3: source
 
 Source of [Outfit Manager](https://www.nexusmods.com/crimsondesert/mods/4029) for Crimson Desert, by Strahlimeier.
 MIT licence (see `LICENSE.txt`); MinHook keeps its own BSD licence (`THIRD-PARTY-MinHook-LICENSE.txt`).
@@ -8,9 +8,9 @@ To play, use the main file, not this one.
 
 | Folder | What |
 |---|---|
-| `src/` | the plugin, `OutfitManager.asi` (C++20, MSVC). `outfit_manager.cpp` is the mod; `lang.*` its languages; `resolver.*` finds the game's functions and data again after a game update; `om_sigs.h` holds their signatures |
-| `mod/Outfit Manager/` | the DMM browser mod: compiled gear-wheel UI files with the Outfits tab, CSS merges, texture list, textures, the language files (`lang/`), manifest |
-| `tools/` | Python scripts that made the mod's art, UI files and language files (see below) |
+| `src/` | the plugin, `OutfitManager.asi` (C++20, MSVC). `outfit_manager.cpp` is the mod; `uibin_patch.*` adds the Outfits tab header and the value text to the gear wheel's compiled UI files as the game loads them; `lang.*` its languages; `resolver.*` finds the game's functions and data again after a game update; `om_sigs.h` holds their signatures |
+| `mod/Outfit Manager/` | the DMM browser mod: the CSS merge, the texture list merge, textures, the language files (`lang/`), manifest |
+| `tools/` | Python scripts that made the mod's art and language files (see below) |
 
 ## Building the plugin
 
@@ -34,9 +34,10 @@ Python 3 scripts used to make the mod's files. They have the author's folder pat
 
 - `omring_gen.py`: the Outfits wheel art for 1 to 12 slots (rings, hover and worn wedges), from the game's own wheels,
   and the mod's CSS.
-- `uibin_tab.py`: patches the game's compiled gear-wheel UI files (`ui/bin__/*.uibinary`): the Outfits tab header,
-  and a second text in each slot for a setting's value. It needs the vanilla files; the author's setup gets them from
-  a separate tool (`pack.vanilla_index()`), not included.
+- `uibin_tab.py`: the Python original of `src/uibin_patch.cpp` (until 0.3.2 the mod shipped the gear wheel's compiled
+  UI files patched by it; since 0.3.3 the plugin patches whatever copy the game loads). Kept as reference and to
+  compare: its output and the plugin's are byte for byte the same. It needs the vanilla files; the author's setup gets
+  them from a separate tool (`pack.vanilla_index()`), not included.
 - `om_key_icons.py`: the controller confirm icons (Cross, A), cut from the game's key guide atlas.
 - `lang_gen.py`: see Languages. `lang_terms.py` (with `paloc_dump.py`): the game's own words for terms the mod
   uses, in all its languages, from its string tables (also needs `pack`).

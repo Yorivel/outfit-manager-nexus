@@ -28,7 +28,6 @@ VAN = os.path.join(ROOT, 're', 'omring', 'vanilla')
 GEN = os.path.join(ROOT, 're', 'omring', 'gen')
 MOD = r'F:\MyProjects\CDInventory\mod\Outfit Manager\files\0012'   # the mod's source (DMM's copy is an install)
 IMG_DIR = 'ui/texture/image/customizeimage'   # DMM routes new DDS here (as Barber Unlocked's)
-VANILLA_ATLAS = os.path.join(ROOT, 'vanilla', 'ui', 'xml', 'texture', 'cd_hud_itemquickslot_08.xml')
 
 S = 900                 # ring image size (and generated canvases)
 C = (S - 1) / 2         # centre in pixel-index coordinates
@@ -590,16 +589,26 @@ def gen(n):
 
 
 def write_atlas():
-    vanilla = open(VANILLA_ATLAS, 'rb').read().decode('utf-8-sig').rstrip('\r\n')
-    lines = [vanilla]
+    """Registers the ring / focus / worn textures in the merge for the game's texture list (DMM adds them to whatever
+    copy of the list it mounts; the mod ships no whole copy, so it neither masks a game update nor clashes with another
+    mod's list). The merge's other lines (badge_gen.py, om_key_icons.py) stay."""
     names = [nm for n in GENERATED for nm in (name_ring(n), name_focus(n))]
     names += [nm for n in range(1, SLOTS + 1) for nm in (name_worn(n), name_worn_amber(n), name_worn_green(n))]
-    for nm in names:
-            lines.append(f'<Texture Name="{nm}" Filename="UI/texture/image/customizeimage/{nm}.dds" Type="Image" '
-                         f'GetRect="1,1,{S},{S}"/>')
-    path = os.path.join(MOD, 'ui', 'xml', 'texture', 'cd_hud_itemquickslot_08.xml')
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    open(path, 'wb').write(('\ufeff' + '\r\n'.join(lines) + '\r\n\r\n').encode('utf-8'))
+    path = os.path.join(MOD, 'ui', 'xml', 'texture', 'cd_hud_itemquickslot_08.xml.merge')
+    raw = open(path, 'rb').read()
+    bom, nl = raw.startswith(b'ï»¿'), '
+' if b'
+' in raw else '
+'  # (written back as it was)
+    mine = ('outfitmanager_ring_', 'outfitmanager_focus_', 'outfitmanager_worn_')
+    lines = [l for l in raw.decode('utf-8-sig').replace('
+', '
+').split('
+') if not any(m in l for m in mine)]
+    at = next(i for i, l in enumerate(lines) if '<__dmm_root__>' in l) + 1
+    lines[at:at] = [f'<Texture Name="{nm}" Filename="UI/texture/image/customizeimage/{nm}.dds" Type="Image" '
+                    f'GetRect="1,1,{S},{S}"/>' for nm in names]
+    open(path, 'wb').write((('﻿' if bom else '') + nl.join(lines)).encode('utf-8'))
 
 
 CSS_HEAD = """/* Outfit Manager: Outfits tab looks (classes set by OutfitManager.asi; merged into the game's file by DMM).

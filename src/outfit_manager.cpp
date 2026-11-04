@@ -21,6 +21,7 @@
 #include "lang.h"
 #include "log.h"
 #include "resolver.h"
+#include "uibin_patch.h"
 
 #include <windows.h>
 #include <hidsdi.h>
@@ -94,6 +95,11 @@ U64 kRvaSelectorSelect = 0x100d180;  // (selector, u32 index, u8): lights dot `i
 U64 kRvaTextureExists = 0x422f7e0;  // bool (*(uiMgr + kOffUiTextures), var*)
 U64 kRvaIconWitness0 = 0xe008e0;     // only offset witnesses for kOffUiTextures: the game's own "texture exists?" callers
 U64 kRvaIconWitness1 = 0xe012e0;
+U64 kRvaTextCaretWitness0 = 0x4181e90; // only offset witnesses for the text box fields (kOffInput*): the game's own
+U64 kRvaTextCaretWitness1 = 0x4183320; // text box code (caret keys, selection, typing)
+U64 kRvaTextCaretWitness2 = 0x4187e30;
+U64 kRvaElemRectWitness0 = 0x49fb9f0;  // only offset witnesses for kOffElemRect: the game's element overlap test
+U64 kRvaElemRectWitness1 = 0x4ab9dd0;  // and a layout setter
 U64 kRvaIconScriptFlag = 0x71760b8; // u8: game uses the image-script path instead (logged only)
 constexpr U16 kPropBackgroundImage = 0x26;
 // Centre tooltip (RootQuickSlot+0x188, UIGamePlayControlCommonInfoDescription) show/hide state machine.
@@ -157,6 +163,13 @@ U64 kRvaRootCursorSelect = 0x1208ae0;
 // Where the game's own code uses a field, its offset is read from that instruction at start-up (tools/siggen.py
 // OFFSETS lists the witness functions); a changed offset is only taken when two witnesses agree. Fields without a
 // witness keep their value. Every object reached through them is type-checked before use (layout_ok).
+U64 kOffSelectorPage = 0xf4;      // ItemSelector: u32 dots per page (only the lit dot's page is drawn)
+U64 kOffInputText = 0x68;         // TextEdit input: -> its text element
+U64 kOffInputCaret = 0xd8;        // TextEdit input: u32 caret, in characters
+U64 kOffInputCaretEnd = 0xdc;     // TextEdit input: u32 selection end (== caret: no selection)
+U64 kOffInputCaretMoved = 0xf1;   // TextEdit input: u8, set by the game's caret keys (redraw the caret now)
+U64 kOffInputBusy = 0xf9;         // TextEdit input: u8, nonzero while the box is not taking text
+U64 kOffElemRect = 0xd0;          // element: float left, top, right, bottom (client px; +4 / +8 / +0xc)
 U64 kOffRootTabBar = 0x180;       // RootQuickSlot -> TabBar script
 U64 kOffRootCenterTip = 0x188;    // -> centre tooltip script (CommonInfoDescription)
 U64 kOffRootCursor = 0x1d0;       // -> RadialCursor script
@@ -291,6 +304,7 @@ struct CategoryHolder {
 const CategoryHolder g_none_category{"none", {}};
 
 U64 g_base = 0;
+std::atomic<int> g_ui_tab_added{0}; // gear-wheel UI files that got the Outfits header (patched in memory at load)
 HMODULE g_self = nullptr;
 
 // The static-info getters take the key by value since the 2026-10-30 update (first argument unused; was const u16*).
@@ -903,7 +917,7 @@ U64 __fastcall build_hook(U64 self, U64 out, U64 a, U64 b)
     // Only inject when the thtml has exactly one extra header (= the browser mod is active).
     bool inject = records == 4 && headers == records + 1 && layout_ok_build(self) && prepare_fake_record();
     if (!inject) {
-        LOG("  no Outfits tab injected");
+        LOG("  no Outfits tab injected%s", g_ui_tab_added ? "" : " (the gear wheel's UI files got no Outfits header at load: see \"gear wheel UI\" above)");
         g_fake_key = 0xFFFF; // (an earlier build's record must not be served for this one)
         return g_build_orig(self, out, a, b);
     }
@@ -1268,7 +1282,6 @@ void show_mode_dots(U64 script, U32 count, U32 mode);
 // last view's count (closing the wheel keeps it too), so ours is written with the count: one page. (Closing the wheel
 // in the settings / Visibility also left the dots of the next opening's changes unshown: close_hook puts the slots back
 // to the outfits first.) Flag 1 skips the select's sound; 0 plays it, kept for a scroll, where the lit dot moves.
-constexpr U64 kOffSelectorPage = 0xf4;
 U32 mode_count(U32 i);
 U32 mode_lit(U32 i);
 
@@ -4974,8 +4987,8 @@ void read_modal_text_raw(U64 modal, char* out, int size)
     out[0] = 0;
     __try {
         U64 input = *reinterpret_cast<U64*>(modal + kOffModalInput);
-        if (input && *reinterpret_cast<unsigned char*>(input + 0xf9) == 0)
-            g_get_text(*reinterpret_cast<U64*>(input + 0x68), out, size);
+        if (input && *reinterpret_cast<unsigned char*>(input + kOffInputBusy) == 0)
+            g_get_text(*reinterpret_cast<U64*>(input + kOffInputText), out, size);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         out[0] = 0;
     }
@@ -5209,7 +5222,6 @@ U64 __fastcall text_click_hook(U64 modal, U64 a, U64 elem, U64 flag)
 // take are put in at the caret (input +0xd8 / +0xdc: caret and selection end, in characters), which then moves past them
 // (+0xf1: the caret-moved flag the game's own keys set, so the caret is drawn there at once).
 bool game_focused();
-constexpr U64 kOffInputCaret = 0xd8, kOffInputCaretEnd = 0xdc, kOffInputCaretMoved = 0xf1;
 WNDPROC g_game_wndproc = nullptr;
 std::mutex g_typed_mu;
 std::wstring g_typed;       // characters since the batch began
@@ -5258,8 +5270,8 @@ bool write_modal_text_raw(U64 modal, const char* text, U32 caret)
 {
     __try {
         U64 input = *reinterpret_cast<U64*>(modal + kOffModalInput);
-        if (!input || *reinterpret_cast<unsigned char*>(input + 0xf9) != 0) return false;
-        g_set_text(*reinterpret_cast<U64*>(input + 0x68), text, 0);
+        if (!input || *reinterpret_cast<unsigned char*>(input + kOffInputBusy) != 0) return false;
+        g_set_text(*reinterpret_cast<U64*>(input + kOffInputText), text, 0);
         *reinterpret_cast<U32*>(input + kOffInputCaret) = caret;
         *reinterpret_cast<U32*>(input + kOffInputCaretEnd) = caret;
         *reinterpret_cast<unsigned char*>(input + kOffInputCaretMoved) = 1; // as the game's own caret keys: redrawn now
@@ -6568,8 +6580,8 @@ bool click_on_header(U64 self)
         U64 h = rp(hv + i * 8ull);
         U64 e = h ? rp(h + 8) : 0;
         float l, t, r, b; // element layout rect (client px), as tooltip.cpp reads it
-        if (!e || !is_element(e) || has_class(e, "!cpp-none") || !rd(e + 0xd0, l) || !rd(e + 0xd4, t) ||
-            !rd(e + 0xd8, r) || !rd(e + 0xdc, b) || !(r > l && b > t))
+        if (!e || !is_element(e) || has_class(e, "!cpp-none") || !rd(e + kOffElemRect, l) ||
+            !rd(e + kOffElemRect + 4, t) || !rd(e + kOffElemRect + 8, r) || !rd(e + kOffElemRect + 0xc, b) || !(r > l && b > t))
             continue;
         char buf[64];
         std::snprintf(buf, sizeof buf, " %u:%.0f,%.0f-%.0f,%.0f", i, l, t, r, b);
@@ -6604,7 +6616,8 @@ void pad_prompts(U64 self)
     U64 script = focused_script(self), fe = script ? rp(script + 8) : 0;
     auto box = [](U64 e, float& cx, float& cy) {
         float l = 0, t = 0, r = 0, b = 0;
-        if (!e || !rd(e + 0xd0, l) || !rd(e + 0xd4, t) || !rd(e + 0xd8, r) || !rd(e + 0xdc, b) || r <= l || b <= t) return false;
+        if (!e || !rd(e + kOffElemRect, l) || !rd(e + kOffElemRect + 4, t) || !rd(e + kOffElemRect + 8, r) ||
+            !rd(e + kOffElemRect + 0xc, b) || r <= l || b <= t) return false;
         cx = (l + r) / 2, cy = (t + b) / 2;
         return true;
     };
@@ -7274,7 +7287,8 @@ void resolve_addresses()
     // neighbour two witnesses have seen move takes this one along when this one's own witnesses can't say.
     struct Pair { U64* field; U64* neighbour; std::int64_t delta; };
     const Pair pairs[] = {{&kOffRootBodyCount, &kOffRootBodies, 8}, {&kOffRootSlotVecCount, &kOffRootSlotVecs, 8},
-                          {&kOffPanelHoldClose, &kOffPanelFlags, -1}, {&kOffModalShown, &kOffModalHidden, -1}};
+                          {&kOffPanelHoldClose, &kOffPanelFlags, -1}, {&kOffModalShown, &kOffModalHidden, -1},
+                          {&kOffSelectorPage, &kOffSelectorCount, 4}}; // (the dots per page sit between the count and the lit dot)
     auto index_of = [&](const U64* v) {
         for (std::size_t i = 0; i < kOffsetCount; ++i)
             if (kOffsetVars[i] == v) return i;
@@ -7438,7 +7452,7 @@ bool install()
         g_toast = reinterpret_cast<ToastFn>(g_base + kRvaToast);
     else
         LOG("toast function not found; notifications only go to the log");
-    if (MH_Initialize() != MH_OK) return false;
+    if (MH_STATUS s = MH_Initialize(); s != MH_OK && s != MH_ERROR_ALREADY_INITIALIZED) return false;
     // Killswitch: from here on any failure undoes every hook, so the mod is either fully on or fully off (and the
     // Outfits header, hidden in the thtml, is only ever shown by a working plugin).
     struct VtPatch { int slot; void* fn; void** orig; } patches[] = {
@@ -7783,6 +7797,133 @@ DWORD WINAPI key_thread(LPVOID)
     }
 }
 
+// --- Gear-wheel UI, patched in memory -----------------------------------------------------------
+// The game builds its screens from compiled UI files (ui/bin__/*.uibinary). The Outfits tab header and the value text
+// are added to the gear wheel's files while the game loads them (uibin_patch.cpp), onto whatever copy it loads: its
+// own, or another mod's that DMM chose. The mod ships none of these files, so it doesn't conflict over them, and a game
+// update that changes them needs no new version as long as the elements copied are still there.
+// The loader reads a file (path from "%#%#%#_%#.uibinary") and wraps the bytes in a stream on its stack
+// {vt, .., data +0x20, size u32 +0x28, pos u32 +0x2c} for the parser (its only call). The hook gives the parser a
+// patched copy instead (kept for the whole run: what the parser makes may point into it). The path is the loader's
+// local: inline, or on the heap when long; where both are relative to the stream is read from the loader's code.
+using UiParseFn = U64(__fastcall*)(U64 loader, U64 stream);
+UiParseFn g_ui_parse_orig = nullptr;
+U64 g_ui_parse_ret = 0;                                // the parser call's return address (the loader's call)
+std::int64_t g_ui_path_inline = 0, g_ui_path_heap = 0; // the path buffer / its heap pointer, relative to the stream
+std::string g_ui_hook_note;                            // how the hook went in (logged by the init thread)
+std::mutex g_ui_mutex;
+std::deque<std::vector<U8>> g_ui_patched; // the patched files, alive for the run
+
+bool ui_copy(U64 from, void* to, size_t n)
+{
+    __try {
+        std::memcpy(to, reinterpret_cast<const void*>(from), n);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+std::string ui_stream_path(U64 stream)
+{
+    char buf[0x106] = {};
+    U64 heap = 0;
+    U64 src = rd(stream + g_ui_path_heap, heap) && plausible(heap) ? heap : stream + g_ui_path_inline;
+    if (!ui_copy(src, buf, sizeof buf - 1)) return {};
+    buf[sizeof buf - 1] = 0;
+    for (char* c = buf; *c; ++c)
+        if (*c < 0x20 || *c > 0x7e) return {};
+    std::string r = buf;
+    return r.size() > 9 && _stricmp(r.c_str() + r.size() - 9, ".uibinary") == 0 ? r : std::string();
+}
+
+void ui_patch_stream(U64 stream, const std::string& path, unsigned what)
+{
+    U64 data = 0;
+    U32 size = 0, pos = 0;
+    if (!rd(stream + 0x20, data) || !rd(stream + 0x28, size) || !rd(stream + 0x2c, pos) || !plausible(data) || !size ||
+        size > (64u << 20) || pos) {
+        LOG("gear wheel UI: %s left as it is (its stream isn't as expected: %llX, %u bytes, at %u)", path.c_str(), data,
+            size, pos);
+        return;
+    }
+    std::vector<U8> in(size), out;
+    if (!ui_copy(data, in.data(), size)) {
+        LOG("gear wheel UI: %s left as it is (bytes unreadable)", path.c_str());
+        return;
+    }
+    uibin::Report r;
+    if (!uibin::patch(in, what, out, r)) {
+        LOG("gear wheel UI: %s left as it is: %s", path.c_str(), r.error.c_str());
+        return;
+    }
+    std::lock_guard lock(g_ui_mutex);
+    g_ui_patched.push_back(std::move(out));
+    const std::vector<U8>& kept = g_ui_patched.back();
+    *reinterpret_cast<U64*>(stream + 0x20) = reinterpret_cast<U64>(kept.data());
+    *reinterpret_cast<U32*>(stream + 0x28) = U32(kept.size());
+    if (r.headers) ++g_ui_tab_added;
+    LOG("gear wheel UI: %s: %d tab header(s), %d value text(s) added (%u -> %zu bytes)", path.c_str(), r.headers,
+        r.values, size, kept.size());
+}
+
+U64 __fastcall ui_parse_hook(U64 loader, U64 stream)
+{
+    if (reinterpret_cast<U64>(_ReturnAddress()) == g_ui_parse_ret) {
+        try {
+            std::string path = ui_stream_path(stream);
+            if (unsigned what = path.empty() ? 0 : uibin::wants(path)) ui_patch_stream(stream, path, what);
+        } catch (...) { // (out of memory: the file stays as it is)
+        }
+    }
+    return g_ui_parse_orig(loader, stream);
+}
+
+// At load (DllMain), before the game builds its UI; again from the init thread if that didn't work.
+bool install_ui_patch()
+{
+    if (g_ui_parse_orig) return true;
+    if (!g_base) g_base = game::main_module().base;
+    // mov rax,[rsp+70]; mov [rbp+..],rax; mov eax,[rsp+7C]; mov [rbp+..],eax; mov [rbp+..],r12d; lea rdx,[rbp+s];
+    // mov rcx,rsi; call parser  (unique in the 10-30, 11-01b and 11-04 exes)
+    U64 site = game::find_unique("48 8B 44 24 70 48 89 45 ?? 8B 44 24 7C 89 45 ?? 44 89 65 ?? 48 8D 55 ?? 48 8B CE E8");
+    if (!site) return g_ui_hook_note = "the UI loader's parser call not found", false;
+    std::int8_t stream_at = 0;
+    std::int32_t rel = 0;
+    rd(site + 23, stream_at), rd(site + 28, rel);
+    // lea r15,[rbp+i]; mov rcx,[rbp+h]; test rcx,rcx; cmovne r15,rcx: the path buffer, inline or on the heap
+    const U8 pat[] = {0x4C, 0x8D, 0x7D, 0, 0x48, 0x8B, 0x8D, 0, 0, 0, 0, 0x48, 0x85, 0xC9, 0x4C, 0x0F, 0x45, 0xF9};
+    U64 hit = 0;
+    int hits = 0;
+    for (U64 a = site - 0x600; a < site; ++a) {
+        bool ok = true;
+        for (size_t k = 0; k < sizeof pat && ok; ++k)
+            ok = k == 3 || (k >= 7 && k <= 10) || *reinterpret_cast<const U8*>(a + k) == pat[k];
+        if (ok) hit = a, ++hits;
+    }
+    if (hits != 1) return g_ui_hook_note = "the UI loader's path buffer not found (" + std::to_string(hits) + ")", false;
+    std::int8_t inl = 0;
+    std::int32_t heap = 0;
+    rd(hit + 3, inl), rd(hit + 7, heap);
+    g_ui_path_inline = std::int64_t(inl) - stream_at;
+    g_ui_path_heap = std::int64_t(heap) - stream_at;
+    U64 call = site + 27, parser = call + 5 + rel;
+    g_ui_parse_ret = call + 5;
+    MH_STATUS init = MH_Initialize();
+    void* fn = reinterpret_cast<void*>(parser);
+    if ((init != MH_OK && init != MH_ERROR_ALREADY_INITIALIZED) ||
+        MH_CreateHook(fn, reinterpret_cast<void*>(&ui_parse_hook), reinterpret_cast<void**>(&g_ui_parse_orig)) != MH_OK ||
+        MH_EnableHook(fn) != MH_OK) {
+        g_ui_parse_orig = nullptr;
+        return g_ui_hook_note = "the UI parser hook failed", false;
+    }
+    char t[160];
+    std::snprintf(t, sizeof t, "parser +%llX (call +%llX), path at stream%+lld / [stream%+lld]", parser - g_base,
+                  call - g_base, g_ui_path_inline, g_ui_path_heap);
+    g_ui_hook_note = t;
+    return true;
+}
+
 DWORD WINAPI init_thread(LPVOID)
 {
     wchar_t buf[MAX_PATH];
@@ -7802,6 +7943,11 @@ DWORD WINAPI init_thread(LPVOID)
             std::snprintf(ver, sizeof ver, "%u.%u.%u", HIWORD(f->dwFileVersionMS), LOWORD(f->dwFileVersionMS),
                           HIWORD(f->dwFileVersionLS));
         LOG("Outfit Manager %s started", ver);
+    }
+    {
+        bool at_load = g_ui_parse_orig != nullptr; // (put in at load; else now, which may be too late for some files)
+        bool ok = install_ui_patch();
+        LOG("gear wheel UI hook: %s%s", ok ? (at_load ? "in at load, " : "in (late), ") : "NOT in: ", g_ui_hook_note.c_str());
     }
     g_store_path = path + L"OutfitManager.outfits";
     g_cache_path = path + L"OutfitManager.cache"; // game addresses for this exe (rebuilt when the exe changes)
@@ -7832,6 +7978,14 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID)
     if (reason == DLL_PROCESS_ATTACH) {
         g_self = module;
         DisableThreadLibraryCalls(module);
+        if (in_game_process()) {
+            wchar_t buf[MAX_PATH]; // (the log open now: the gear wheel's files can load before the init thread runs)
+            GetModuleFileNameW(module, buf, MAX_PATH);
+            std::wstring dir = buf;
+            dir.resize(dir.find_last_of(L"/\\") + 1);
+            logx::open((dir + L"OutfitManager.log").c_str());
+            install_ui_patch(); // (before the game builds its UI: the files load once, at start)
+        }
         if (in_game_process())
             if (HANDLE t = CreateThread(nullptr, 0, init_thread, nullptr, 0, nullptr))
                 CloseHandle(t);

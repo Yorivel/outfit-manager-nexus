@@ -1,4 +1,4 @@
-Outfit Manager 0.3.2 by Strahlimeier
+Outfit Manager 0.3.3 by Strahlimeier
 Adds an Outfits tab to Crimson Desert's gear wheel: save what you wear, switch outfits with one click.
 
 INSTALL (DMM)
@@ -46,8 +46,9 @@ FILES
 NOTES
   Tested on Crimson Desert 1.0.0.3479 (with the Charting the Unknown expansion) and DMM 4.7.0.
   Controllers: tested on a DualSense, both directly and through Steam Input (Xbox layout).
-  The mod replaces four of the game's compiled gear-wheel UI files, so other mods that change the gear wheel's
-  layout will clash with it, and a game update that changes those files needs a new version of this mod.
+  The mod ships none of the game's own files: the plugin adds the Outfits tab to the gear wheel while the game loads
+  it, onto whatever copy it loads (the game's, or another mod's), and DMM merges the mod's CSS and texture list into
+  the game's. So it works alongside other mods that change the gear wheel (tested with Better Radial Menus).
 
 LICENCE
   MIT, see LICENSE.txt (covers the mod's own work, not the game's content).
