@@ -1,0 +1,33 @@
+# Switches the posts' status image (status/current.png) to "Game update: not tested yet" when Crimson Desert's public
+# build on Steam is newer than the last build the mod was marked as working on (status/tested_build.txt, written by
+# make_status.py set working). Steam has no update notification for outsiders, so the build is checked on a schedule.
+name: Game update status
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare Steam's public build with the tested one
+        run: |
+          build=$(curl -sf https://api.steamcmd.net/v1/info/3321460 | jq -r '.data["3321460"].depots.branches.public.buildid')
+          tested=$(cat status/tested_build.txt 2>/dev/null || echo none)
+          echo "public build $build, tested build $tested"
+          if [ -z "$build" ] || [ "$build" = "null" ]; then echo "Steam didn't answer; nothing changed"; exit 0; fi
+          if [ "$build" = "$tested" ]; then exit 0; fi
+          if [ "$(cat status/flagged_build.txt 2>/dev/null)" = "$build" ]; then echo "already flagged"; exit 0; fi
+          cp status/untested.png status/current.png
+          echo "$build" > status/flagged_build.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add status/current.png status/flagged_build.txt
+          git commit -m "Status: untested (game build $build is out; tested on $tested)"
+          git push
