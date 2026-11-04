@@ -2,6 +2,11 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
+## 0.3.2 (2026-11-04)
+
+- Updated for the game patch of 2026-11-04: the gear-wheel UI files are rebuilt from the patched game (the patch changed two of them).
+- Fixed: after that patch, Climate on Auto found no resistance on any piece, so no cold / heat badges showed. The mod now finds where the game keeps an item's resistances by itself, so a later patch that moves them again doesn't break it.
+
 ## 0.3.1 (2026-11-04)
 
 - Fixed: the mod could stay in English whatever language was picked, when DMM's update didn't copy the new language folder. All 15 languages are now built into the plugin; the files in Outfit Manager\lang still win over it, for corrections.

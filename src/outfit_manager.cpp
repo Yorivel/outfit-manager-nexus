@@ -1344,19 +1344,31 @@ U16 key_of_pid(U32 pid)
 
 
 
+// Where an item's info keeps its stat lists (the 20261104 patch moved both by 8: 0x118 -> 0x120, 0x188 -> 0x190):
+// found again at the first menu open from items whose values are known (calibrate_resist_ids).
+U64 kOffItemPassives = 0x118; // -> {entries*, count} (null when none: the game's helper +2603A00)
+U64 kOffItemStats = 0x188;    // -> {rows*, count}; a row's base stats at +0x58 / +0x60
+
+// An item info's passive list (base false) or base stat list (true, from the first refinement row) at `off`.
+std::pair<U64, U32> stat_list(U64 info, U64 off, bool base)
+{
+    if (!info) return {0, 0};
+    if (base) {
+        U64 stats = rp(info + off), row0 = stats ? rp(stats) : 0;
+        return {row0 ? rp(row0 + 0x58) : 0, row0 ? r32(row0 + 0x60) : 0};
+    }
+    U64 p = rp(info + off);
+    return {p ? rp(p) : 0, p ? r32(p + 8) : 0};
+}
+
 std::pair<int, int> item_resistance(U16 key)
 {
     if (auto f = g_item_resist.find(key); f != g_item_resist.end()) return f->second;
     std::pair<int, int> r{0, 0};
     U16 k = key;
     U64 info = g_item_info ? g_item_info(0, k) : 0;
-    U64 passives = info ? rp(info + 0x118) : 0; // (a {entries*, count}, null when none: the game's helper +2603A00)
-    U64 list = passives ? rp(passives) : 0;
-    U32 n = passives ? r32(passives + 8) : 0;
-    U64 stats = info ? rp(info + 0x188) : 0; // ({rows*, count}; the resistance is the same in every refinement row)
-    U64 row0 = stats ? rp(stats) : 0;
-    U64 base = row0 ? rp(row0 + 0x58) : 0;
-    U32 nb = row0 ? r32(row0 + 0x60) : 0;
+    auto [list, n] = stat_list(info, kOffItemPassives, false);
+    auto [base, nb] = stat_list(info, kOffItemStats, true); // (the resistance is the same in every refinement row)
     auto sum = [&](U64 l, U32 cnt, U32 ice, U32 fire) {
         for (U32 i = 0; l && i < cnt && i < 16; ++i) {
             U32 kind = 0, level = 0;
@@ -1372,29 +1384,47 @@ std::pair<int, int> item_resistance(U16 key)
     return r;
 }
 
-// The ids of the resistance stats can renumber on a patch: they are read from items whose values are known (found by
-// permanent id). A reference counts when exactly one of its entries has the known level; references must agree; without
-// that the built-in id stays.
+// The ids of the resistance stats can renumber on a patch, and the lists can move in the item info: both are read from
+// items whose values are known (found by permanent id). First the lists' offsets: for each kind (passive / base), the
+// offset where every reference of that kind has an entry with its id and level (one offset only, else the built-in one
+// stays). Then the ids: a reference counts when exactly one of its entries has the known level; references must agree;
+// without that the built-in id stays.
 void calibrate_resist_ids()
 {
     struct Ref { U32 pid; U32 level; bool base; U32* id; };
     const Ref refs[] = {{0xF4B2F, 10, false, &kPassiveIce}, {0xF4B2E, 10, false, &kPassiveFire}, {0xF4EC4, 3, true, &kBaseIce},
                         {0xF43FC, 5, true, &kBaseIce},      {0xF43BF, 7, true, &kBaseFire}};
+    for (bool base : {false, true}) {
+        U64& off = base ? kOffItemStats : kOffItemPassives;
+        std::vector<U64> hits;
+        for (U64 o = 0x80; o < 0x300; o += 8) {
+            int refs_of_kind = 0, matched = 0;
+            for (const Ref& r : refs) {
+                if (r.base != base) continue;
+                ++refs_of_kind;
+                U16 key = key_of_pid(r.pid);
+                auto [list, n] = stat_list(key != 0xFFFF && g_item_info ? g_item_info(0, key) : 0, o, base);
+                bool has = false;
+                for (U32 i = 0; list && n <= 64 && i < n; ++i) {
+                    U32 kind = 0, level = 0;
+                    has |= rd(list + i * 8ull, kind) && rd(list + i * 8ull + 4, level) && level == r.level &&
+                           (kind & 0xFFFF) == *r.id;
+                }
+                matched += has;
+            }
+            if (refs_of_kind && matched == refs_of_kind) hits.push_back(o);
+        }
+        if (hits.size() == 1 && hits[0] != off) LOG("self-test: the %s stat list moved: +%llX -> +%llX", base ? "base" : "passive", off, hits[0]);
+        if (hits.size() == 1) off = hits[0];
+        else LOG("self-test: the %s stat list found at %zu offsets; +%llX kept", base ? "base" : "passive", hits.size(), off);
+    }
     std::map<U32*, U32> found;
     std::set<U32*> clash;
     int answered = 0;
     for (const Ref& r : refs) {
         U16 key = key_of_pid(r.pid);
         U64 info = key != 0xFFFF && g_item_info ? g_item_info(0, key) : 0;
-        U64 list = 0;
-        U32 n = 0;
-        if (info && r.base) {
-            U64 stats = rp(info + 0x188), row0 = stats ? rp(stats) : 0;
-            list = row0 ? rp(row0 + 0x58) : 0, n = row0 ? r32(row0 + 0x60) : 0;
-        } else if (info) {
-            U64 p = rp(info + 0x118);
-            list = p ? rp(p) : 0, n = p ? r32(p + 8) : 0;
-        }
+        auto [list, n] = stat_list(info, r.base ? kOffItemStats : kOffItemPassives, r.base);
         U32 id = 0;
         int hits = 0;
         for (U32 i = 0; list && i < n && i < 16; ++i) {
@@ -1413,8 +1443,9 @@ void calibrate_resist_ids()
             *var = id, moved = true;
         }
     if (moved) g_item_resist.clear();
-    LOG("self-test: resistance ids from %d of %zu references (%zu disagree): passive ice %X fire %X, base ice %X fire %X", answered,
-        std::size(refs), clash.size(), kPassiveIce, kPassiveFire, kBaseIce, kBaseFire);
+    LOG("self-test: resistance ids from %d of %zu references (%zu disagree): passive ice %X fire %X, base ice %X fire %X "
+        "(lists at +%llX / +%llX)", answered, std::size(refs), clash.size(), kPassiveIce, kPassiveFire, kBaseIce, kBaseFire,
+        kOffItemPassives, kOffItemStats);
 }
 
 // Abyss gears belong to one COPY of an item: its sockets are at copy+0x60 -> 6-byte entries {u16 gear key (0xFFFF:

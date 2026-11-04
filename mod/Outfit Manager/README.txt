@@ -1,4 +1,4 @@
-Outfit Manager 0.3.1 by Strahlimeier
+Outfit Manager 0.3.2 by Strahlimeier
 Adds an Outfits tab to Crimson Desert's gear wheel: save what you wear, switch outfits with one click.
 
 INSTALL (DMM)
