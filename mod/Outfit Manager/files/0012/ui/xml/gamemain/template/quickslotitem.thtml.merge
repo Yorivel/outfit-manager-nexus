@@ -1,0 +1,7 @@
+<xml-patch>
+    <!-- Outfit Manager: "Outfits" tab header after the last vanilla header (hidden until OutfitManager.asi shows it; label set by the asi) -->
+    <insert-after find="widget[@id='QuickSlotHeader8']">
+        <widget id="QuickSlotHeaderOutfits" component="ItemQuickSlotView2.QuickSlotHeader" css="!cpp-none">
+        </widget>
+    </insert-after>
+</xml-patch>

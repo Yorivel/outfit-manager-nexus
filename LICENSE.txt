@@ -1,0 +1,35 @@
+MIT License
+
+Copyright (c) 2026 Strahlimeier
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+Scope
+
+This licence covers Outfit Manager's own work: OutfitManager.asi and the mod's
+own files (stylesheet merges, texture list merges, and the textures it creates).
+
+It does not cover Crimson Desert's own content, which belongs to Pearl Abyss:
+the three files in files/0012/ui/bin__/ are the game's gear-wheel UI files with
+Outfit Manager's tab added, and some textures are derived from the game's art.
+
+Third-party code: OutfitManager.asi contains MinHook by Tsuda Kageyu (and the
+Hacker Disassembler Engine it includes), under their own BSD licences; see
+THIRD-PARTY-MinHook-LICENSE.txt.
