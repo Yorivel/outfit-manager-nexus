@@ -2,8 +2,8 @@
 // Keep in step with the browser mod's manifest.json "version".
 #include <winver.h>
 
-#define OM_VERSION 0, 2, 0, 0
-#define OM_VERSION_STR "0.2.0"
+#define OM_VERSION 0, 3, 0, 0
+#define OM_VERSION_STR "0.3.0"
 
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION OM_VERSION

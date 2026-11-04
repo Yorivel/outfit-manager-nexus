@@ -30,15 +30,6 @@
 <Texture Name="outfitmanager_badge_combat" Filename="UI/texture/image/customizeimage/outfitmanager_badge_combat.dds" Type="Image" GetRect="1,1,80,80"/>
 <Texture Name="outfitmanager_badge_peace" Filename="UI/texture/image/customizeimage/outfitmanager_badge_peace.dds" Type="Image" GetRect="1,1,80,80"/>
 <Texture Name="outfitmanager_badge_return" Filename="UI/texture/image/customizeimage/outfitmanager_badge_return.dds" Type="Image" GetRect="1,1,80,80"/>
-<Texture Name="outfitmanager_val_auto" Filename="UI/texture/image/customizeimage/outfitmanager_val_auto.dds" Type="Image" GetRect="1,1,378,90"/>
-<Texture Name="outfitmanager_val_off" Filename="UI/texture/image/customizeimage/outfitmanager_val_off.dds" Type="Image" GetRect="1,1,378,90"/>
-<Texture Name="outfitmanager_val_cold" Filename="UI/texture/image/customizeimage/outfitmanager_val_cold.dds" Type="Image" GetRect="1,1,378,90"/>
-<Texture Name="outfitmanager_val_heat" Filename="UI/texture/image/customizeimage/outfitmanager_val_heat.dds" Type="Image" GetRect="1,1,378,90"/>
-<Texture Name="outfitmanager_val_load" Filename="UI/texture/image/customizeimage/outfitmanager_val_load.dds" Type="Image" GetRect="1,1,378,90"/>
-<Texture Name="outfitmanager_val_leave" Filename="UI/texture/image/customizeimage/outfitmanager_val_leave.dds" Type="Image" GetRect="1,1,378,90"/>
-<Texture Name="outfitmanager_val_default" Filename="UI/texture/image/customizeimage/outfitmanager_val_default.dds" Type="Image" GetRect="1,1,378,90"/>
-<Texture Name="outfitmanager_val_on" Filename="UI/texture/image/customizeimage/outfitmanager_val_on.dds" Type="Image" GetRect="1,1,378,90"/>
-<Texture Name="outfitmanager_val_take" Filename="UI/texture/image/customizeimage/outfitmanager_val_take.dds" Type="Image" GetRect="1,1,378,90"/>
-<Texture Name="outfitmanager_val_keep_settings" Filename="UI/texture/image/customizeimage/outfitmanager_val_keep_settings.dds" Type="Image" GetRect="1,1,378,90"/>
-<Texture Name="outfitmanager_val_reset_all" Filename="UI/texture/image/customizeimage/outfitmanager_val_reset_all.dds" Type="Image" GetRect="1,1,378,90"/>
+<Texture Name="outfitmanager_key_cross" Filename="UI/texture/image/customizeimage/outfitmanager_key_cross.dds" Type="Image" GetRect="1,1,80,80"/>
+<Texture Name="outfitmanager_key_a" Filename="UI/texture/image/customizeimage/outfitmanager_key_a.dds" Type="Image" GetRect="1,1,80,80"/>
 </__dmm_root__>

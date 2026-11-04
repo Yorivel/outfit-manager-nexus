@@ -11,6 +11,11 @@ Element format (no absolute offsets seen):
   id, text / X, component, template, script: strings (u32 length + bytes)
   u32, 3 tail bytes (kind, 0, 6)
 
+Also a second text in each slot's label wrap (CoolTimeChargedCountWrap, whose CoolTimeChargedCount OM uses for a
+setting's name): a copy of that text as OmValueText, classes om-value-text and font-text-caption-yellow, for the
+setting's value in gold (one text holds one colour). The wrap's child count goes up by one. The slot components the
+wheel builds from are in itemquickslotview2_component_game.uibinary, so that file gets it too.
+
 uibin_tab.py [--write]: reports; with --write, writes the patched files into the Outfit Manager DMM mod (rebuild after
 every game patch: they're whole files)."""
 import os, struct, sys
@@ -138,13 +143,65 @@ def patch(b):
         done += 1
 
 
+def lp(x): return struct.pack('<I', len(x)) + x
+
+
+WRAP, TEXT, VALUE = b'CoolTimeChargedCountWrap', b'CoolTimeChargedCount', b'OmValueText'
+
+
+def patch_value(b):
+    """b with OmValueText after the CoolTimeChargedCount in every CoolTimeChargedCountWrap."""
+    res, pos, done = b, 0, 0
+    while True:
+        at = res.find(lp(WRAP), pos)
+        if at < 0:
+            return res, done
+        hit = None
+        for start in range(at - 1, max(at - 3000, 0), -1):
+            if res[start] != 1:
+                continue
+            found = []
+            try:
+                end = element(res, start, found)
+            except Bad:
+                continue
+            if found and found[-1][0] == WRAP and found[-1][1] == start:
+                hit = (start, end, found)
+                break
+        if not hit:
+            raise Bad(f'no element for the wrap id at {at}')
+        start, end, found = hit
+        kids = [f for f in found if f[3] and f[3][0] == start]
+        assert len(kids) == 1 and kids[0][0] == TEXT, [k[0] for k in kids]
+        _, cs, ce, (_, count_at) = kids[0]
+        copy = res[cs:ce]
+        for old, new in ((lp(TEXT), lp(VALUE)), (lp(b'charged-count'), lp(b'om-value-text')),
+                         (lp(b'font-text-caption-white'), lp(b'font-text-caption-yellow'))):
+            assert copy.count(old) == 1, old
+            copy = copy.replace(old, new)
+        n = u32(res, count_at)
+        assert n == 1
+        res = res[:ce] + copy + res[ce:]
+        res = res[:count_at] + struct.pack('<I', n + 1) + res[count_at + 4:]
+        check = []
+        assert element(res, start, check) == end + len(copy) and any(c[0] == VALUE for c in check)
+        print(f'  value text in the wrap at {start}: children 1 -> 2; re-parses OK')
+        pos = end + len(copy)
+        done += 1
+
+
 game = pack.vanilla_index()
-for p in FILES:
+# (the slot components themselves come from itemquickslotview2_component_game: the value text goes there too; it has no
+# tab headers)
+for p in FILES + ['ui/bin__/itemquickslotview2_component_game.uibinary']:
     b = game[p].read(p)
     print(p, len(b))
-    r, n = patch(b)
+    r, n = patch(b) if p in FILES else (b, 0)
     print(f'  {n} header(s) added, {len(b)} -> {len(r)}')
-    assert n
+    assert n or p not in FILES
+    r, v = patch_value(r)
+    print(f'  {v} value text(s) added, -> {len(r)}')
+    assert v
     if write:
         full = os.path.join(MOD, *p.split('/'))
         os.makedirs(os.path.dirname(full), exist_ok=True)

@@ -618,6 +618,8 @@ CSS_HEAD = """/* Outfit Manager: Outfits tab looks (classes set by OutfitManager
    plugin), above the picture and the focus, so like the game's it does not change with the focus. */
 .self-center.om-plus-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(Common_Icon_Keyguide_Plus); }
 .self-center.om-cog-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_cog); }
+.self-center.om-cross-c { display: block; opacity: 1; left: 50%; top: 50%; width: 34px; height: 34px; rotate-z: 0deg; translate-x: -17px; translate-y: 4px; background-image: textureid(outfitmanager_key_cross); }
+.self-center.om-abtn-c { display: block; opacity: 1; left: 50%; top: 50%; width: 34px; height: 34px; rotate-z: 0deg; translate-x: -17px; translate-y: 4px; background-image: textureid(outfitmanager_key_a); }
 .self-center.om-flag-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_flag); }
 /* Condition markers (main mode, saved outfits): the game's own thermometers, in their colours, at the badge spot (centre
    +13 / +29 from the picture's centre, like the lantern's "Auto"); the 46px icons fill their box, so 26px reads as large
@@ -644,18 +646,10 @@ CSS_HEAD = """/* Outfit Manager: Outfits tab looks (classes set by OutfitManager
 .self-center.om-label-wrap { display: block; opacity: 1; left: 50%; top: 50%; width: 0px; height: 0px; }
 .quickslot-item-name.charged-count.om-label { bottom: 0px; height: 24px; line-height: 24px; font-size: 18px; white-space: normal; }
 .quickslot-item-name.charged-count.om-label.om-label-value { bottom: -24px; height: 48px; }
+/* A setting's value under its name: the label wrap's second text (OmValueText, tools/uibin_tab.py), the game's gold
+   caption style; its box as the old value pictures had (30px high, from 2px under the slot's centre). */
+.quickslot-item-name.om-value-text { bottom: -32px; height: 30px; line-height: 30px; }
 /* A value setting's value under its name: the game's value text (tools/value_text_gen.py textures, 126x30). */
-.self-center.om-val-auto { display: block; opacity: 1; left: 50%; top: 50%; width: 126px; height: 30px; rotate-z: 0deg; translate-x: -63px; translate-y: 2px; background-image: textureid(outfitmanager_val_auto); }
-.self-center.om-val-off { display: block; opacity: 1; left: 50%; top: 50%; width: 126px; height: 30px; rotate-z: 0deg; translate-x: -63px; translate-y: 2px; background-image: textureid(outfitmanager_val_off); }
-.self-center.om-val-cold { display: block; opacity: 1; left: 50%; top: 50%; width: 126px; height: 30px; rotate-z: 0deg; translate-x: -63px; translate-y: 2px; background-image: textureid(outfitmanager_val_cold); }
-.self-center.om-val-heat { display: block; opacity: 1; left: 50%; top: 50%; width: 126px; height: 30px; rotate-z: 0deg; translate-x: -63px; translate-y: 2px; background-image: textureid(outfitmanager_val_heat); }
-.self-center.om-val-load { display: block; opacity: 1; left: 50%; top: 50%; width: 126px; height: 30px; rotate-z: 0deg; translate-x: -63px; translate-y: 2px; background-image: textureid(outfitmanager_val_load); }
-.self-center.om-val-leave { display: block; opacity: 1; left: 50%; top: 50%; width: 126px; height: 30px; rotate-z: 0deg; translate-x: -63px; translate-y: 2px; background-image: textureid(outfitmanager_val_leave); }
-.self-center.om-val-default { display: block; opacity: 1; left: 50%; top: 50%; width: 126px; height: 30px; rotate-z: 0deg; translate-x: -63px; translate-y: 2px; background-image: textureid(outfitmanager_val_default); }
-.self-center.om-val-on { display: block; opacity: 1; left: 50%; top: 50%; width: 126px; height: 30px; rotate-z: 0deg; translate-x: -63px; translate-y: 2px; background-image: textureid(outfitmanager_val_on); }
-.self-center.om-val-take { display: block; opacity: 1; left: 50%; top: 50%; width: 126px; height: 30px; rotate-z: 0deg; translate-x: -63px; translate-y: 2px; background-image: textureid(outfitmanager_val_take); }
-.self-center.om-val-keep-settings { display: block; opacity: 1; left: 50%; top: 50%; width: 126px; height: 30px; rotate-z: 0deg; translate-x: -63px; translate-y: 2px; background-image: textureid(outfitmanager_val_keep_settings); }
-.self-center.om-val-reset-all { display: block; opacity: 1; left: 50%; top: 50%; width: 126px; height: 30px; rotate-z: 0deg; translate-x: -63px; translate-y: 2px; background-image: textureid(outfitmanager_val_reset_all); }
 .self-center.om-prompt-c { display: block; opacity: 1; left: 50%; top: 50%; width: 34px; height: 34px; rotate-z: 0deg; translate-x: -17px; translate-y: 4px; background-image: textureid(Common_Icon_Keyguide_PC_Mouse_left); }
 /* (Unused, kPlusSlotCentred = true: the "+" slot as an "add" button: no silhouette, its symbol centred, 72px box.) */
 .self-center.om-plus-big { display: block; opacity: 1; left: 50%; top: 50%; width: 72px; height: 72px; rotate-z: 0deg; translate-x: -36px; translate-y: -36px; background-image: textureid(Common_Icon_Keyguide_Plus); }
