@@ -596,19 +596,13 @@ def write_atlas():
     names += [nm for n in range(1, SLOTS + 1) for nm in (name_worn(n), name_worn_amber(n), name_worn_green(n))]
     path = os.path.join(MOD, 'ui', 'xml', 'texture', 'cd_hud_itemquickslot_08.xml.merge')
     raw = open(path, 'rb').read()
-    bom, nl = raw.startswith(b'ï»¿'), '
-' if b'
-' in raw else '
-'  # (written back as it was)
+    bom, nl = raw.startswith(b'\xef\xbb\xbf'), '\r\n' if b'\r\n' in raw else '\n'  # (written back as it was)
     mine = ('outfitmanager_ring_', 'outfitmanager_focus_', 'outfitmanager_worn_')
-    lines = [l for l in raw.decode('utf-8-sig').replace('
-', '
-').split('
-') if not any(m in l for m in mine)]
+    lines = [l for l in raw.decode('utf-8-sig').replace('\r\n', '\n').split('\n') if not any(m in l for m in mine)]
     at = next(i for i, l in enumerate(lines) if '<__dmm_root__>' in l) + 1
     lines[at:at] = [f'<Texture Name="{nm}" Filename="UI/texture/image/customizeimage/{nm}.dds" Type="Image" '
                     f'GetRect="1,1,{S},{S}"/>' for nm in names]
-    open(path, 'wb').write((('﻿' if bom else '') + nl.join(lines)).encode('utf-8'))
+    open(path, 'wb').write((('\ufeff' if bom else '') + nl.join(lines)).encode('utf-8'))
 
 
 CSS_HEAD = """/* Outfit Manager: Outfits tab looks (classes set by OutfitManager.asi; merged into the game's file by DMM).
