@@ -163,11 +163,21 @@ void load(const std::wstring& dir, const std::string& code)
     g_code = "en";
     for (size_t i = 0; i < kLanguageCount; ++i)
         if (code == kLanguages[i].code) g_code = code;
+    // built in first (a missing lang folder still has every language), then the shipped file if it is there (fixes
+    // without a new plugin), then the player's own lines
+    static const char* const kAll[][3] = {
+#include "lang_all.inc"
+    };
+    int built = 0;
+    for (const auto& e : kAll)
+        if (g_code == e[0]) g_table[e[1]] = e[2], ++built;
     std::wstring base = dir + std::wstring(g_code.begin(), g_code.end());
     int shipped = g_code == "en" ? 0 : read_file(base + L".txt", g_table);
     int own = read_file(base + L".custom.txt", g_table);
-    LOG("language: %s (%d lines shipped%s, %d of the player's)", g_code.c_str(), shipped < 0 ? 0 : shipped,
-        shipped < 0 ? ": no file" : "", own < 0 ? 0 : own);
+    std::string where; // (the log is narrow; non-ASCII path characters show as '?')
+    for (wchar_t c : base) where += c < 0x80 ? static_cast<char>(c) : '?';
+    LOG("language: %s (%d lines built in, %d from %s.txt%s, %d of the player's)", g_code.c_str(), built,
+        shipped < 0 ? 0 : shipped, where.c_str(), shipped < 0 ? " (no file)" : "", own < 0 ? 0 : own);
 }
 
 const std::string& code() { return g_code; }

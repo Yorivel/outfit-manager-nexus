@@ -2,6 +2,10 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
+## 0.3.1 (2026-11-04)
+
+- Fixed: the mod could stay in English whatever language was picked, when DMM's update didn't copy the new language folder. All 15 languages are now built into the plugin; the files in Outfit Manager\lang still win over it, for corrections.
+
 ## 0.3.0 (2026-11-04)
 
 - Controllers: proper support, tested on a DualSense (direct and through Steam Input). A / Cross confirms, L2 / R2 scroll a slot, and the slots show those buttons only where they do something; the click prompts switch to Cross or A while you play on a controller.

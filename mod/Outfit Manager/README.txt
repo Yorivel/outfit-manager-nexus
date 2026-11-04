@@ -1,4 +1,4 @@
-Outfit Manager 0.3.0 by Strahlimeier
+Outfit Manager 0.3.1 by Strahlimeier
 Adds an Outfits tab to Crimson Desert's gear wheel: save what you wear, switch outfits with one click.
 
 INSTALL (DMM)
@@ -24,10 +24,11 @@ LANGUAGES
   global settings (scroll over +). All 15 of the game's languages are included.
   The translations were made with AI, so they may read stiffly. Corrections are very welcome: post them on the Nexus
   page and they go into the next version, credited to you.
-  The texts are in "Outfit Manager\lang" in the game's bin64 folder, one file per language (en.txt lists every line,
-  with notes on the format). To change lines just for yourself, put them in a file named after your language with
-  ".custom" added (fr.custom.txt, ja.custom.txt, ...): it has the same format, only needs the lines you change, and
-  updates never overwrite it.
+  All languages are built into the plugin. The texts are also in "Outfit Manager\lang" in the game's bin64 folder,
+  one file per language (en.txt lists every line, with notes on the format); those files win over the built-in text.
+  To change lines just for yourself, put them in a file named after your language with ".custom" added
+  (fr.custom.txt, ja.custom.txt, ...): it has the same format, only needs the lines you change, and updates never
+  overwrite it.
   Codes: en English, fr French, de German, it Italian, es Spanish (Spain), es-mx Spanish (Latin America),
   pt-br Portuguese (Brazil), pl Polish, ru Russian, tr Turkish, ar Arabic, ja Japanese, ko Korean,
   zh-cn Chinese (Simplified), zh-tw Chinese (Traditional).
