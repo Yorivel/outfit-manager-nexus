@@ -48,7 +48,7 @@
 #include <string>
 #include <vector>
 
-namespace {
+namespace om {
 
 using U64 = std::uint64_t;
 using U32 = std::uint32_t;
@@ -9216,23 +9216,23 @@ DWORD WINAPI init_thread(LPVOID)
     return 0;
 }
 
-}
+} // namespace om
 
 BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH) {
-        g_self = module;
+        om::g_self = module;
         DisableThreadLibraryCalls(module);
-        if (in_game_process()) {
+        if (om::in_game_process()) {
             wchar_t buf[MAX_PATH]; // (the log open now: the gear wheel's files can load before the init thread runs)
             GetModuleFileNameW(module, buf, MAX_PATH);
             std::wstring dir = buf;
             dir.resize(dir.find_last_of(L"/\\") + 1);
             logx::open((dir + L"OutfitManager.log").c_str());
-            install_ui_patch(); // (before the game builds its UI: the files load once, at start)
+            om::install_ui_patch(); // (before the game builds its UI: the files load once, at start)
         }
-        if (in_game_process())
-            if (HANDLE t = CreateThread(nullptr, 0, init_thread, nullptr, 0, nullptr))
+        if (om::in_game_process())
+            if (HANDLE t = CreateThread(nullptr, 0, om::init_thread, nullptr, 0, nullptr))
                 CloseHandle(t);
     }
     return TRUE;
