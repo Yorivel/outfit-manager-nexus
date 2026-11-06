@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw, ImageFilter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from badge_gen import write_dds
 
-OUT = sys.argv[1] if len(sys.argv) > 1 else r'F:\MyProjects\CDInventory\mod\Outfit Manager'  # (the mod's source)
+OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'mod', 'Outfit Manager')  # (the repo's mod)
 FILES = os.path.join(OUT, 'files', '0012')
 SPR = r'F:\MyProjects\CDInventory\nexus\sprites'
 
