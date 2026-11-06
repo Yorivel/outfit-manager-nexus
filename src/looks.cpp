@@ -4,6 +4,7 @@
 #include "addrs.h"
 #include "store.h"
 #include "looks_view.h"
+#include "prompts.h"
 #include "om_rest.h"
 
 namespace om {

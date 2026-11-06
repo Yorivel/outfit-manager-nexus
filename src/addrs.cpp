@@ -1,7 +1,7 @@
 // Game addresses, struct offsets and game functions (found again by the resolver after a game update).
 #include "om.h"
 #include "addrs.h"
-#include "om_rest.h"
+#include "prompts.h"
 
 namespace om {
 

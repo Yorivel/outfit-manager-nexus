@@ -4,6 +4,7 @@
 #include "items.h"
 #include "store.h"
 #include "looks.h"
+#include "settings.h"
 #include "om_rest.h"
 
 namespace om {

@@ -3,6 +3,7 @@
 #include "ui.h"
 #include "addrs.h"
 #include "items.h"
+#include "settings.h"
 #include "om_rest.h"
 
 namespace om {

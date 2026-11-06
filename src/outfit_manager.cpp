@@ -26,17 +26,12 @@
 #include "saves.h"
 #include "looks.h"
 #include "looks_view.h"
+#include "prompts.h"
+#include "actions.h"
+#include "settings.h"
 
 namespace om {
 
-// Vtable slots: the known build's numbers; adopt_slots() takes the slot each function is in now (resolver).
-int kSlotTextModalClick = 115;   // (modal, ?, clicked element, char): +0xd8 confirm, +0xe0 cancel
-int kSlotCommonModalClick = 115; // same handler role in the CommonModal
-constexpr U32 kParamsSize = 0x1428; // (0x1310 before the 2026-10-30 update: one more label buffer at the end)
-constexpr U32 kParamsMessage = 0x118, kParamsMessageCap = 0x801, kParamsMessageLen = 0x92c;
-constexpr int kNameMaxChars = 24;
-constexpr U32 kParamsTitle = 0x0, kParamsTitleLen = 0x114, kParamsConfirm = 0xfc0, kParamsCancel = 0x10d8;
-constexpr U32 kParamsLabelCap = 0x100; // inline buffers of 0x108 bytes
 constexpr U32 kSlotNameHolder = 0x08; // -> {char* category, ...}
 constexpr U32 kSlotHash = 0x1c;
 constexpr U32 kSlotEquipIdx = 0x20;
@@ -57,9 +52,6 @@ TabFn g_select_orig = nullptr;
 TabFn g_close_orig = nullptr;
 TabFn g_focus_orig = nullptr;
 FloatFn g_frame_orig = nullptr;
-VoidFn g_hide_script = nullptr;
-ModalClickFn g_text_click_orig = nullptr;
-ModalClickFn g_ask_click_orig = nullptr;
 VoidFn g_restyle = nullptr;
 std::atomic<U32> g_fake_key{0xFFFF}; // record index served from g_fake_rec (0xFFFF = none)
 U64 g_outfits_root = 0; // the menu the Outfits tab was injected into (build_hook)
@@ -203,51 +195,11 @@ std::atomic<U32> g_peek_key{0};           // the Outfit Arc's key (a virtual-key
 // The current character's hotkeys for the input filters (another thread): vk | mods << 8 per outfit, 0 = none.
 std::atomic<U32> g_hotkeys[16] = {};
 std::atomic<bool> g_peek_pad{false};       // the Outfit Arc on controllers: hold L1 / LB, press the d-pad's down
-
-// The settings' descriptions (the settings view's centre caption), by group and entry: {title, description}.
-enum Page { kPageNone, kPageSettings, kPageOutfit, kPageConditions, kPageSettings2 };
 U32 g_depth_outfit = 0; // the saved outfit the conditions' texts are for
-std::string stash_description(const Outfit& o);
-
-std::pair<std::string, std::string> entry_text(int page, U32 index)
-{
-    if (index == 2) return {lang::t("setting.back"), lang::t("desc.back")};
-    if (page == kPageOutfit) {
-        if (index == 0) return {lang::t("setting.rename"), lang::t("desc.rename")};
-        if (index == 1) return {lang::t("setting.delete"), lang::t("desc.delete")};
-    } else if (page == kPageSettings) {
-        if (index == 3) return {"", lang::t(g_stash ? "desc.gstash.on" : "desc.gstash.off")};
-        if (index == 0) return {"", lang::t(g_take_from_companions ? "desc.party.take" : "desc.party.leave")};
-        if (index == 1) return {"", lang::t(g_messages ? "desc.messages.on" : "desc.messages.off")};
-    } else if (page == kPageSettings2) {
-        if (index == 0) return {lang::t("setting.clear"), lang::t("desc.clear")};
-        if (index == 1) return {lang::t("setting.uninstall"), lang::t("desc.uninstall")};
-    } else if (page == kPageConditions && g_depth_outfit < g_outfits.size()) {
-        const Outfit& o = g_outfits[g_depth_outfit];
-        if (index == 3) {
-            if (o.climate == 1) return {"", lang::t("desc.climate.cold")};
-            if (o.climate == 2) return {"", lang::t("desc.climate.heat")};
-            if (o.climate == 3) return {"", lang::t("desc.climate.off")};
-            int ice = 0, fire = 0;
-            outfit_resistance(o, ice, fire);
-            return {"", lang::f("desc.climate.auto", {{"ice", std::to_string(ice)}, {"fire", std::to_string(fire)}})};
-        }
-        if (index == 0) {
-            if (!o.has_weapons) return {"", lang::t("desc.weapons.none")};
-            return {"", lang::t(o.load_weapons ? "desc.weapons.load" : "desc.weapons.leave")};
-        }
-        if (index == 1) return {"", stash_description(o)};
-    }
-    return {"", ""};
-}
 
 // Set while the plugin itself is calling into the game (pump, prompt answers): callbacks the game fires
 // synchronously meanwhile (focus, frame getter, cursor) must not start another round of work.
 int g_busy = 0;
-struct Busy {
-    Busy() { ++g_busy; }
-    ~Busy() { --g_busy; }
-};
 
 int g_force_images = 0; // frames left to re-set the chest textures (after focus changes / opening)
 
@@ -309,7 +261,7 @@ void keep_slot_images(U64 self, bool force)
 // all counts share the comrades-wheel focus look).
 U32 wheel_n() { return visible_slots() < kOutfitSlots ? visible_slots() : 0; }
 
-std::string numbered(const char* fmt, U32 a, U32 b = 0)
+std::string numbered(const char* fmt, U32 a, U32 b)
 {
     char s[32];
     std::snprintf(s, sizeof s, fmt, a, b);
@@ -352,11 +304,6 @@ const char* prompt_class()
 {
     return !g_pad_in_use ? "om-prompt-c" : g_pad_is_ps ? "om-cross-c" : "om-abtn-c";
 }
-
-const char* const kBadges[] = {"om-plus-big", "om-cog-big", "om-plus-c", "om-cog-c", "om-flag-c", "om-cold-c", "om-heat-c",
-                               "om-cold2-c", "om-heat2-c", "om-eye-c", "om-look-shown-c", "om-look-hidden-c",
-                               "om-look-combat-c", "om-look-peace-c", "om-return-c", "om-prompt-c", "om-cross-c",
-                               "om-abtn-c"};
 // (g_badge_class keeps a pointer: into kBadges)
 size_t badge_index(const char* c)
 {
@@ -468,7 +415,6 @@ bool show_caps(U64 self, U64 root, U32 vk, std::uint8_t mods, int where)
     set_class(box, "!cpp-none", false);
     return true;
 }
-bool show_value(U64 root, const std::string& text, int hotkey = 0, bool caps = false);
 
                                                                                        // anchor, 2 under the eye
 bool show_value(U64 root, const std::string& text, int hotkey, bool caps)
@@ -483,9 +429,6 @@ bool show_value(U64 root, const std::string& text, int hotkey, bool caps)
     return set_class(t, "!cpp-none", text.empty());
 }
 bool clear_label(U64 mark);
-U32 mode_count(U32 i);
-U32 mode_lit(U32 i);
-void show_mode_dots(U64 script, U32 count, U32 mode);
 void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const std::vector<size_t>& pieces)
 {
     U32 k = i < visible ? slot_outfit(i) : kOutfitSlots;
@@ -554,8 +497,6 @@ bool clear_label(U64 mark)
     }
     return ok;
 }
-void apply_cfg_slot(U64 self, U64 script, U64 root, U32 i, U32 visible);
-std::string hotkey_name(U32 vk, std::uint8_t mods);
 bool outfit_missing(size_t o);
 const OutfitItem* outfit_piece(const Outfit& o, U16 slot);
 bool refresh_missing(U64 self);
@@ -703,7 +644,6 @@ bool outfits_current(U64 self)
     U64 tb = rp(self + kOffRootTabBar);
     return tb && r32(tb + kOffTabCurrent) == tab;
 }
-U32 cfg_dots(U32 i, U32* lit);
 
 // Saved outfit: outfit / settings / conditions / appearance; the "+" slot: + / settings 1 / settings 2 (mode 2 there =
 // page 2). The Appearance view: the page slot's three pages, a piece's looks, Back none.
@@ -1371,16 +1311,6 @@ int find_worn_outfit(U64 self)
     return -1;
 }
 
-std::string default_name()
-{
-    for (U32 n = 1;; ++n) {
-        std::string s = lang::f("outfit.default_name", {{"n", std::to_string(n)}});
-        bool used = false;
-        for (const Outfit& o : g_outfits) used |= o.name == s;
-        if (!used) return s;
-    }
-}
-
 // --- Player actor and character -----------------------------------------------------------------
 // The context getter fills {vt, actor, u8 valid, ..}; it is released the way the game does it.
 U64 acquire_player(U64* ctx)
@@ -1642,25 +1572,6 @@ struct ItemAt {
     U64 item; // its 200 bytes in the bag
 };
 
-// --- Bags and settings --------------------------------------------------------------------------
-// One inventory for all three characters (each wears its own gear). Bag ids: 1 carried items, 4 key items (both "on
-// you"), 7 private storage, 14 wardrobe, 13 a hidden bag (never used); the others hold no gear.
-// User settings (the "+" slot's settings view).
-bool g_stash = false;               // after a load, saved pieces left in the bag go to storage (off until turned on)
-bool stash_of(const Outfit& o) { return o.stash ? o.stash == 1 : g_stash; } // (its own, or the global)
-bool g_take_from_companions = true; // pieces another character wears: take them (asked first)
-bool g_messages = true;             // the after-the-fact reports (pieces left, not taken, overwritten); "+" settings page
-std::string g_language;             // the mod's language: a lang::kLanguages code, "" = the game's (detected at start)
-std::wstring g_lang_dir;            // the language files: <plugin folder>/Outfit Manager/lang/
-std::string g_detected_language = "en"; // the game's, read at start (its options file, Steam)
-
-// Loads the chosen language (the setting, else the game's) unless it is loaded already.
-void apply_language()
-{
-    std::string want = g_language.empty() ? g_detected_language : g_language;
-    if (want != lang::code()) lang::load(g_lang_dir, want);
-}
-
 constexpr U64 bag_bit(U16 bag) { return bag < 64 ? 1ull << bag : 0; }
 // Bags loading takes pieces from: the ones on you, storage and the wardrobe (wherever a piece was put away, by Stash or
 // by hand, loading finds it). Companions go through the game's UI requests, which find the item in its own bag (from
@@ -1670,17 +1581,6 @@ U64 equip_bags(bool companion)
     U64 m = bag_bit(kBagCarried) | bag_bit(kBagKeyItems);
     if (!companion || companion_pull_ok()) m |= bag_bit(kBagStorage) | bag_bit(kBagWardrobe);
     return m;
-}
-
-// Character keys -> names (keys are game data, the same in every save).
-const char* character_name(U16 key)
-{
-    switch (key) {
-    case 0: return lang::t("character.kliff");
-    case 3: return lang::t("character.damiane");
-    case 5: return lang::t("character.oongka");
-    }
-    return lang::t("character.other");
 }
 
 // The bag holding uid, among the bags in `allowed` (bag_bit mask; 0 = any). With a key, the item must also be that item:
@@ -2459,10 +2359,6 @@ U64 focused_script(U64 self)
         return 0;
     }
 }
-std::string cfg_description(std::uint8_t k);
-std::string cfg_title(std::uint8_t k);
-std::string cfg_value_text(std::uint8_t k, const char* v);
-std::vector<const char*> cfg_values(std::uint8_t k, U32& cur);
 
 // Shows the focused saved outfit's name in the centre, or what the "+" slot does.
 void center_for_focus(U64 self, U64 script, bool hide_otherwise)
@@ -2552,271 +2448,6 @@ void refresh_wheel(U64 self)
     sync_ring(self);
 }
 
-// --- Rename prompt: the game's own TextEditModalMessage (as its naming prompts open it) ----------
-// Confirm with text renames the outfit just saved; an empty confirm, cancel, Esc or closing the menu keep "Outfit N".
-std::atomic<U64> g_name_modal{0}; // the open prompt (0: none)
-U64 g_name_self = 0;       // the gear menu it was opened from
-std::string g_name_default;
-size_t g_name_index = 0;   // the outfit being named (checked against g_name_default)
-U64 g_name_opened = 0;     // tick
-U64 g_modal_ended = 0;      // tick: presses made while typing are dropped for a moment after the prompt closes
-unsigned char g_name_shown = 0; // modal +0xbd at open (the shown flag; the hide clears it)
-alignas(16) unsigned char g_modal_params[0x1800];
-static_assert(sizeof(g_modal_params) >= kParamsSize, "the modal parameter block does not fit");
-
-// Object-free (for __try): the opened modal or 0.
-U64 open_text_modal_raw(U64 self, const char* message)
-{
-    __try {
-        U64 ui = reinterpret_cast<UiMgrFn>(*reinterpret_cast<U64*>(*reinterpret_cast<U64*>(self) + kVfUiMgr))(self);
-        U64 view = ui ? g_find_view(ui, "ModalMessageView") : 0;
-        if (!view) return 0;
-        g_params_init(reinterpret_cast<U64>(g_modal_params));
-        strncpy_s(reinterpret_cast<char*>(g_modal_params + kParamsMessage), kParamsMessageCap, message, _TRUNCATE);
-        *reinterpret_cast<U32*>(g_modal_params + kParamsMessageLen) = 0xFFFFFFFF; // length: recompute
-        U64 modal = g_open_text_modal(0, view, g_modal_params, kNameMaxChars);
-        g_params_free(reinterpret_cast<U64>(g_modal_params));
-        if (modal && !has_vt(modal, kRvaTextModalVt)) return 0; // not the modal we know: leave it alone
-        if (modal) *reinterpret_cast<U64*>(modal + kOffModalOwner) = 0; // no owner callback (a stale one from earlier use)
-        return modal;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return 0;
-    }
-}
-
-// Object-free: the prompt's current text (empty if it can't be read).
-void read_modal_text_raw(U64 modal, char* out, int size)
-{
-    out[0] = 0;
-    __try {
-        U64 input = *reinterpret_cast<U64*>(modal + kOffModalInput);
-        if (input && *reinterpret_cast<unsigned char*>(input + kOffInputBusy) == 0)
-            g_get_text(*reinterpret_cast<U64*>(input + kOffInputText), out, size);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        out[0] = 0;
-    }
-    out[size - 1] = 0;
-}
-
-// Object-free: closes the prompt the way its own buttons do.
-void hide_modal_raw(U64 modal)
-{
-    __try {
-        g_hide_script(modal);
-        if (kOffModalD0)
-            if (U64 d0 = *reinterpret_cast<U64*>(modal + kOffModalD0)) *reinterpret_cast<unsigned char*>(d0 + 0xf2) = 0;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        LOG("rename: hide faulted");
-    }
-}
-
-U64 call_click_raw(U64 modal, U64 a, U64 elem, U64 flag)
-{
-    __try {
-        return g_text_click_orig(modal, a, elem, flag);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        LOG("rename: game click handler faulted");
-        return 0;
-    }
-}
-
-bool name_invalid_raw(const char* s)
-{
-    __try {
-        return g_name_invalid(s);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-std::string clean_name(const std::string& in)
-{
-    std::string s;
-    for (char c : in)
-        if (static_cast<unsigned char>(c) >= 0x20 && c != 0x7f) s += c; // no tabs / newlines (store format)
-    size_t a = s.find_first_not_of(' '), b = s.find_last_not_of(' ');
-    return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
-}
-
-// A prompt takes the input while it is open, so the gear menu misses the release of the button that holds it open
-// and stays up afterwards. Once a prompt is gone, do what the game's release handler (0x1098f10, event 1) does.
-using QueueHideFn = void(__fastcall*)(U64, U64);
-QueueHideFn g_queue_hide = nullptr;
-bool g_release_pending = false; // set when a prompt closes while the menu is open; done by pump on the next frame
-
-// The input side of the same problem: the HUD key binding that holds the menu (0xcc40c0's binding: +0x232 "pressed")
-// never sees its key go up either, so the next press only counts as the missing release. The hook remembers the binding
-// whose down / held event left it pressed (with a copy of that event); after a prompt the game is handed that event
-// again as an up (type 7 at +0x38) and runs its own release: binding state, hold progress, the HUD's release handler
-// (which closes the menu).
-using BindingInputFn = void(__fastcall*)(U64, U64, U64);
-BindingInputFn g_binding_input_orig = nullptr;
-constexpr U32 kInputEventCopy = 0x40; // the fields the state machine reads end at +0x3a
-struct HeldBinding {
-    U64 dispatcher = 0, binding = 0;
-    alignas(16) unsigned char event[kInputEventCopy] = {};
-};
-std::map<U64, HeldBinding> g_pressed; // bindings whose key is down, by binding
-U64 g_last_pressed = 0;               // the binding pressed last (at menu open: the one that opened it)
-HeldBinding g_held;                   // the menu's binding, taken at menu open
-std::mutex g_held_mu; // input may arrive on another thread than the menu's
-
-// At menu open: the binding pressed last is the menu's button.
-void note_menu_binding()
-{
-    std::lock_guard lock(g_held_mu);
-    auto it = g_pressed.find(g_last_pressed);
-    g_held = it != g_pressed.end() ? it->second : HeldBinding{};
-}
-
-// 1 = pressed by a down / held event, 2 = released (up), 0 = neither or unreadable.
-int binding_change(U64 event, U64 binding, unsigned char* copy)
-{
-    __try {
-        unsigned char type = *reinterpret_cast<unsigned char*>(event + kOffEventType);
-        if ((type == 3 || type == 6) && *reinterpret_cast<unsigned char*>(binding + kOffBindingPressed)) {
-            std::memcpy(copy, reinterpret_cast<const void*>(event), kInputEventCopy);
-            return 1;
-        }
-        return type == 7 ? 2 : 0;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return 0;
-    }
-}
-
-void __fastcall binding_input_hook(U64 dispatcher, U64 event, U64 binding)
-{
-    g_binding_input_orig(dispatcher, event, binding);
-    if (!kOffEventType || !kOffBindingPressed) return; // (offsets doubtful after a game update)
-    alignas(16) unsigned char copy[kInputEventCopy];
-    int change = binding_change(event, binding, copy);
-    if (!change) return;
-    std::lock_guard lock(g_held_mu);
-    if (change == 1) {
-        HeldBinding& h = g_pressed[binding];
-        h.dispatcher = dispatcher, h.binding = binding;
-        std::memcpy(h.event, copy, kInputEventCopy);
-        g_last_pressed = binding;
-    } else {
-        g_pressed.erase(binding);
-        if (binding == g_held.binding) g_held = {};
-    }
-}
-
-// 1 = released through the game's input, 0 = its up did arrive, -1 = fault.
-int send_up(HeldBinding& h)
-{
-    __try {
-        if (!*reinterpret_cast<unsigned char*>(h.binding + kOffBindingPressed)) return 0;
-        if (!kOffEventType || kOffEventType >= kInputEventCopy) return -1; // layout doubtful / beyond our copy
-        h.event[kOffEventType] = 7; // key up
-        h.event[0x10] = 0; // "handled" (the state machine sets it)
-        g_binding_input_orig(h.dispatcher, reinterpret_cast<U64>(h.event), h.binding);
-        return 1;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return -1;
-    }
-}
-
-// True if a held binding was released through the game's own input path.
-bool release_held_binding()
-{
-    HeldBinding h;
-    {
-        std::lock_guard lock(g_held_mu);
-        h = g_held;
-        g_held = {};
-        g_pressed.erase(h.binding);
-    }
-    if (!h.binding || !g_binding_input_orig) return false;
-    int r = send_up(h);
-    LOG("prompt closed: %s (binding %llX)", r > 0 ? "menu button released through the game's input" :
-        r == 0 ? "menu button was already up" : "input release faulted", h.binding);
-    return r > 0;
-}
-
-void release_menu_button(U64 self)
-{
-    if (release_held_binding()) return;
-    if (!kOffPanelFlags || !kOffPanelHoldClose || !kOffPanelElem) return; // (doubtful after a game update)
-    __try {
-        U64 ui = reinterpret_cast<UiMgrFn>(*reinterpret_cast<U64*>(*reinterpret_cast<U64*>(self) + kVfUiMgr))(self);
-        U64 view = ui ? g_find_view(ui, "ItemQuickSlotView2") : 0;
-        if (!view || (*reinterpret_cast<unsigned char*>(view + kOffViewFlags) & 0x60) != 0x40) return; // not shown
-        U64 inner = *reinterpret_cast<U64*>(view + kOffViewInner);
-        U64 panel = inner ? *reinterpret_cast<U64*>(inner + 0x10) : 0;
-        if (!panel) return;
-        auto flags = reinterpret_cast<unsigned char*>(panel + kOffPanelFlags);
-        *flags &= 0xfe; // the button is up
-        bool held_open = (*flags & 2) && *reinterpret_cast<unsigned char*>(panel + kOffPanelHoldClose); // opened by holding
-        LOG("prompt closed: menu button released (%s)", held_open ? "menu closes" : "menu was opened by a tap: stays");
-        if (held_open) {
-            U64 elem = *reinterpret_cast<U64*>(panel + kOffPanelElem);
-            if (!is_element(elem)) {
-                LOG("prompt closed: the menu's view element is not where expected; not closing it");
-                return;
-            }
-            g_queue_hide(*reinterpret_cast<U64*>(elem + 0x58), elem);
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        LOG("prompt closed: menu button release faulted");
-    }
-}
-
-void finish_naming(const std::string& text, const char* why)
-{
-    if (!g_name_modal) return;
-    Busy busy;
-    g_name_modal = 0;
-    g_modal_ended = GetTickCount64();
-    g_release_pending = g_menu_open;
-    U64 self = g_name_self;
-    std::string name = clean_name(text);
-    bool here = g_name_index < g_outfits.size() && g_outfits[g_name_index].name == g_name_default;
-    LOG("rename: %s, text \"%s\" -> \"%s\"%s", why, text.c_str(), name.c_str(), here ? "" : " (outfit gone)");
-    if (!here || name.empty() || name == g_name_default) return;
-    for (const Outfit& o : g_outfits)
-        if (o.name == name) {
-            if (g_menu_open) notify(self, lang::f("toast.name_taken", {{"outfit", name}}));
-            return;
-        }
-    g_outfits[g_name_index].name = name;
-    save_outfits();
-    if (g_menu_open && outfits_current(self)) {
-        center_restore();
-        center_for_focus(self, focused_script(self), true);
-    }
-}
-
-// Slot 113 of the TextEdit modal (its button / key handler): only our prompt is handled here.
-U64 __fastcall text_click_hook(U64 modal, U64 a, U64 elem, U64 flag)
-{
-    if (!g_name_modal || modal != g_name_modal || (flag & 0xFF)) return g_text_click_orig(modal, a, elem, flag);
-    if (elem && elem == rp(modal + kOffModalConfirm)) {
-        char buf[0x105] = {};
-        read_modal_text_raw(modal, buf, sizeof buf);
-        std::string text = buf;
-        if (clean_name(text).empty()) { // the game ignores an empty confirm; here it keeps the default name
-            hide_modal_raw(modal);
-            finish_naming("", "confirmed empty");
-            return 0;
-        }
-        if (name_invalid_raw(buf)) {
-            LOG("rename: \"%s\" rejected by the game's name filter", buf);
-            return call_click_raw(modal, a, elem, flag); // shows the game's error and keeps the prompt open
-        }
-        U64 r = call_click_raw(modal, a, elem, flag); // validates again and closes
-        finish_naming(text, "confirmed");
-        return r;
-    }
-    if (elem && elem == rp(modal + kOffModalCancel)) {
-        U64 r = call_click_raw(modal, a, elem, flag);
-        finish_naming("", "cancelled");
-        return r;
-    }
-    return g_text_click_orig(modal, a, elem, flag);
-}
-
 // --- Typed characters the prompt drops -------------------------------------------------------------
 // The game's text box makes its own characters from the keys: letters (shifted too) and digits, but no Shift / AltGr
 // symbols (! + / * ...) or accented letters, though pasting them works. While our prompt is open the characters
@@ -2825,13 +2456,6 @@ U64 __fastcall text_click_hook(U64 modal, U64 a, U64 elem, U64 flag)
 // (+0xf1: the caret-moved flag the game's own keys set, so the caret is drawn there at once).
 
 WNDPROC g_game_wndproc = nullptr;
-std::mutex g_typed_mu;
-std::wstring g_typed;       // characters since the batch began
-std::string g_typed_base;   // the box text on the frame before the batch
-U32 g_typed_caret = 0;      // and its caret
-int g_typed_quiet = 0;      // frames since the last character
-std::string g_name_text;    // the box text on the last frame
-U32 g_name_caret = 0;       // its caret
 
 // The wheel hook is in (the arc open): it alone counts the notches. The window and raw input routes then only keep
 // the wheel from the game (2026-11-06: all three counted, 6 steps per notch, and with 3 outfits the arc went round
@@ -2884,7 +2508,6 @@ LRESULT CALLBACK name_wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
     }
     return CallWindowProcW(g_game_wndproc, w, m, wp, lp);
 }
-bool game_focused();
 
 // Once, when our prompt first opens (the game window is in front then); stays in place, idle while no prompt is open.
 void watch_game_chars()
@@ -2894,212 +2517,6 @@ void watch_game_chars()
     g_game_wndproc = reinterpret_cast<WNDPROC>(
         SetWindowLongPtrW(w, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&name_wndproc)));
     LOG("rename: watching typed characters (window %p)", static_cast<void*>(w));
-}
-
-// Object-free: the prompt's caret (false if it can't be read, or a selection is open).
-bool read_modal_caret_raw(U64 modal, U32& caret)
-{
-    __try {
-        U64 input = *reinterpret_cast<U64*>(modal + kOffModalInput);
-        if (!input) return false;
-        caret = *reinterpret_cast<U32*>(input + kOffInputCaret);
-        return caret == *reinterpret_cast<U32*>(input + kOffInputCaretEnd);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-// Object-free: sets the prompt's text and caret (false if it can't be reached).
-bool write_modal_text_raw(U64 modal, const char* text, U32 caret)
-{
-    __try {
-        U64 input = *reinterpret_cast<U64*>(modal + kOffModalInput);
-        if (!input || *reinterpret_cast<unsigned char*>(input + kOffInputBusy) != 0) return false;
-        g_set_text(*reinterpret_cast<U64*>(input + kOffInputText), text, 0);
-        *reinterpret_cast<U32*>(input + kOffInputCaret) = caret;
-        *reinterpret_cast<U32*>(input + kOffInputCaretEnd) = caret;
-        *reinterpret_cast<unsigned char*>(input + kOffInputCaretMoved) = 1; // as the game's own caret keys: redrawn now
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-size_t utf8_chars(const std::string& s)
-{
-    size_t n = 0;
-    for (char c : s) n += (static_cast<unsigned char>(c) & 0xC0) != 0x80;
-    return n;
-}
-
-// The byte offset of character `chars` (the end if past it).
-size_t utf8_offset(const std::string& s, size_t chars)
-{
-    size_t i = 0;
-    for (; i < s.size(); ++i)
-        if ((static_cast<unsigned char>(s[i]) & 0xC0) != 0x80 && chars-- == 0) break;
-    return i;
-}
-
-void type_dropped_chars()
-{
-    char buf[0x105] = {};
-    read_modal_text_raw(g_name_modal, buf, sizeof buf);
-    U32 caret = 0;
-    bool caret_ok = read_modal_caret_raw(g_name_modal, caret);
-    std::string now = buf, base;
-    std::wstring typed;
-    U32 base_caret = 0;
-    {
-        std::lock_guard<std::mutex> lock(g_typed_mu);
-        g_name_text = now;
-        g_name_caret = caret_ok ? caret : 0xFFFFFFFF;
-        if (g_typed.empty() || ++g_typed_quiet < 2) return;
-        typed.swap(g_typed);
-        base = g_typed_base;
-        base_caret = g_typed_caret;
-    }
-    // What the game typed went in at the caret: the text around it must be as before (else: deleted / a selection /
-    // edited in the same moment, and it is left as it is).
-    size_t pos = base_caret == 0xFFFFFFFF ? std::string::npos : utf8_offset(base, base_caret);
-    size_t tail = pos == std::string::npos ? 0 : base.size() - pos;
-    if (pos == std::string::npos || now.size() < base.size() || now.compare(0, pos, base, 0, pos) != 0 ||
-        now.compare(now.size() - tail, tail, base, pos, tail) != 0) {
-        LOG("rename: typed characters skipped (text \"%s\" was \"%s\", caret %u)", now.c_str(), base.c_str(), base_caret);
-        return;
-    }
-    std::string out = now;
-    bool added = false;
-    for (wchar_t c : typed) {
-        char u[8] = {};
-        int n = WideCharToMultiByte(CP_UTF8, 0, &c, 1, u, sizeof u, nullptr, nullptr);
-        if (n <= 0) continue;
-        if (out.compare(pos, size_t(n), u, size_t(n)) == 0) { pos += size_t(n); continue; } // the game took it
-        if (utf8_chars(out) >= size_t(kNameMaxChars)) break;
-        out.insert(pos, u, size_t(n));
-        pos += size_t(n);
-        added = true;
-    }
-    if (!added) return;
-    U32 at = U32(utf8_chars(out.substr(0, pos)));
-    if (write_modal_text_raw(g_name_modal, out.c_str(), at)) {
-        LOG("rename: typed characters added: \"%s\" -> \"%s\"", now.c_str(), out.c_str());
-        std::lock_guard<std::mutex> lock(g_typed_mu);
-        g_name_text = out;
-        g_name_caret = at;
-    }
-}
-
-void open_rename_prompt(U64 self, size_t index)
-{
-    if (!g_open_text_modal || g_name_modal) return;
-    std::string msg = lang::f("prompt.name", {{"outfit", g_outfits[index].name}});
-    U64 modal = open_text_modal_raw(self, msg.c_str());
-    if (!modal) {
-        LOG("rename: prompt did not open; name stays \"%s\"", g_outfits[index].name.c_str());
-        return;
-    }
-    g_name_modal = modal;
-    g_name_self = self;
-    g_name_index = index;
-    g_name_default = g_outfits[index].name;
-    g_name_opened = GetTickCount64();
-    {
-        std::lock_guard<std::mutex> lock(g_typed_mu);
-        g_typed.clear();
-        g_name_text.clear();
-        g_name_caret = 0;
-    }
-    watch_game_chars();
-    rd(modal + kOffModalShown, g_name_shown);
-    unsigned char hiding = 0;
-    rd(modal + kOffModalHidden, hiding);
-    LOG("rename: prompt %llX open for \"%s\" (+0xbd %u, +0xbe %u, input %llX)", modal, g_name_default.c_str(),
-        g_name_shown, hiding, rp(modal + kOffModalInput));
-}
-
-// While the prompt is open: notices it closing some other way (the shown flag drops, or a 3-minute safety stop).
-void watch_rename_prompt()
-{
-    if (!g_name_modal) return;
-    type_dropped_chars();
-    unsigned char shown = g_name_shown;
-    rd(g_name_modal + kOffModalShown, shown);
-    if (g_name_shown && !shown) finish_naming("", "prompt closed elsewhere");
-    else if (GetTickCount64() - g_name_opened > 180000) {
-        hide_modal_raw(g_name_modal);
-        finish_naming("", "timed out");
-    }
-}
-
-// --- Questions before loading: the game's own yes / no CommonModalMessage --------------------------
-// 1. Pieces another character wears (setting on): "... is worn by Oongka. Take it?" - Take: their unequip request, then
-//    the piece is put on once it is in the bags (pump); Leave as is: those slots stay.
-// 2. Pieces that are gone while another copy is owned: "Wear copy" (saved into the outfit) / "Leave as is".
-// Slots left as they are get one notification saying why. Esc / closing the menu loads nothing.
-struct Take {
-    size_t k;     // outfit item index
-    U16 who;      // character key
-    U64 actor;    // their actor
-    U16 worn_slot; // the slot they wear it in
-};
-struct Left {
-    U16 slot;
-    const char* why; // its line: left.storage, ... ({piece}, {who})
-    U16 who = 0;     // left.stays_with: whose
-};
-struct AskedLoad {
-    U32 index = 0;
-    std::string name; // checked: the list may change while the question is open
-    std::vector<std::pair<size_t, U64>> copies;
-    std::vector<Take> takes;
-    std::vector<Left> left;
-    int stage = 0; // the open question: 1 takes, 2 copies
-    int confirm = 0; // instead a yes / no from the outfit page: kConfirmOverwrite, kConfirmDelete, kConfirmSwap
-    U32 other = 0;          // kConfirmSwap: the outfit worn now (checked by name, as index is)
-    std::string other_name;
-    bool takes_answered = false, take = false, copies_answered = false, use_copies = false;
-};
-std::atomic<U64> g_ask_modal{0}; // the open question (0: none)
-U64 g_ask_self = 0;
-U64 g_ask_opened = 0;
-unsigned char g_ask_shown = 0;
-AskedLoad g_pending;
-enum AskAnswer { kAskAbort, kAskYes, kAskNo };
-
-U64 open_common_modal_raw(U64 self, const char* title, const char* message, const char* yes, const char* no)
-{
-    __try {
-        U64 ui = reinterpret_cast<UiMgrFn>(*reinterpret_cast<U64*>(*reinterpret_cast<U64*>(self) + kVfUiMgr))(self);
-        U64 view = ui ? g_find_view(ui, "ModalMessageView") : 0;
-        if (!view) return 0;
-        unsigned char* p = g_modal_params;
-        g_params_init(reinterpret_cast<U64>(p));
-        strncpy_s(reinterpret_cast<char*>(p + kParamsTitle), kParamsLabelCap, title, _TRUNCATE);
-        *reinterpret_cast<U32*>(p + kParamsTitleLen) = 0xFFFFFFFF;
-        strncpy_s(reinterpret_cast<char*>(p + kParamsMessage), kParamsMessageCap, message, _TRUNCATE);
-        *reinterpret_cast<U32*>(p + kParamsMessageLen) = 0xFFFFFFFF;
-        // (an empty label hides its button)
-        strncpy_s(reinterpret_cast<char*>(p + kParamsConfirm), kParamsLabelCap, yes, _TRUNCATE);
-        strncpy_s(reinterpret_cast<char*>(p + kParamsCancel), kParamsLabelCap, no, _TRUNCATE);
-        U64 modal = g_open_common_modal(0, view, p, reinterpret_cast<const char*>(g_base + kRvaCommonModalName));
-        g_params_free(reinterpret_cast<U64>(p));
-        if (modal && !has_vt(modal, kRvaCommonModalVt)) return 0; // not the modal we know: leave it alone
-        if (modal) *reinterpret_cast<U64*>(modal + kOffModalOwner) = 0; // no owner callback
-        return modal;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return 0;
-    }
-}
-
-U64 call_ask_click_raw(U64 modal, U64 a, U64 elem, U64 flag)
-{
-    __try {
-        return g_ask_click_orig(modal, a, elem, flag);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        LOG("missing pieces: game click handler faulted");
-        return 0;
-    }
 }
 
 // "Helmet (Wooden Mask...)": one piece of the outfit.
@@ -3171,31 +2588,6 @@ void finish_load(U64 self, AskedLoad& p)
     refresh_wheel(self);
 }
 
-enum Confirm { kConfirmNone, kConfirmOverwrite, kConfirmDelete, kConfirmSwap, kConfirmCleanSave, kConfirmUninstall };
-
-// --- Settings view: an outfit's settings (or the plugin's, from the "+" slot) on the wheel ---------------------------
-// The second scroll mode of a slot opens it (no submenu). Its segments: a setting's name and value (its dots are the
-// choices: scroll to change) or an action (the click prompt), then Back (left of the top). The centre names the
-// highlighted setting, its value and what it does.
-
-bool g_overwrite_reset = false; // the settings view's Overwrite: false keeps the outfit's settings, true resets them
-
-enum CfgKind : std::uint8_t {
-    kCfgVisibility, kCfgClimate, kCfgWeapons, kCfgStash, kCfgPosition, kCfgRename, kCfgOverwrite, kCfgDelete, // a saved outfit's
-    kCfgGStash, kCfgParty, kCfgMessages, kCfgClear, kCfgUninstall,                               // the "+" slot's
-    kCfgBack, kCfgLanguage, kCfgPeekKey, kCfgPeekPad, kCfgHotkey
-};
-
-// The Outfit Arc's key (the "+" page's Outfit Arc; Off by default: no key is free in every layout, so the player sets
-// one). A click on the setting waits for the next key or mouse button (left / right excepted: they click), read with
-// GetAsyncKeyState so it works however the game reads its input; Esc cancels, Backspace / Delete turn it off. Held: the
-// arc shows; the wheel moves along it; released: the highlighted outfit goes on. The key and, while the arc is open, the
-// wheel are kept from the game (raw_input_hook, name_wndproc).
-std::atomic<bool> g_peek_capture{false}; // the setting waits for a key
-int g_capture_outfit = -1;               // ... for that outfit's Hotkey (-1: for the Outfit Arc's key)
-U32 g_peek_capture_slot = 0;             // its slot (refreshed when the key comes)
-bool g_peek_capture_held[256] = {};      // keys already down when it started waiting (not taken as the answer)
-
 // Older builds of 5 November stored names; now the key code.
 void peek_key_load(const std::string& id)
 {
@@ -3263,444 +2655,6 @@ USHORT peek_mouse_flags(U32 vk)
     if (vk == VK_XBUTTON1) return RI_MOUSE_BUTTON_4_DOWN | RI_MOUSE_BUTTON_4_UP;
     if (vk == VK_XBUTTON2) return RI_MOUSE_BUTTON_5_DOWN | RI_MOUSE_BUTTON_5_UP;
     return 0;
-}
-
-std::vector<std::uint8_t> cfg_entries()
-{
-    if (g_cfg < 0) return {};
-    if (size_t(g_cfg) < g_outfits.size())
-        return {kCfgVisibility, kCfgClimate, kCfgWeapons, kCfgStash, kCfgHotkey, kCfgPosition, kCfgRename, kCfgOverwrite,
-                kCfgDelete, kCfgBack};
-    // (the Outfit Arc's binding for the input in use: the key, or the pad's; pump re-shows the page when it changes)
-    return {kCfgGStash, kCfgParty, kCfgMessages, kCfgLanguage, g_pad_in_use ? kCfgPeekPad : kCfgPeekKey, kCfgClear,
-            kCfgUninstall, kCfgBack};
-}
-
-const char* cfg_name(std::uint8_t k)
-{
-    static const char* const n[] = {"setting.visibility", "setting.climate", "setting.weapons", "setting.stash",
-                                    "setting.position",   "setting.rename",  "setting.overwrite", "setting.delete",
-                                    "setting.stash",      "setting.party",   "setting.messages", "setting.clear",
-                                    "setting.uninstall",  "setting.back",    "setting.language", "setting.peekkey",
-                                    "setting.peekpad",    "setting.hotkey"};
-    return k <= kCfgHotkey ? lang::t(n[k]) : "";
-}
-
-// A text that stays where it is (the settings' values are kept as pointers between refreshes: a reused std::string's
-// buffer moves once the text outgrows it, 2026-11-06: "Ctrl + Shift + 1" showed leftover memory). Each distinct text
-// is kept once, for the session (a few key names).
-const char* stable_text(const std::string& t)
-{
-    static std::set<std::string> kept;
-    static std::mutex mu;
-    std::lock_guard<std::mutex> lock(mu);
-    return kept.insert(t).first->c_str();
-}
-
-// A value setting's choices (their line keys; the Language setting: Auto and each language's own name) and the current
-// one (none: an action).
-std::vector<const char*> cfg_values(std::uint8_t k, U32& cur)
-{
-    cur = 0;
-    if (size_t(g_cfg) < g_outfits.size()) {
-        const Outfit& o = g_outfits[size_t(g_cfg)];
-        if (k == kCfgClimate) { // (shown Auto / Off / Cold / Heat; stored 0 Auto, 3 Off, 1 Cold, 2 Heat)
-            static const U32 pos[4] = {0, 2, 3, 1};
-            cur = pos[o.climate & 3];
-            return {"value.auto", "value.off", "value.cold", "value.heat"};
-        }
-        if (k == kCfgWeapons) {
-            cur = uses_weapons(o) ? 0 : 1;
-            return {"value.load", "value.leave"};
-        }
-        if (k == kCfgStash) {
-            cur = o.stash % 3;
-            return {"value.default", "value.on", "value.off"};
-        }
-        if (k == kCfgHotkey) { // (one value: the hotkey, or the wait for one)
-            bool waiting = g_peek_capture && g_capture_outfit == g_cfg;
-            return {waiting ? "value.press_key" : stable_text(hotkey_name(o.hk_vk, o.hk_mods))};
-        }
-        if (k == kCfgOverwrite) { // (an action with a choice: scrolled, then clicked)
-            cur = g_overwrite_reset ? 1 : 0;
-            return {"value.keep_settings", "value.reset_all"};
-        }
-    }
-    if (k == kCfgGStash) return cur = g_stash ? 1 : 0, std::vector<const char*>{"value.off", "value.on"};
-    if (k == kCfgParty) return cur = g_take_from_companions ? 1 : 0, std::vector<const char*>{"value.leave", "value.take"};
-    if (k == kCfgMessages) return cur = g_messages ? 1 : 0, std::vector<const char*>{"value.off", "value.on"};
-    if (k == kCfgPeekPad) return cur = g_peek_pad ? 1 : 0, std::vector<const char*>{"value.off", "value.peekpad"};
-    if (k == kCfgPeekKey) // (one value: the key, or the wait for one)
-        return {g_peek_capture && g_capture_outfit < 0 ? "value.press_key" : stable_text(peek_key_name(g_peek_key.load()))};
-    if (k == kCfgLanguage) {
-        std::vector<const char*> v{"value.auto_language"};
-        for (size_t i = 0; i < lang::kLanguageCount; ++i) {
-            v.push_back(lang::kLanguages[i].code);
-            if (g_language == lang::kLanguages[i].code) cur = U32(i + 1);
-        }
-        return v;
-    }
-    return {};
-}
-
-// A value as shown (the Language setting's: the language's own name; Auto: with the game's).
-std::string cfg_value_text(std::uint8_t k, const char* v)
-{
-    if (k == kCfgPeekKey || k == kCfgHotkey) // (a line key, or the key's own label)
-        return !std::strcmp(v, "value.press_key") || !std::strcmp(v, "value.no_hotkey") ? lang::t(v) : v;
-    if (k == kCfgPeekPad) return lang::f(v, {{"button", g_pad_is_ps ? "L1" : "LB"}}); // (the pad in use's own name)
-    if (k != kCfgLanguage) return lang::t(v);
-    std::string auto_code = std::string(v) == "value.auto_language" ? g_detected_language : v;
-    const char* name = "English";
-    for (size_t i = 0; i < lang::kLanguageCount; ++i)
-        if (auto_code == lang::kLanguages[i].code) name = lang::kLanguages[i].name;
-    return std::string(v) == "value.auto_language" ? lang::f("value.auto_language", {{"language", name}}) : name;
-}
-
-// The setting's name on its slot and in the centre; Position shows the outfit's place (no dots: there can be many).
-std::string cfg_title(std::uint8_t k)
-{
-    if (k != kCfgPosition) return cfg_name(k);
-    return lang::f("setting.position", {{"n", std::to_string(g_cfg + 1)}, {"total", std::to_string(g_outfits.size())}});
-}
-
-// What the setting does (the centre's caption).
-std::string cfg_description(std::uint8_t k)
-{
-    std::pair<std::string, std::string> t;
-    if (k == kCfgPosition) return lang::t("desc.position");
-    if (size_t(g_cfg) < g_outfits.size()) {
-        g_depth_outfit = static_cast<U32>(g_cfg); // (entry_text's outfit)
-        if (k == kCfgClimate) t = entry_text(kPageConditions, 3);
-        else if (k == kCfgWeapons) t = entry_text(kPageConditions, 0);
-        else if (k == kCfgStash) t = entry_text(kPageConditions, 1);
-        else if (k == kCfgRename) t = entry_text(kPageOutfit, 0);
-        else if (k == kCfgOverwrite)
-            t.second = lang::t(g_overwrite_reset ? "desc.overwrite.reset" : "desc.overwrite.keep");
-        else if (k == kCfgDelete) t = entry_text(kPageOutfit, 1);
-        else if (k == kCfgVisibility) t.second = lang::t("desc.visibility");
-        else if (k == kCfgHotkey) {
-            const Outfit& o = g_outfits[size_t(g_cfg)];
-            t.second = g_peek_capture && g_capture_outfit == g_cfg ? lang::t("desc.hotkey.wait")
-                       : o.hk_vk ? lang::f("desc.hotkey.on", {{"hotkey", hotkey_name(o.hk_vk, o.hk_mods)}})
-                                 : lang::t("desc.hotkey.off");
-        }
-    } else {
-        if (k == kCfgGStash) t = entry_text(kPageSettings, 3);
-        else if (k == kCfgParty) t = entry_text(kPageSettings, 0);
-        else if (k == kCfgMessages) t = entry_text(kPageSettings, 1);
-        else if (k == kCfgClear) t = entry_text(kPageSettings2, 0);
-        else if (k == kCfgUninstall) t = entry_text(kPageSettings2, 1);
-        else if (k == kCfgLanguage) t.second = lang::t("desc.language");
-        else if (k == kCfgPeekPad)
-            t.second = lang::f(g_peek_pad ? "desc.peekpad.on" : "desc.peekpad.off", {{"button", g_pad_is_ps ? "L1" : "LB"}});
-        else if (k == kCfgPeekKey)
-            t.second = lang::t(g_peek_capture ? "desc.peekkey.wait" : g_peek_key.load() ? "desc.peekkey.on" : "desc.peekkey.off");
-    }
-    if (k == kCfgBack) t.second = lang::t("desc.back");
-    return t.second;
-}
-
-void cfg_refresh(U64 self)
-{
-    g_force_images = 3;
-    refresh_wheel(self);
-    center_for_focus(self, focused_script(self), true);
-}
-
-void cfg_enter(U64 self, U32 o)
-{
-    g_eye = -1, g_cfg = static_cast<int>(o), g_overwrite_reset = false;
-    LOG("settings view: %s", o < g_outfits.size() ? ("\"" + g_outfits[o].name + "\"").c_str() : "the plugin's");
-    cfg_refresh(self);
-}
-
-void cfg_leave(U64 self)
-{
-    LOG("settings view: back to the outfits");
-    g_cfg = -1;
-    g_center_desc.clear();
-    reset_modes();
-    cfg_refresh(self);
-}
-
-// Position: the outfit changes places with its neighbour (no wrap at the ends); the view stays on it, the worn outfit's
-// index follows. Prompts and a load in progress hold a name they check, but a load's late parts use the index: not then.
-void cfg_move(U64 self, U32 i, int step)
-{
-    int from = g_cfg, to = from + (step > 0 ? 1 : -1);
-    if (from < 0 || to < 0 || size_t(to) >= g_outfits.size() || size_t(from) >= g_outfits.size() || g_async.active) return;
-    std::swap(g_outfits[size_t(from)], g_outfits[size_t(to)]);
-    g_cfg = to;
-    if (g_worn_outfit == from) g_worn_outfit = to;
-    else if (g_worn_outfit == to) g_worn_outfit = from;
-    LOG("settings \"%s\": position %d -> %d", g_outfits[size_t(to)].name.c_str(), from + 1, to + 1);
-    save_outfits();
-    apply_outfit_slots(self, i);
-    center_for_focus(self, focused_script(self), true);
-}
-
-// A scroll on a value setting moves it on / back (and saves); on the rest nothing.
-void cfg_scroll(U64 self, U32 i, int step)
-{
-    std::vector<std::uint8_t> e = cfg_entries();
-    U32 k = i < visible_slots() ? slot_outfit(i) : kOutfitSlots;
-    if (k >= e.size()) return;
-    if (e[k] == kCfgPosition) return cfg_move(self, i, step);
-    U32 cur = 0;
-    std::vector<const char*> v = cfg_values(e[k], cur);
-    if (v.empty()) return;
-    U32 to = U32((cur + v.size() + step) % v.size());
-    if (e[k] == kCfgOverwrite) { // (how the next Overwrite goes: nothing saved)
-        g_overwrite_reset = to == 1;
-        LOG("settings view: Overwrite -> %s", v[to]);
-        apply_outfit_slots(self, i);
-        center_for_focus(self, focused_script(self), true);
-        return;
-    }
-    if (size_t(g_cfg) < g_outfits.size()) {
-        Outfit& o = g_outfits[size_t(g_cfg)];
-        if (e[k] == kCfgClimate) {
-            static const std::uint8_t val[4] = {0, 3, 1, 2};
-            o.climate = val[to];
-        } else if (e[k] == kCfgWeapons) {
-            if (!o.has_weapons) {
-                notify(self, lang::f("toast.no_weapons", {{"outfit", o.name}}));
-                return;
-            }
-            o.load_weapons = to == 0;
-        } else if (e[k] == kCfgStash) {
-            o.stash = static_cast<std::uint8_t>(to);
-        }
-        LOG("settings \"%s\": %s -> %s", o.name.c_str(), cfg_name(e[k]), v[to]);
-    } else {
-        if (e[k] == kCfgGStash) g_stash = to == 1;
-        else if (e[k] == kCfgParty) g_take_from_companions = to == 1;
-        else if (e[k] == kCfgMessages) g_messages = to == 1;
-        else if (e[k] == kCfgPeekPad) g_peek_pad = to == 1;
-        else if (e[k] == kCfgLanguage) {
-            g_language = to == 0 ? std::string() : std::string(v[to]);
-            apply_language();
-            if (U64 h = outfits_header(self)) set_label(h); // (the tab's name)
-        }
-        LOG("settings: %s -> %s", cfg_name(e[k]), v[to]);
-    }
-    save_outfits();
-    apply_outfit_slots(self, i);
-    center_for_focus(self, focused_script(self), true);
-}
-void open_clean_confirm(U64 self, int what);
-void open_confirm(U64 self, U32 index, int what, U32 other = 0);
-void overwrite_pressed(U64 self, U32 index, bool reset);
-
-// A click on an action: Visibility opens the outfit's pieces; the others the existing prompts (Delete and the "+" slot's
-// clean-ups leave the view first: their answer changes the list).
-void cfg_press(U64 self, U32 i)
-{
-    std::vector<std::uint8_t> e = cfg_entries();
-    U32 k = i < visible_slots() ? slot_outfit(i) : kOutfitSlots;
-    if (k >= e.size()) return;
-    U32 o = static_cast<U32>(g_cfg);
-    LOG("settings view: %s pressed", cfg_name(e[k]));
-    switch (e[k]) {
-    case kCfgVisibility: g_cfg = -1, eye_enter(self, o); break;
-    case kCfgRename: open_rename_prompt(self, o); break;
-    case kCfgOverwrite: overwrite_pressed(self, o, g_overwrite_reset); break;
-    case kCfgDelete: cfg_leave(self), open_confirm(self, o, kConfirmDelete, 0); break;
-    case kCfgClear: cfg_leave(self), open_clean_confirm(self, kConfirmCleanSave); break;
-    case kCfgUninstall: cfg_leave(self), open_clean_confirm(self, kConfirmUninstall); break;
-    case kCfgBack: cfg_leave(self); break;
-    case kCfgPeekKey: // (waits for the key: peek_capture_frame)
-    case kCfgHotkey:
-        for (int vk = 0; vk < 256; ++vk) g_peek_capture_held[vk] = (GetAsyncKeyState(vk) & 0x8000) != 0;
-        g_capture_outfit = e[k] == kCfgHotkey ? int(o) : -1;
-        g_peek_capture_slot = i;
-        g_peek_capture = true;
-        apply_outfit_slots(self, i);
-        center_for_focus(self, focused_script(self), true);
-        break;
-    default: break; // (a value setting: scrolled)
-    }
-}
-
-// The dots of slot i in the settings view: a value setting's choices (lit: the current one); none for the rest.
-U32 cfg_dots(U32 i, U32* lit)
-{
-    std::vector<std::uint8_t> e = cfg_entries();
-    U32 k = i < visible_slots() ? slot_outfit(i) : kOutfitSlots;
-    if (k >= e.size()) return 0;
-    U32 cur = 0;
-    std::vector<const char*> v = cfg_values(e[k], cur);
-    if (lit) *lit = cur;
-    return e[k] == kCfgLanguage || e[k] == kCfgPeekKey || e[k] == kCfgHotkey ? 0 : static_cast<U32>(v.size()); // (the value says it)
-}
-
-// Slot i of the settings view: the setting's name (and value) on the slot's text, its dots, the click prompt for an
-// action; Back: its label and the click prompt, like an action.
-void apply_cfg_slot(U64 self, U64 script, U64 root, U32 i, U32 visible)
-{
-    std::vector<std::uint8_t> e = cfg_entries();
-    U32 k = i < visible ? slot_outfit(i) : kOutfitSlots;
-    bool entry = k < e.size();
-    std::uint8_t kind = entry ? e[k] : kCfgBack;
-    U32 cur = 0;
-    std::vector<const char*> vals = entry ? cfg_values(kind, cur) : std::vector<const char*>{};
-    bool back = entry && kind == kCfgBack, action = entry && !back && vals.empty() && kind != kCfgPosition;
-    show_slot_image(self, root, i, std::string());
-    if (i < visible) show_mode_dots(script, mode_count(i), mode_lit(i));
-    U64 badge = find_by_class(root, "quickslot-occupancy-icon-chain"), low = find_by_class(root, "cpp-icon-disable-item");
-    const char* want = action || back ? prompt_class() : nullptr;
-    g_badge_elem[i] = badge, g_badge_class[i] = want ? kBadges[badge_index(want)] : nullptr;
-    bool ok = true;
-    if (badge) {
-        ok &= set_class(badge, "self-center", true);
-        for (const char* c : kBadges) ok &= set_class(badge, c, want && !std::strcmp(want, c));
-        ok &= set_class(badge, "!cpp-none", !want);
-    }
-    U64 mark = find_parent_of_class(root, "charged-count");
-    bool label = entry; // (Back too: "Back")
-    if (mark) {
-        ok &= set_class(mark, "om-eye-c", false) && set_class(mark, "om-eye2-c", false);
-        ok &= set_class(mark, "self-center", true) && set_class(mark, "om-label-wrap", label);
-        ok &= set_class(mark, "!cpp-none", !label);
-        if (U64 text = find_by_class(mark, "charged-count")) {
-            std::string t = label ? cfg_title(kind) : "";
-            if (g_set_text) g_set_text(text, t.c_str(), 0);
-            ok &= set_class(text, "om-label", label) && set_class(text, "om-label-value", false);
-        }
-    }
-    g_mark_elem[i] = mark, g_mark_shown[i] = mark && label;
-    ok &= show_value(root, vals.empty() ? std::string() : cfg_value_text(kind, vals[cur]));
-    g_slot_image[i].missing = false;
-    ok &= set_class(root, "!cpp-none", i >= visible);
-    ok &= swap_class(root, g_slot_class[i], i < visible ? numbered("om-s%u-%u", visible, i) : "");
-    U64 icon = rp(script + kOffScriptCategoryIcon);
-    if (icon && is_element(icon)) {
-        ok &= set_class(icon, "quickslot-item-image-none", false);
-        ok &= swap_class(icon, g_placeholder_class[i], "");
-        ok &= set_class(icon, "om-empty-armor", false);
-        ok &= set_class(icon, "om-empty-sword", false) && set_class(icon, "om-empty-necklace", false);
-        ok &= set_class(icon, "!cpp-none", true);
-        ok &= set_class(icon, "om-missing", false);
-    }
-    g_low_elem[i] = low, g_low_shown[i] = false;
-    if (low) ok &= swap_class(low, g_worn_class[i], "") && set_class(low, "!cpp-none", true);
-    if (U64 focus = find_by_class(root, "quickslot-item-focus-bg-10"))
-        ok &= swap_class(focus, g_focus_class[i], i < visible ? numbered("om-f%u-%u", visible, i) : "");
-    if (!ok) LOG("  settings slot %u: class change skipped (%s)", i, describe(root).c_str());
-}
-
-bool g_ask_next = false; // the next question of g_pending opens on the next pump (not inside a modal's click)
-void clean_outfits(U64 self);
-void confirmed(U64 self, U32 index, int what, U32 other);
-void uninstall(U64 self);
-
-void finish_ask(int answer, const char* why)
-{
-    if (!g_ask_modal) return;
-    g_ask_modal = 0;
-    g_modal_ended = GetTickCount64();
-    g_release_pending = g_menu_open;
-    AskedLoad p = std::move(g_pending);
-    g_pending = {};
-    bool here = p.index < g_outfits.size() && g_outfits[p.index].name == p.name;
-    LOG("question %d: %s (\"%s\"%s)", p.stage, why, p.name.c_str(), here ? "" : ", outfit gone");
-    if (p.confirm == kConfirmCleanSave || p.confirm == kConfirmUninstall) { // (about no one outfit)
-        if (answer != kAskYes || !g_menu_open) return;
-        if (p.confirm == kConfirmCleanSave) clean_outfits(g_ask_self);
-        else uninstall(g_ask_self);
-        return;
-    }
-    bool from_wheel = g_ask_self == g_outfits_root; // (or the quick peek: asked in the game, no wheel to close)
-    if (!here || answer == kAskAbort || (from_wheel && !g_menu_open)) return;
-    if (p.confirm) {
-        bool other_here = p.confirm != kConfirmSwap ||
-                          (p.other < g_outfits.size() && g_outfits[p.other].name == p.other_name);
-        if (answer == kAskYes && other_here) confirmed(g_ask_self, p.index, p.confirm, p.other);
-        return;
-    }
-    if (p.stage == 1) p.takes_answered = true, p.take = answer == kAskYes;
-    else p.copies_answered = true, p.use_copies = answer == kAskYes;
-    if (p.stage == 1 && !p.copies.empty()) { // the copies question next (opened by pump)
-        g_release_pending = false;
-        g_pending = std::move(p);
-        g_ask_next = true;
-        return;
-    }
-    finish_load(g_ask_self, p);
-}
-
-void abort_prompts(const char* why)
-{
-    if (g_name_modal) {
-        hide_modal_raw(g_name_modal);
-        finish_naming("", why);
-    }
-    if (g_ask_modal) {
-        hide_modal_raw(g_ask_modal);
-        finish_ask(kAskAbort, why);
-    }
-    if (g_ask_next) {
-        g_ask_next = false;
-        g_pending = {};
-        LOG("questions: %s; nothing loaded", why);
-    }
-}
-
-// Slot 113 of the CommonModal (its button / key handler): only our question is handled here. Without an owner the game
-// stores no answer, so the clicked button tells it.
-U64 __fastcall ask_click_hook(U64 modal, U64 a, U64 elem, U64 flag)
-{
-    if (!g_ask_modal || modal != g_ask_modal || (flag & 0xFF)) return g_ask_click_orig(modal, a, elem, flag);
-    bool yes = elem && elem == rp(modal + kOffModalConfirm), no = elem && elem == rp(modal + kOffModalCancel);
-    bool esc = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0; // Esc may arrive as the cancel button: it loads nothing
-    LOG("question: click elem %llX (confirm %d, cancel %d, Esc %d)", elem, yes, no, esc);
-    U64 r = call_ask_click_raw(modal, a, elem, flag);
-    if (esc) finish_ask(kAskAbort, "Esc; nothing loaded");
-    else if (yes || no) finish_ask(yes ? kAskYes : kAskNo, yes ? "yes" : "leave as is");
-    return r;
-}
-
-// Opens the next question of a load (pieces on other characters, then copies), or loads.
-void ask_next(U64 self, AskedLoad p)
-{
-    if (p.index >= g_outfits.size()) return;
-    const Outfit& o = g_outfits[p.index];
-    std::string msg, yes;
-    if (!p.takes.empty() && !p.takes_answered) {
-        p.stage = 1;
-        for (const Take& t : p.takes)
-            msg += (msg.empty() ? std::string() : lang::f("list.separator")) +
-                   lang::f("ask.take_item", {{"piece", piece_label(o, o.items[t.k].slot)}, {"who", character_name(t.who)}});
-        long long n = static_cast<long long>(p.takes.size());
-        msg = lang::n("ask.take", n, {{"piece", piece_label(o, o.items[p.takes[0].k].slot)},
-                                      {"who", character_name(p.takes[0].who)}, {"list", msg}});
-        yes = lang::n("ask.take_yes", n);
-    } else if (!p.copies.empty() && !p.copies_answered) {
-        p.stage = 2;
-        std::vector<U16> copy_slots;
-        for (const auto& [k, uid] : p.copies) copy_slots.push_back(o.items[k].slot);
-        long long n = static_cast<long long>(p.copies.size());
-        msg = lang::n("ask.copy", n, {{"list", slot_list(o, copy_slots)}});
-        yes = lang::n("ask.copy_yes", n);
-    } else {
-        finish_load(self, p);
-        return;
-    }
-    U64 modal = g_open_common_modal ? open_common_modal_raw(self, o.name.c_str(), msg.c_str(), yes.c_str(), lang::t("ask.leave")) : 0;
-    if (!modal) {
-        LOG("question %d did not open; those slots stay as they are", p.stage);
-        if (p.stage == 1) p.takes_answered = true;
-        else p.copies_answered = true;
-        ask_next(self, std::move(p));
-        return;
-    }
-    g_pending = std::move(p);
-    g_ask_self = self;
-    g_ask_opened = GetTickCount64();
-    rd(modal + kOffModalShown, g_ask_shown);
-    g_ask_modal = modal;
-    LOG("question %d %llX open (+0xbd %u): %s", g_pending.stage, modal, g_ask_shown, msg.c_str());
 }
 
 // Space / click on a saved outfit: where is each piece? Then asks (pieces on other characters, copies of gone ones) or
@@ -3780,19 +2734,6 @@ void start_loading(U64 self, U32 index)
         return;
     }
     ask_next(self, std::move(p));
-}
-
-// pump: the next question of a load, and the asynchronous parts of the last one.
-
-// The next question of a load (opened a moment after the last one closed).
-void pump_ask(U64 self)
-{
-    if (g_ask_next && !g_ask_modal && !g_name_modal && GetTickCount64() - g_modal_ended > 150) {
-        g_ask_next = false;
-        AskedLoad p = std::move(g_pending);
-        g_pending = {};
-        if (p.index < g_outfits.size() && g_outfits[p.index].name == p.name) ask_next(self, std::move(p));
-    }
 }
 void lost_check(U64 self, const std::string& outfit, const std::vector<LeavingPiece>& leaving);
 void stash_pieces(U64 self, const Outfit* loaded);
@@ -3993,14 +2934,6 @@ void stash_verify(U64 self)
     else if (moved) report(self, lang::f("report.stash.moved", {{"moved", pieces_text(moved)}}));
     else if (left) report(self, lang::f("report.stash.left", {{"left", pieces_text(left)}}));
 }
-
-// Each saved piece and whether it goes away: only when every outfit using it has Stash on (one with it off keeps the
-// piece in the bag: Off wins, so a piece shared with an outfit kept at hand stays at hand).
-struct StashDest {
-    U64 uid;
-    U16 key;
-    bool on; // goes away (every outfit using it has Stash on)
-};
 std::vector<StashDest> stash_destinations()
 {
     std::vector<StashDest> out;
@@ -4068,292 +3001,7 @@ void stash_pieces(U64 self, const Outfit* loaded)
         g_stash_check = std::move(check);
     }
 }
-
-// While the question is open: notices it closing some other way (Esc, a click outside) or a 3-minute safety stop.
-void watch_ask()
-{
-    if (!g_ask_modal) return;
-    unsigned char shown = g_ask_shown;
-    rd(g_ask_modal + kOffModalShown, shown);
-    if (g_ask_shown && !shown) finish_ask(kAskAbort, "closed without an answer; nothing loaded");
-    else if (GetTickCount64() - g_ask_opened > 180000) {
-        hide_modal_raw(g_ask_modal);
-        finish_ask(kAskAbort, "timed out; nothing loaded");
-    }
-}
-
-// The "+" slot pressed: save the worn armor as a new outfit, unless an identical one exists (then names it).
-void save_new_outfit(U64 self)
-{
-    if (g_uninstalled) {
-        notify(self, lang::t("toast.uninstalled"));
-        return;
-    }
-    if (g_outfits.size() >= kMaxOutfits) {
-        notify(self, lang::f("toast.limit", {{"n", std::to_string(kMaxOutfits)}}));
-        return;
-    }
-    Outfit o;
-    if (!snapshot(self, o)) return;
-    for (const Outfit& s : g_outfits)
-        if (same_saved(s, o)) {
-            notify(self, lang::f("toast.already_saved", {{"outfit", s.name}}));
-            return;
-        }
-    o.name = default_name();
-    if (int a = anchor_outfit(); a >= 0) carry_looks(g_outfits[size_t(a)], o); // (a changed outfit saved as new looks the same)
-    g_outfits.push_back(o);
-    g_outfit_count = static_cast<U32>(g_outfits.size());
-    LOG("saved \"%s\" (%zu items, chest %s)", o.name.c_str(), o.items.size(),
-        o.chest_icon.empty() ? "none" : o.chest_icon.c_str());
-    save_outfits();
-    refresh_wheel(self);
-    center_for_focus(self, focused_script(self), true);
-    open_rename_prompt(self, g_outfits.size() - 1);
-}
-
-// Delete (the outfit page, confirmed): the later outfits move up and the wheel shrinks.
-void delete_outfit(U64 self, U32 o)
-{
-    LOG("deleted \"%s\"", g_outfits[o].name.c_str());
-    g_outfits.erase(g_outfits.begin() + o);
-    g_outfit_count = static_cast<U32>(g_outfits.size());
-    save_outfits();
-    refresh_wheel(self);
-    center_restore();
-    center_for_focus(self, focused_script(self), true);
-}
-
-// --- The submenu pages (entries: 0 right, 1 bottom, 2 left = Back, 3 top) --------------------------------------------
-// The outfit's Stash, explained; with the pieces another outfit keeps in the bag (Off wins for a shared piece).
-std::string stash_description(const Outfit& o)
-{
-    bool on = stash_of(o);
-    std::string s = lang::t(!o.stash ? (g_stash ? "desc.stash.default_on" : "desc.stash.default_off")
-                            : on      ? "desc.stash.on"
-                                      : "desc.stash.off");
-    if (!on) return s;
-    int held = 0;
-    std::string by;
-    for (const auto& [uid, key, away] : stash_destinations())
-        if (!away)
-            for (const OutfitItem& it : o.items)
-                if (it.uid == uid && it.key == key && loads_piece(o, it.slot)) {
-                    ++held;
-                    for (const Outfit& other : g_outfits) // (the outfit that keeps it, on this character)
-                        if (by.empty() && &other != &o && !stash_of(other))
-                            for (const OutfitItem& x : other.items)
-                                if (x.uid == uid && x.key == key && loads_piece(other, x.slot)) by = other.name;
-                }
-    if (held) s += " " + (by.empty() ? lang::n("desc.stash.kept_other", held) : lang::n("desc.stash.kept_by", held, {{"outfit", by}}));
-    return s;
-}
-
-// A saved outfit's settings, as words.
-const char* climate_text(const Outfit& o)
-{
-    static const char* const t[4] = {"Climate: Auto", "Climate: Cold", "Climate: Heat", "Climate: Off"};
-    return t[o.climate & 3];
-}
-const char* weapons_text(const Outfit& o) { return uses_weapons(o) ? "Weapons: Load" : "Weapons: Leave"; }
-const char* outfit_stash_text(const Outfit& o)
-{
-    static const char* const k[3] = {"Stash: Default", "Stash: On", "Stash: Off"};
-    return k[o.stash % 3];
-}
-
-const char* stash_text() { return g_stash ? "Stash: On" : "Stash: Off"; }
-
-// Clean up: this save's outfits, i.e. the current outfits of every character and the copies of the save loaded last
-// (so loading it again does not bring them back; the other saves keep theirs, as with any game state).
-void clean_outfits(U64 self)
-{
-    size_t gone = 0, saves = 0;
-    {
-        std::lock_guard<std::mutex> lock(g_store_mu);
-        if (g_generation.load() != g_seen_generation) {
-            LOG("clean up dropped: a save was loaded meanwhile");
-            return;
-        }
-        store_for(g_character).outfits = g_outfits;
-        gone = outfit_total(g_store);
-        g_store.clear();
-        g_published.clear();
-        for (auto& [slot, b] : g_bound)
-            if (g_loaded_known && b.id.same(g_loaded_id)) {
-                if (!b.store.empty()) ++saves;
-                b.store.clear();
-            }
-        bool ok = write_store_file();
-        LOG("clean up: %zu current outfits and the copies of %zu saves deleted%s", gone, saves,
-            ok ? "" : " (writing FAILED)");
-    }
-    g_outfits.clear();
-    g_outfit_count = 0;
-    refresh_wheel(self);
-    center_restore();
-    center_for_focus(self, focused_script(self), true);
-    notify(self, lang::t("toast.cleared"));
-}
-
-// Uninstall: every file the mod keeps (the outfits of every save and the settings, the address cache, the log, a
-// write's leftover) is deleted, so removing the mod in DMM leaves nothing behind. The mod never writes into game saves.
-// It stays loaded until the game closes, inert: nothing it does writes a file again.
-bool g_uninstalled = false;
 std::wstring g_log_path;
-
-void uninstall(U64 self)
-{
-    {
-        std::lock_guard<std::mutex> lock(g_store_mu);
-        g_uninstalled = true;
-        g_store.clear(), g_published.clear(), g_bound.clear(), g_pending_writes.clear(), g_unfinished.clear();
-    }
-    g_outfits.clear();
-    g_outfit_count = 0;
-    LOG("uninstall: deleting the outfit file, the cache and this log; the mod stays inert until the game closes");
-    logx::close();
-    int failed = 0;
-    for (const std::wstring& f : {g_store_path, g_store_path + L".tmp", g_cache_path, g_log_path})
-        if (!f.empty() && !DeleteFileW(f.c_str()) && GetLastError() != ERROR_FILE_NOT_FOUND) ++failed;
-    refresh_wheel(self);
-    center_restore();
-    center_for_focus(self, focused_script(self), true);
-    notify(self, lang::t(failed ? "toast.remove_failed" : "toast.removed"));
-}
-
-// The Clean up and Uninstall questions: a deleting button and Cancel (the dialog's second button is Esc's: Esc always
-// cancels).
-void open_clean_confirm(U64 self, int what)
-{
-    if (g_ask_modal || g_ask_next) return;
-    std::string msg, yes;
-    if (what == kConfirmCleanSave) {
-        size_t total = 0;
-        std::string who;
-        store_for(g_character); // (the current character counts from its working list, g_outfits)
-        for (const CharacterOutfits& c : g_store) {
-            size_t n = c.character == g_character ? g_outfits.size() : c.outfits.size();
-            if (!n) continue;
-            total += n;
-            who += (who.empty() ? std::string() : lang::f("list.separator")) +
-                   lang::f("ask.clear_who", {{"character", c.character == kNoCharacter ? lang::t("character.unassigned")
-                                                                                        : character_name(c.character)},
-                                             {"n", std::to_string(n)}});
-        }
-        if (!total) {
-            notify(self, lang::t("toast.nothing_to_clear"));
-            return;
-        }
-        msg = lang::f("ask.clear", {{"n", std::to_string(total)}, {"who", who}});
-        yes = lang::t("ask.yes.delete");
-    } else {
-        msg = lang::t("ask.uninstall");
-        yes = lang::t("ask.yes.remove");
-    }
-    const char* title = lang::t(what == kConfirmCleanSave ? "setting.clear" : "setting.uninstall");
-    U64 modal = g_open_common_modal ? open_common_modal_raw(self, title, msg.c_str(), yes.c_str(), lang::t("ask.cancel")) : 0;
-    if (!modal) {
-        LOG("clean up: the dialog did not open; nothing deleted");
-        return;
-    }
-    AskedLoad p;
-    p.confirm = what;
-    g_pending = std::move(p);
-    g_ask_self = self;
-    g_ask_opened = GetTickCount64();
-    rd(modal + kOffModalShown, g_ask_shown);
-    g_ask_modal = modal;
-    LOG("clean up question %d %llX open: %s", what, modal, msg.c_str());
-}
-
-// Overwrite / Delete / Swap ask first, in the game's yes / no dialog (the loading questions' machinery: finish_ask
-// answers). other: kConfirmSwap's second outfit; kConfirmOverwrite: 1 resets the outfit's settings, 0 keeps them.
-void open_confirm(U64 self, U32 index, int what, U32 other)
-{
-    if (g_ask_modal || g_ask_next || index >= g_outfits.size()) return;
-    if (what == kConfirmSwap && other >= g_outfits.size()) return;
-    const std::string& name = g_outfits[index].name;
-    std::string msg = what == kConfirmOverwrite ? lang::f(other ? "ask.overwrite.reset" : "ask.overwrite.keep", {{"outfit", name}})
-                      : what == kConfirmDelete  ? lang::f("ask.delete", {{"outfit", name}})
-                                                : lang::f("ask.swap", {{"outfit", name}, {"worn", g_outfits[other].name}});
-    const char* yes = lang::t(what == kConfirmOverwrite ? "ask.yes.overwrite" : what == kConfirmDelete ? "ask.yes.delete" : "ask.yes.swap");
-    U64 modal = g_open_common_modal ? open_common_modal_raw(self, name.c_str(), msg.c_str(), yes, lang::t("ask.cancel")) : 0;
-    if (!modal) {
-        LOG("confirm %d for \"%s\": the dialog did not open; nothing done", what, name.c_str());
-        return;
-    }
-    AskedLoad p;
-    p.index = index, p.name = name, p.confirm = what;
-    p.other = other; // (Swap: the other outfit; Overwrite: reset or keep)
-    if (what == kConfirmSwap) p.other_name = g_outfits[other].name;
-    g_pending = std::move(p);
-    g_ask_self = self;
-    g_ask_opened = GetTickCount64();
-    rd(modal + kOffModalShown, g_ask_shown);
-    g_ask_modal = modal;
-    LOG("confirm %d %llX open: %s", what, modal, msg.c_str());
-}
-
-void confirmed(U64 self, U32 index, int what, U32 other)
-{
-    if (index >= g_outfits.size()) return;
-    if (what == kConfirmDelete) {
-        delete_outfit(self, index);
-        return;
-    }
-    if (what == kConfirmSwap) {
-        if (other >= g_outfits.size() || other == index) return;
-        std::swap(g_outfits[index], g_outfits[other]);
-        LOG("Swap: \"%s\" and \"%s\" changed slots", g_outfits[other].name.c_str(), g_outfits[index].name.c_str());
-        save_outfits();
-        refresh_wheel(self);
-        center_restore();
-        center_for_focus(self, focused_script(self), true);
-        report(self, lang::f("report.swapped", {{"a", g_outfits[other].name}, {"b", g_outfits[index].name}}));
-        return;
-    }
-    Outfit o;
-    if (!snapshot(self, o)) return;
-    for (size_t j = 0; j < g_outfits.size(); ++j)
-        if (same_saved(g_outfits[j], o)) {
-            notify(self, lang::f(j == index ? "toast.already_holds" : "toast.already_saved", {{"outfit", g_outfits[j].name}}));
-            return;
-        }
-    const Outfit& was = g_outfits[index];
-    o.name = was.name;
-    o.worn = was.worn; // (whether it is the last loaded one: not a setting)
-    bool keep = other == 0;
-    if (keep) { // (its settings and looks stay; reset: as newly saved)
-        if (was.has_weapons) o.load_weapons = was.load_weapons;
-        o.climate = was.climate, o.stash = was.stash;
-        o.hk_vk = was.hk_vk, o.hk_mods = was.hk_mods;
-        carry_looks(was, o);
-    }
-    g_outfits[index] = o;
-    LOG("Overwrite (%s): \"%s\" now holds %zu items (chest %s)", keep ? "settings kept" : "settings reset",
-        o.name.c_str(), o.items.size(), o.chest_icon.empty() ? "none" : o.chest_icon.c_str());
-    save_outfits();
-    refresh_wheel(self);
-    center_restore();
-    center_for_focus(self, focused_script(self), true);
-    report(self, lang::f("report.now_holds", {{"outfit", o.name}}));
-}
-
-// Overwrite: what is worn decides the question. Already this outfit: said so; another saved outfit: offer to swap
-// their slots; anything else: confirm the overwrite.
-void overwrite_pressed(U64 self, U32 index, bool reset)
-{
-    Outfit o;
-    if (index >= g_outfits.size() || !snapshot(self, o)) return;
-    for (size_t j = 0; j < g_outfits.size(); ++j)
-        if (same_saved(g_outfits[j], o)) {
-            if (j == index) notify(self, lang::f("toast.already_holds", {{"outfit", g_outfits[j].name}}));
-            else open_confirm(self, index, kConfirmSwap, static_cast<U32>(j));
-            return;
-        }
-    open_confirm(self, index, kConfirmOverwrite, reset ? 1 : 0);
-}
 
 // A left click anywhere acts like Space on the highlighted (focused) slot, except on the tab headers (switching tabs
 // must not also load the highlighted outfit; the tab changes only after the press).
@@ -4485,59 +3133,6 @@ void pad_prompts(U64 self)
     }
     if (rd(style, cur_x) && rd(style + 8, cur_y) && (std::fabs(cur_x - x) > 0.5f || std::fabs(cur_y - y) > 0.5f))
         wr<float>(style, x), wr<float>(style + 8, y); // (the game lays it out from these on its next pass)
-}
-
-// Runs on the UI thread from the menu's frequent callbacks.
-// The Outfit Arc setting waiting for a key: the next key or mouse button newly down (left / right excepted).
-void peek_capture_frame(U64 self)
-{
-    if (!g_peek_capture) return;
-    int got = -1;
-    for (int vk = 1; vk < 256 && got < 0; ++vk) {
-        if (vk == VK_LBUTTON || vk == VK_RBUTTON || vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU ||
-            (vk >= VK_LSHIFT && vk <= VK_RMENU) || vk == VK_LWIN || vk == VK_RWIN)
-            continue; // (the modifiers: held with a hotkey's key, never the key)
-        bool down = (GetAsyncKeyState(vk) & 0x8000) != 0;
-        if (down && !g_peek_capture_held[vk]) got = vk;
-        g_peek_capture_held[vk] = down;
-    }
-    if (got < 0 || !game_focused()) return;
-    g_peek_capture = false;
-    if (g_capture_outfit >= 0) { // an outfit's Hotkey
-        size_t o = size_t(g_capture_outfit);
-        g_capture_outfit = -1;
-        if (o >= g_outfits.size()) return;
-        if (got == VK_ESCAPE) {
-            LOG("settings \"%s\": hotkey: cancelled", g_outfits[o].name.c_str());
-        } else if (got == VK_BACK || got == VK_DELETE) {
-            g_outfits[o].hk_vk = 0, g_outfits[o].hk_mods = 0;
-            LOG("settings \"%s\": hotkey cleared", g_outfits[o].name.c_str());
-            save_outfits();
-        } else if (U32(got) == g_peek_key.load()) { // (it opens the Outfit Arc: not also a hotkey)
-            notify(self, lang::f("toast.hotkey_arc", {{"hotkey", peek_key_name(U32(got))}}));
-        } else {
-            std::uint8_t m = mods_now();
-            for (size_t j = 0; j < g_outfits.size(); ++j) // (one outfit per hotkey: it moves here)
-                if (j != o && g_outfits[j].hk_vk == got && g_outfits[j].hk_mods == m) {
-                    g_outfits[j].hk_vk = 0, g_outfits[j].hk_mods = 0;
-                    notify(self, lang::f("toast.hotkey_moved", {{"hotkey", hotkey_name(U32(got), m)}, {"outfit", g_outfits[j].name}}));
-                }
-            g_outfits[o].hk_vk = static_cast<U16>(got), g_outfits[o].hk_mods = m;
-            LOG("settings \"%s\": hotkey -> %s (%d, mods %u)", g_outfits[o].name.c_str(), hotkey_name(U32(got), m).c_str(), got, m);
-            save_outfits();
-        }
-        apply_outfit_slots(self, g_peek_capture_slot);
-        center_for_focus(self, focused_script(self), true);
-        return;
-    }
-    if (got == VK_ESCAPE) LOG("settings: Outfit Arc key: cancelled");
-    else {
-        g_peek_key = got == VK_BACK || got == VK_DELETE ? 0 : U32(got);
-        LOG("settings: Outfit Arc key -> %s (%d)", peek_key_name(g_peek_key.load()).c_str(), g_peek_key.load());
-        save_outfits();
-    }
-    apply_outfit_slots(self, g_peek_capture_slot);
-    center_for_focus(self, focused_script(self), true);
 }
 
 void pump(U64 self)
@@ -4926,62 +3521,6 @@ void features_toast(U64 self)
         a = b + 1;
     }
     notify(self, lang::f("toast.features_off", {{"list", list}}));
-}
-
-// Optional: without it saving works as before and names stay "Outfit N".
-void install_rename_prompt()
-{
-    if (!have({kRvaTextModalVt, kRvaTextModalClick, kRvaOpenTextModal, kRvaModalParamsInit, kRvaModalParamsFree,
-               kRvaFindView, kRvaGetText, kRvaNameInvalid, kRvaHideScript, kOffModalOwner, kOffModalD0})) {
-        feature_off("feature.renaming");
-        return;
-    }
-    void** vt = reinterpret_cast<void**>(g_base + kRvaTextModalVt);
-    g_find_view = reinterpret_cast<FindViewFn>(g_base + kRvaFindView);
-    g_params_init = reinterpret_cast<VoidFn>(g_base + kRvaModalParamsInit);
-    g_params_free = reinterpret_cast<VoidFn>(g_base + kRvaModalParamsFree);
-    g_get_text = reinterpret_cast<GetTextFn>(g_base + kRvaGetText);
-    g_name_invalid = reinterpret_cast<NameInvalidFn>(g_base + kRvaNameInvalid);
-    g_hide_script = reinterpret_cast<VoidFn>(g_base + kRvaHideScript);
-    g_text_click_orig = reinterpret_cast<ModalClickFn>(vt[kSlotTextModalClick]);
-    if (!game::patch_vtable(vt, kSlotTextModalClick, reinterpret_cast<void*>(&text_click_hook))) {
-        LOG("rename prompt: vtable patch failed; outfits keep their default names");
-        feature_off("feature.renaming");
-        return;
-    }
-    if (have({kRvaQueueHide})) // closing the held menu after a prompt (else it stays up until the button is pressed)
-        g_queue_hide = reinterpret_cast<QueueHideFn>(g_base + kRvaQueueHide);
-    if (have({kRvaBindingInput})) { // ... and releasing its key binding (else the next press only releases it)
-        void* t = reinterpret_cast<void*>(g_base + kRvaBindingInput);
-        if (MH_CreateHook(t, reinterpret_cast<void*>(&binding_input_hook),
-                          reinterpret_cast<void**>(&g_binding_input_orig)) != MH_OK ||
-            MH_EnableHook(t) != MH_OK) {
-            g_binding_input_orig = nullptr;
-            LOG("rename prompt: key binding hook failed; the menu button may need an extra press after a prompt");
-        }
-    }
-    g_open_text_modal = reinterpret_cast<OpenTextModalFn>(g_base + kRvaOpenTextModal); // last: enables the prompt
-    LOG("rename prompt ready (TextEdit modal slot %d hooked)", kSlotTextModalClick);
-}
-
-// Optional too (needs the rename prompt's helpers): without it a gone piece's slot is simply left as is.
-void install_ask_dialog()
-{
-    if (!g_find_view ||
-        !have({kRvaCommonModalVt, kRvaCommonModalClick, kRvaOpenCommonModal, kRvaCommonModalName, kOffModalOwner}) ||
-        memcmp(reinterpret_cast<const void*>(g_base + kRvaCommonModalName), "CommonModalMessage", 19) != 0) {
-        feature_off("feature.missing_pieces");
-        return;
-    }
-    void** vt = reinterpret_cast<void**>(g_base + kRvaCommonModalVt);
-    g_ask_click_orig = reinterpret_cast<ModalClickFn>(vt[kSlotCommonModalClick]);
-    if (!game::patch_vtable(vt, kSlotCommonModalClick, reinterpret_cast<void*>(&ask_click_hook))) {
-        LOG("missing-pieces question: vtable patch failed; gone pieces are left as is");
-        feature_off("feature.missing_pieces");
-        return;
-    }
-    g_open_common_modal = reinterpret_cast<OpenCommonModalFn>(g_base + kRvaOpenCommonModal); // last: enables it
-    LOG("missing-pieces question ready (CommonModal slot %d hooked)", kSlotCommonModalClick);
 }
 
 bool install()

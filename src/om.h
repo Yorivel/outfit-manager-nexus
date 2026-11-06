@@ -177,6 +177,14 @@ struct SlotImage {
     bool missing = false; // greyed out (om-missing): the outfit lacks a piece
 };
 
+// The settings' descriptions (the settings view's centre caption), by group and entry: {title, description}.
+enum Page { kPageNone, kPageSettings, kPageOutfit, kPageConditions, kPageSettings2 };
+extern int g_busy;
+struct Busy {
+    Busy() { ++g_busy; }
+    ~Busy() { --g_busy; }
+};
+
 // only: just that slot (a scroll changes one slot; re-styling them all made the other badges flicker).
 // An item's Ice / Fire Resistance level: its passive list (item info +0x118 -> {entries of {u32 kind, u32 level}*,
 // u32 count}). The kind's low 16 bits are the passive's id (the high 16 change per session: a runtime handle): 0x704
@@ -184,6 +192,11 @@ struct SlotImage {
 // Levels add up over the worn pieces; 5 / 10 / 15 each cancel one of the cold / heat gauge's three bars, 15 also gives
 // immunity to Freeze / Burn. Item data never changes in a session: cached per key.
 using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
+
+const char* const kBadges[] = {"om-plus-big", "om-cog-big", "om-plus-c", "om-cog-c", "om-flag-c", "om-cold-c", "om-heat-c",
+                               "om-cold2-c", "om-heat2-c", "om-eye-c", "om-look-shown-c", "om-look-hidden-c",
+                               "om-look-combat-c", "om-look-peace-c", "om-return-c", "om-prompt-c", "om-cross-c",
+                               "om-abtn-c"};
 
 // Save binding. The game's save writes / loads are seen on its own threads (file hook, folder watch), so they work
 // on g_published, a copy of the active set the UI thread publishes after each change (all under g_store_mu).
@@ -274,6 +287,47 @@ struct AsyncLoad {
 };
 using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
 
+// A prompt takes the input while it is open, so the gear menu misses the release of the button that holds it open
+// and stays up afterwards. Once a prompt is gone, do what the game's release handler (0x1098f10, event 1) does.
+using QueueHideFn = void(__fastcall*)(U64, U64);
+
+// --- Questions before loading: the game's own yes / no CommonModalMessage --------------------------
+// 1. Pieces another character wears (setting on): "... is worn by Oongka. Take it?" - Take: their unequip request, then
+//    the piece is put on once it is in the bags (pump); Leave as is: those slots stay.
+// 2. Pieces that are gone while another copy is owned: "Wear copy" (saved into the outfit) / "Leave as is".
+// Slots left as they are get one notification saying why. Esc / closing the menu loads nothing.
+struct Take {
+    size_t k;     // outfit item index
+    U16 who;      // character key
+    U64 actor;    // their actor
+    U16 worn_slot; // the slot they wear it in
+};
+struct Left {
+    U16 slot;
+    const char* why; // its line: left.storage, ... ({piece}, {who})
+    U16 who = 0;     // left.stays_with: whose
+};
+struct AskedLoad {
+    U32 index = 0;
+    std::string name; // checked: the list may change while the question is open
+    std::vector<std::pair<size_t, U64>> copies;
+    std::vector<Take> takes;
+    std::vector<Left> left;
+    int stage = 0; // the open question: 1 takes, 2 copies
+    int confirm = 0; // instead a yes / no from the outfit page: kConfirmOverwrite, kConfirmDelete, kConfirmSwap
+    U32 other = 0;          // kConfirmSwap: the outfit worn now (checked by name, as index is)
+    std::string other_name;
+    bool takes_answered = false, take = false, copies_answered = false, use_copies = false;
+};
+
+enum Confirm { kConfirmNone, kConfirmOverwrite, kConfirmDelete, kConfirmSwap, kConfirmCleanSave, kConfirmUninstall };
+
+enum CfgKind : std::uint8_t {
+    kCfgVisibility, kCfgClimate, kCfgWeapons, kCfgStash, kCfgPosition, kCfgRename, kCfgOverwrite, kCfgDelete, // a saved outfit's
+    kCfgGStash, kCfgParty, kCfgMessages, kCfgClear, kCfgUninstall,                               // the "+" slot's
+    kCfgBack, kCfgLanguage, kCfgPeekKey, kCfgPeekPad, kCfgHotkey
+};
+
 // Every move gives the piece a new uid. The stash knows what it moved, so it follows each piece exactly: the copy of its
 // item in storage that was not there before the requests is the piece (adopt_returned stays the fallback for moves
 // made by hand).
@@ -285,6 +339,14 @@ struct StashCheck {
     std::vector<StashSent> sent;
     std::vector<U64> before; // uids in storage before the requests
     U64 at = 0;              // tick of the requests (0: nothing pending)
+};
+
+// Each saved piece and whether it goes away: only when every outfit using it has Stash on (one with it off keeps the
+// piece in the bag: Off wins, so a piece shared with an outfit kept at hand stays at hand).
+struct StashDest {
+    U64 uid;
+    U16 key;
+    bool on; // goes away (every outfit using it has Stash on)
 };
 
 // The HUD (always up in play) runs the same per-frame base function: a tick for what must finish with the wheel
