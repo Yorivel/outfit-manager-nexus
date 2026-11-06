@@ -1,4 +1,4 @@
-# Outfit Manager 0.5.0-dev4: source
+# Outfit Manager 0.5.0-dev5: source
 
 Source of [Outfit Manager](https://www.nexusmods.com/crimsondesert/mods/4029) for Crimson Desert, by Strahlimeier.
 MIT licence (see `LICENSE.txt`); MinHook keeps its own BSD licence (`THIRD-PARTY-MinHook-LICENSE.txt`).
