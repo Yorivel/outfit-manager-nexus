@@ -45,9 +45,14 @@ constexpr U16 kPropBackgroundImage = 0x26;
 // Native toast (AlertSystemOverView's ToastMessage), as the game's menus show it: (ui, const char* utf8, error 0);
 // ui = any UI script's vfunc +0x118 (kVfUiMgr).
 constexpr U64 kVfUiMgr = 0x118; // slot 35 (34 before the 2026-10-30 update)
+                                    // strings (+0x58: 16-byte entries, the first u64 the name) - a part's +0x48 indexes it
+
+constexpr U16 kTemplateRecord = 1; // Armor: 12 item slots
 constexpr U32 kOutfitSlots = 12;
 constexpr U32 kMaxOutfits = kOutfitSlots - 1; // the last slot is always the "+" (saving, the global settings)
 constexpr U32 kRecordSize = 0x30; // (copied whole; the 2026-10-30 header is 8 bytes shorter)
+// QuickSlotInfo record: slot count and slot array (+0x14 / +0x20 before the 2026-10-30 update)
+constexpr U32 kRecSlotCount = 0x0c, kRecSlots = 0x18;
 constexpr U32 kSlotSize = 0x50;
 
 // The static-info getters take the key by value since the 2026-10-30 update (first argument unused; was const u16*).
@@ -162,11 +167,29 @@ constexpr U16 kAccessorySlots[] = {7, 8, 9, 10, 11, 17, 18};
 
 constexpr size_t kBackPiece = ~size_t(0); // (eye_pieces: the back shield, not one of the outfit's items)
 
+// Saved outfits show their chest piece on the slot's item image (ItemCoolTimeIconOutfit).
+struct SlotImage {
+    U64 elem = 0;
+    std::string icon; // last icon set on elem
+    bool ok = false;
+    bool shown = false; // should be visible
+    bool missing = false; // greyed out (om-missing): the outfit lacks a piece
+};
+
+// only: just that slot (a scroll changes one slot; re-styling them all made the other badges flicker).
+// An item's Ice / Fire Resistance level: its passive list (item info +0x118 -> {entries of {u32 kind, u32 level}*,
+// u32 count}). The kind's low 16 bits are the passive's id (the high 16 change per session: a runtime handle): 0x704
+// Fire Resistance, 0x705 Ice, 0x706 Lightning; the others are other passives (0x70a fishing cooldown, 0x6xx ...).
+// Levels add up over the worn pieces; 5 / 10 / 15 each cancel one of the cold / heat gauge's three bars, 15 also gives
+// immunity to Freeze / Burn. Item data never changes in a session: cached per key.
+using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
+
 // The two hands' weapon slots (equipment-0: MainWeapon_*_R, equipment-1: MainWeapon_*_L). Two one-handed weapons worn
 // in each other's hands count as the outfit's (2026-11-06, a player's log: the game refuses to take either off -
 // "no items available to be equipped after removal" - so a load could never swap them back; every load ended 18 of 20
 // and the outfit showed as modified).
 constexpr U16 kHandR = 0, kHandL = 1;
+using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
 
 // (defined in core.cpp)
 extern U64 g_base;

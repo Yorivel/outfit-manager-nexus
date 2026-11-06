@@ -20,6 +20,8 @@
 #include "om.h"
 #include "om_rest.h"
 #include "addrs.h"
+#include "ui.h"
+#include "items.h"
 
 namespace om {
 
@@ -31,11 +33,6 @@ constexpr U32 kParamsMessage = 0x118, kParamsMessageCap = 0x801, kParamsMessageL
 constexpr int kNameMaxChars = 24;
 constexpr U32 kParamsTitle = 0x0, kParamsTitleLen = 0x114, kParamsConfirm = 0xfc0, kParamsCancel = 0x10d8;
 constexpr U32 kParamsLabelCap = 0x100; // inline buffers of 0x108 bytes
-                                    // strings (+0x58: 16-byte entries, the first u64 the name) - a part's +0x48 indexes it
-
-constexpr U16 kTemplateRecord = 1; // Armor: 12 item slots
-// QuickSlotInfo record: slot count and slot array (+0x14 / +0x20 before the 2026-10-30 update)
-constexpr U32 kRecSlotCount = 0x0c, kRecSlots = 0x18;
 constexpr U32 kSlotNameHolder = 0x08; // -> {char* category, ...}
 constexpr U32 kSlotHash = 0x1c;
 constexpr U32 kSlotEquipIdx = 0x20;
@@ -48,7 +45,6 @@ struct CategoryHolder {
 const CategoryHolder g_none_category{"none", {}};
 std::atomic<int> g_ui_tab_added{0}; // gear-wheel UI files that got the Outfits header (patched in memory at load)
 RecordGetFn g_qsi_get = nullptr; // original (trampoline once hooked)
-RecordGetFn g_str_get = nullptr;
 OpenFn g_open_orig = nullptr;
 TabFn g_tab_orig = nullptr;
 OpenFn g_build_orig = nullptr;
@@ -110,7 +106,6 @@ std::uint8_t slot_look(const Outfit& o, U16 slot)
     auto f = o.empty_looks.find(slot);
     return f != o.empty_looks.end() ? f->second : std::uint8_t(kLookDefault);
 }
-U64 back_shield_item();
 
 // A slot of the view: the outfit's item there; nothing saved there: an empty item with the slot's look; (kBackPiece)
 // the back shield as an item: what its slot holds now (for the icon and name) with the outfit's back look.
@@ -153,126 +148,6 @@ U32 visible_slots()
 // Visible slot i sits at (i+1)*360/N, so slot N-1 is the top one: outfits start there and run clockwise,
 // which puts the "+" slot (outfit index = saved count) last, just left of the top.
 U32 slot_outfit(U32 i) { return (i + 1) % visible_slots(); }
-
-// --- UI elements --------------------------------------------------------------------------------
-// Element: +0x20 class holder {element*, vector<u32 classId>*}. Script object: +8 element.
-std::string class_name(U32 id)
-{
-    U64 tbl = rp(g_base + kRvaClassNames);
-    U64 arr = tbl ? rp(tbl + 0x58) : 0;
-    std::string n = arr ? cstr(rp(arr + U64(id) * 0x10)) : std::string();
-    if (n.empty()) {
-        char b[16];
-        std::snprintf(b, sizeof b, "#%u", id);
-        n = b;
-    }
-    return n;
-}
-
-bool is_element(U64 e)
-{
-    U64 holder = rp(e + 0x20);
-    return holder && rp(holder) == e;
-}
-
-std::string classes(U64 elem)
-{
-    U64 holder = rp(elem + 0x20);
-    U64 vec = holder ? rp(holder + 8) : 0;
-    U64 data = vec ? rp(vec) : 0;
-    U32 n = vec ? r32(vec + 8) : 0;
-    if (!data || n > 64) return "(no classes)";
-    std::string s;
-    for (U32 i = 0; i < n; ++i) {
-        if (i) s += ' ';
-        s += class_name(r32(data + i * 4ull));
-    }
-    return s;
-}
-
-// Describes a pointer that is either an element or a script object owning one.
-std::string describe(U64 p)
-{
-    char b[64];
-    if (is_element(p)) {
-        std::snprintf(b, sizeof b, "elem %llX flags b0=%02X b1=%02X: ", p, r32(p + 0xb8) & 0xFF, r32(p + 0xb9) & 0xFF);
-        return b + classes(p);
-    }
-    U64 e = rp(p + 8);
-    if (e && is_element(e)) {
-        std::snprintf(b, sizeof b, "script %llX vt=+%llX elem %llX b0=%02X: ", p, rp(p) - g_base, e,
-                      r32(e + 0xb0) & 0xFF);
-        return b + classes(e);
-    }
-    std::snprintf(b, sizeof b, "? %llX: ", p);
-    return b + hex(p, 0x20);
-}
-
-// --- Dumps --------------------------------------------------------------------------------------
-std::string str_id(U64 at)
-{
-    U16 id = 0xFFFF;
-    if (!rd(at, id)) return "?";
-    U64 si = g_str_get(0, id);
-    std::string s = si ? cstr(rp(rp(si + 0x10))) : std::string();
-    char b[16];
-    std::snprintf(b, sizeof b, "[%u]", id);
-    return b + s;
-}
-
-void dump_quickslotinfo()
-{
-    U64 mgr = rp(g_base + kRvaQuickSlotInfoMgr);
-    U32 count = mgr ? r32(mgr + 8) : 0;
-    LOG("QuickSlotInfo mgr %llX: %u records", mgr, count);
-    for (U32 i = 0; i < count && i < 16; ++i) {
-        U16 key = static_cast<U16>(i);
-        U64 rec = g_qsi_get(0, key);
-        if (!rec) continue;
-        U32 slots = r32(rec + kRecSlotCount);
-        U64 sarr = rp(rec + kRecSlots);
-        LOG("  rec %u @%llX slots=%u head: %s", i, rec, slots, hex(rec, 0x40).c_str());
-        for (U32 s = 0; s < slots && s < 16 && sarr; ++s) {
-            U64 so = sarr + s * 0x50ull;
-            LOG("    slot %u widget=%s comp=%s raw: %s", s, str_id(so + 2).c_str(), str_id(so + 4).c_str(),
-                hex(so, 0x50).c_str());
-        }
-    }
-}
-
-void dump_menu(U64 self, const char* why)
-{
-    LOG("---- RootQuickSlot %llX: %s", self, why);
-    U64 tb = rp(self + kOffRootTabBar);
-    if (tb) {
-        U32 n = r32(tb + kOffTabHeaderCount);
-        LOG("tabbar %llX headers=%u prev=%d cur=%d sel=%d default=%d flags120=%s", tb, n, r32(tb + 0x110),
-            r32(tb + kOffTabCurrent), r32(tb + 0x11c), r32(tb + 0x118), hex(tb + 0x120, 8).c_str());
-        U64 hv = rp(tb + kOffTabHeaders);
-        for (U32 i = 0; i < n && i < 16 && hv; ++i) {
-            U64 h = rp(hv + i * 8ull);
-            LOG("  header %u e0=%u %s", i, r32(h + 0xe0) & 0xFF, describe(h).c_str());
-        }
-    }
-    U32 bodies = r32(self + kOffRootBodyCount);
-    U64 bv = rp(self + kOffRootBodies);
-    LOG("bodies=%u  +230(defTab)=%d +284=%04X +286=%04X +288=%d +28c..291=%s", bodies, r32(self + 0x230),
-        r32(self + 0x284) & 0xFFFF, r32(self + 0x286) & 0xFFFF, r32(self + 0x288), hex(self + 0x28c, 6).c_str());
-    for (U32 i = 0; i < bodies && i < 16 && bv; ++i)
-        LOG("  body %u %s", i, describe(rp(bv + i * 8ull)).c_str());
-    U64 sv = rp(self + kOffRootSlotVecs);
-    U32 tabs = r32(self + kOffRootSlotVecCount);
-    for (U32 i = 0; i < tabs && i < 16 && sv; ++i) {
-        U32 cnt = r32(sv + i * 0x10ull + 8);
-        U64 arr = rp(sv + i * 0x10ull);
-        LOG("  tab %u slot scripts=%u first: %s", i, cnt, arr && cnt ? describe(rp(arr)).c_str() : "-");
-    }
-    for (U64 off : {0x1a0ull, 0x1a8ull, 0x1b0ull, 0x1c0ull, 0x1d0ull, 0x1b8ull}) {
-        U64 p = rp(self + off);
-        LOG("  +%llX: %s", off, p ? describe(p).c_str() : "null");
-    }
-    LOG("  elem: %s", describe(self).c_str());
-}
 
 // --- Outfits tab --------------------------------------------------------------------------------
 // The count the body builder iterates: (***root + 8) -> +0x460 -> +8 (root depends on a TLS flag,
@@ -362,234 +237,6 @@ bool prepare_fake_record()
     }
     return true;
 }
-
-// --- Type checks --------------------------------------------------------------------------------
-// Every object reached through a struct offset must have its class. A pointer read at a moved offset practically
-// never has the expected vtable, so a failed check means the game's layout changed in a way the offsets did not
-// follow: the mod then stays off (no Outfits tab) and says so once.
-bool has_vt(U64 obj, U64 vt_rva) { return vt_rva && obj && rp(obj) == g_base + vt_rva; }
-
-std::string g_layout_bad; // what failed ("" = fine)
-bool g_layout_toast_done = false;
-
-// At build time (the bodies are about to be made): the menu and its tab bar.
-bool layout_ok_build(U64 self)
-{
-    U64 tb = rp(self + kOffRootTabBar);
-    U32 n = tb ? r32(tb + kOffTabHeaderCount) : 0;
-    const char* why = !has_vt(self, kRvaRootQuickSlotVt) ? "menu"
-                      : !has_vt(tb, kRvaTabBarVt)       ? "tab bar"
-                      : !n || n > 16 || !has_vt(rp(rp(tb + kOffTabHeaders)), kRvaHeaderVt) ? "tab headers"
-                                                                                         : nullptr;
-    if (why && g_layout_bad.empty()) {
-        g_layout_bad = why;
-        LOG("layout check failed at build: %s (menu %llX, tab bar %llX, %u headers); mod off", why, self, tb, n);
-    }
-    return !why;
-}
-
-// When the menu opens (everything built): also the centre tooltip, cursor, bodies and the Armor slot scripts.
-bool layout_ok(U64 self)
-{
-    static U64 checked = 0;
-    if (!g_layout_bad.empty()) return false;
-    if (checked == self) return true;
-    if (!layout_ok_build(self)) return false;
-    U64 bodies = rp(self + kOffRootBodies), sv = rp(self + kOffRootSlotVecs);
-    U32 nb = r32(self + kOffRootBodyCount), ns = r32(self + kOffRootSlotVecCount);
-    const char* why = !has_vt(rp(self + kOffRootCenterTip), kRvaCenterTipVt) ? "centre tooltip"
-                      : !has_vt(rp(self + kOffRootCursor), kRvaRadialCursorVt) ? "radial cursor"
-                      : !nb || nb > 16 || !has_vt(rp(bodies), kRvaBodyVt)   ? "tab bodies"
-                      : ns <= kTemplateRecord || ns > 16 ||
-                              !has_vt(rp(rp(sv + kTemplateRecord * 0x10ull)), kRvaEquipSlotVt) ? "armor slots"
-                                                                                               : nullptr;
-    if (why) {
-        g_layout_bad = why;
-        LOG("layout check failed: %s (bodies %u, slot tabs %u); mod off", why, nb, ns);
-        return false;
-    }
-    checked = self;
-    LOG("layout check passed (menu %llX)", self);
-    return true;
-}
-
-U64 __fastcall build_hook(U64 self, U64 out, U64 a, U64 b)
-{
-    U64 tables[2] = {qsi_table(kRvaQsiTableRoot0), qsi_table(kRvaQsiTableRoot1)};
-    U64 tb = rp(self + kOffRootTabBar);
-    U32 headers = tb ? r32(tb + kOffTabHeaderCount) : 0;
-    U32 records = tables[0] ? r32(tables[0] + 8) : 0;
-    LOG("build bodies: self %llX tabbar %llX headers=%u records=%u tables %llX %llX", self, tb, headers, records,
-        tables[0], tables[1]);
-
-    // Only inject when the thtml has exactly one extra header (= the browser mod is active).
-    bool inject = records == 4 && headers == records + 1 && layout_ok_build(self) && prepare_fake_record();
-    if (!inject) {
-        LOG("  no Outfits tab injected%s", g_ui_tab_added ? "" : " (the gear wheel's UI files got no Outfits header at load: see \"gear wheel UI\" above)");
-        g_fake_key = 0xFFFF; // (an earlier build's record must not be served for this one)
-        return g_build_orig(self, out, a, b);
-    }
-    g_fake_key = records;
-    g_outfits_root = self; // (only this menu has the Outfits tab: every other one stays the game's)
-    U32 bumped[2] = {};
-    for (int i = 0; i < 2; ++i) {
-        if (!tables[i] || (i == 1 && tables[1] == tables[0])) continue;
-        U32* cnt = reinterpret_cast<U32*>(tables[i] + 8);
-        if (*cnt != records) continue;
-        *cnt = records + 1;
-        bumped[i] = 1;
-    }
-    U64 r = g_build_orig(self, out, a, b);
-    for (int i = 0; i < 2; ++i)
-        if (bumped[i]) *reinterpret_cast<U32*>(tables[i] + 8) = records;
-    LOG("  injected record %u; result %u, bodies now %u", records, r32(out), r32(self + kOffRootBodyCount));
-    return r;
-}
-
-// Depth-first search for the first element below `elem` carrying class `cls`.
-U64 find_by_class(U64 elem, const char* cls, int max_depth = 8, int depth = 0)
-{
-    if (!elem || depth > max_depth) return 0;
-    U64 holder = rp(elem + 0x20);
-    U64 vec = holder ? rp(holder + 8) : 0;
-    U64 data = vec ? rp(vec) : 0;
-    U32 n = vec ? r32(vec + 8) : 0;
-    for (U32 i = 0; data && i < n && i < 64; ++i)
-        if (class_name(r32(data + i * 4ull)) == cls) return elem;
-    U64 kids = rp(elem + 0x40);
-    U32 count = r32(elem + 0x48);
-    for (U32 i = 0; kids && i < count && i < 64; ++i)
-        if (U64 hit = find_by_class(rp(kids + i * 8ull), cls, max_depth, depth + 1)) return hit;
-    return 0;
-}
-
-// The element whose child has class `cls` (for elements with no class of their own).
-U64 find_parent_of_class(U64 elem, const char* cls, int max_depth = 8, int depth = 0)
-{
-    if (!elem || depth > max_depth) return 0;
-    U64 kids = rp(elem + 0x40);
-    U32 count = r32(elem + 0x48);
-    for (U32 i = 0; kids && i < count && i < 64; ++i) {
-        U64 k = rp(kids + i * 8ull);
-        if (k && find_by_class(k, cls, 0) == k) return elem;
-        if (U64 hit = find_parent_of_class(k, cls, max_depth, depth + 1)) return hit;
-    }
-    return 0;
-}
-
-bool g_label_logged = false;
-
-// The header script's "show" virtual (+0x20), only on a tab header (CheckBox script), SEH-guarded.
-void show_header(U64 h)
-{
-    U64 fn = has_vt(h, kRvaHeaderVt) ? rp(rp(h) + 0x20) : 0;
-    if (!fn) {
-        LOG("Outfits header %llX is not a tab header script; not shown", h);
-        return;
-    }
-    __try {
-        reinterpret_cast<VoidFn>(fn)(h);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        LOG("Outfits header: show faulted");
-    }
-}
-
-// Header of the Outfits tab, or 0 if the tab was not injected.
-U64 outfits_header(U64 self)
-{
-    U32 idx = g_fake_key.load();
-    if (idx == 0xFFFF || !layout_ok(self)) return 0;
-    U64 tb = rp(self + kOffRootTabBar);
-    U64 hv = tb ? rp(tb + kOffTabHeaders) : 0;
-    U32 n = tb ? r32(tb + kOffTabHeaderCount) : 0;
-    return hv && n > idx ? rp(hv + idx * 8ull) : 0;
-}
-
-// The header has no localstring in the thtml; its text is set here.
-void set_label(U64 h)
-{
-    U64 text = find_by_class(rp(h + 8), "quickslot-tabbar-header-text");
-    if (text) g_set_text(text, lang::t("tab.outfits"), 0);
-    if (!g_label_logged) {
-        g_label_logged = true;
-        LOG("Outfits header %s, label elem %llX", describe(h).c_str(), text);
-    }
-}
-
-// Adds or removes a CSS class the way the game's scripts do (skipped while the element is mid-restyle).
-bool set_class(U64 elem, const char* cls, bool on)
-{
-    U64 holder = rp(elem + 0x20);
-    U64 vec = holder ? rp(holder + 8) : 0;
-    if (!vec) return false;
-    U64 pending = rp(rp(holder) + 0xa0);
-    if (pending && rp(pending + 8)) return false;
-    U64 id = 0;
-    g_intern(&id, cls, 1, 0x2ffff);
-    U32 cid = static_cast<U32>(id);
-    if (!cid) return false;
-    if (on) {
-        if (!g_vec_add(vec, &cid)) return true; // already set
-        g_vec_sort(vec);
-    } else if (g_vec_remove(vec, &cid) == 0xFFFFFFFF) {
-        return true; // not set
-    }
-    g_restyle(holder);
-    return true;
-}
-
-// Replaces the numbered class previously applied to `elem` (tracked in `applied`) with `want` ("" = none).
-bool swap_class(U64 elem, std::string& applied, const std::string& want)
-{
-    if (applied == want) return true;
-    if (!applied.empty()) {
-        if (!set_class(elem, applied.c_str(), false)) return false;
-        applied.clear();
-    }
-    if (!want.empty()) {
-        if (!set_class(elem, want.c_str(), true)) return false;
-        applied = want;
-    }
-    return true;
-}
-
-bool has_class(U64 elem, const char* cls) { return elem && find_by_class(elem, cls, 0) == elem; }
-
-// Sets an element's background image to a texture by name, the way item icons get theirs (f35fb0).
-// 1 = set, 0 = no such texture, -1 = fault.
-int set_image_raw(U64 self, U64 elem, const char* name)
-{
-    alignas(16) U64 var[2] = {g_base + kRvaEmptyString, 2};
-    int r = -1;
-    __try {
-        g_str_assign(var, name);
-        g_str_normalize(var);
-        g_str_lower(var);
-        U64 ui = reinterpret_cast<UiMgrFn>(*reinterpret_cast<U64*>(*reinterpret_cast<U64*>(self) + kVfUiMgr))(self);
-        if (!g_texture_exists(*reinterpret_cast<U64*>(ui + kOffUiTextures), var)) {
-            r = 0;
-        } else {
-            U64 prop = kPropBackgroundImage, flag = 0;
-            g_set_style_prop(*reinterpret_cast<U64*>(elem + 0x20), &prop, var, &flag);
-            r = 1;
-        }
-        g_str_destroy(var);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        r = -1;
-    }
-    return r;
-}
-
-// Saved outfits show their chest piece on the slot's item image (ItemCoolTimeIconOutfit).
-struct SlotImage {
-    U64 elem = 0;
-    std::string icon; // last icon set on elem
-    bool ok = false;
-    bool shown = false; // should be visible
-    bool missing = false; // greyed out (om-missing): the outfit lacks a piece
-};
-SlotImage g_slot_image[kOutfitSlots];
-bool g_rehide_logged = false;
 // --- Slot modes: scrolling cycles what an Outfits slot does --------------------------------------
 // Like vanilla's item cycling (the dots under a slot): a slot cycles its action (a saved outfit: click loads; the "+"
 // slot: click saves) / settings (click opens the settings view). The game's scroll handlers (slot vtable 181 / 182) are hooked; on our
@@ -645,10 +292,8 @@ std::atomic<bool> g_peek_pad{false};       // the Outfit Arc on controllers: hol
 // The settings' descriptions (the settings view's centre caption), by group and entry: {title, description}.
 enum Page { kPageNone, kPageSettings, kPageOutfit, kPageConditions, kPageSettings2 };
 U32 g_depth_outfit = 0; // the saved outfit the conditions' texts are for
-extern bool g_messages;
 extern bool g_stash;
 extern bool g_take_from_companions;
-void outfit_resistance(const Outfit& o, int& ice, int& fire);
 std::string stash_description(const Outfit& o);
 
 std::pair<std::string, std::string> entry_text(int page, U32 index)
@@ -779,260 +424,7 @@ bool g_worn_changed = false; // the centre tooltip's tag follows on the next pum
 // Outfits tab: saved outfits, then one empty "+" slot (until all 12 are used); the rest hidden.
 bool g_slots_logged = false;
 U32 g_applied_visible = 0; // visible slot count the classes were last set for
-
-// only: just that slot (a scroll changes one slot; re-styling them all made the other badges flicker).
-// An item's Ice / Fire Resistance level: its passive list (item info +0x118 -> {entries of {u32 kind, u32 level}*,
-// u32 count}). The kind's low 16 bits are the passive's id (the high 16 change per session: a runtime handle): 0x704
-// Fire Resistance, 0x705 Ice, 0x706 Lightning; the others are other passives (0x70a fishing cooldown, 0x6xx ...).
-// Levels add up over the worn pieces; 5 / 10 / 15 each cancel one of the cold / heat gauge's three bars, 15 also gives
-// immunity to Freeze / Burn. Item data never changes in a session: cached per key.
-using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
-
-U32 kPassiveFire = 0x74e, kPassiveIce = 0x74f; // (0x704 / 0x705 before 2026-10-30: Kuku armour Ice 10 = 0x74f, Ziggurat Lightning 1 = 0x750)
-// Base stats (cloaks...): a second list of the same {kind, level}: info +0x188 -> {rows*, n}, row (0x80 each) +0x58 entries, +0x60 count
-// (Plate Cloak of the Shadows: Fire Lv 7; Wolf Cloak: Ice Lv 5).
-U32 kBaseFire = 0x72, kBaseIce = 0x73; // (0x68 / 0x69 before 2026-10-30: Scout Cloak Ice 3 = 0x73, Hungering Fang Lightning 7 = 0x74)
 std::map<U16, std::pair<int, int>> g_item_resist; // key -> {ice, fire}
-
-// The game's item table: a key is a row, and a patch that adds items renumbers the rows; the permanent id in each row
-// stays. Only the first block is used: the rows from the data file, whose body offsets grow from row to row. After it the
-// table has room for rows the game fills while it runs (they come and go, and repeat ids). Checked: ids all different.
-U64 item_rows(U32* count = nullptr)
-{
-    static int state = 0; // 0 not checked, 1 fine, 2 not what it should be
-    static U32 block = 0;
-    U64 table = kRvaItemTable ? rp(g_base + kRvaItemTable) : 0;
-    U64 rows = table ? rp(table + 0x28) : 0;
-    U32 n = table ? r32(table + 8) : 0;
-    if (!rows || !n) return 0; // (not loaded yet)
-    if (!state) {
-        std::set<U32> ids;
-        U32 last = 0;
-        for (U32 i = 0; i < n && i < 60000; ++i) {
-            U32 id = r32(rows + i * 8ull), off = r32(rows + i * 8ull + 4);
-            if (!id || (i && off <= last)) break;
-            ids.insert(id);
-            last = off;
-            block = i + 1;
-        }
-        bool ok = n <= 60000 && block >= 100 && block * 2 >= n && ids.size() == block;
-        state = ok ? 1 : 2;
-        LOG("self-test: item table, %u rows, %u from the data file, %zu different ids: %s", n, block, ids.size(),
-            ok ? "ok" : "FAILED (keys can't be repaired)");
-    }
-    if (state != 1) return 0;
-    if (count) *count = block;
-    return rows;
-}
-
-U32 pid_of(U16 key)
-{
-    U32 n = 0;
-    U64 rows = item_rows(&n);
-    return rows && key < n ? r32(rows + key * 8ull) : 0;
-}
-
-U16 key_of_pid(U32 pid)
-{
-    static std::map<U32, U16> keys;
-    U32 n = 0;
-    U64 rows = item_rows(&n);
-    if (!rows) return 0xFFFF;
-    if (keys.empty())
-        for (U32 i = 0; i < n && i < 0xFFFF; ++i)
-            if (U32 id = r32(rows + i * 8ull)) keys[id] = static_cast<U16>(i);
-    auto f = keys.find(pid);
-    return f != keys.end() ? f->second : U16(0xFFFF);
-}
-
-// An item info's passive list (base false) or base stat list (true, from the first refinement row) at `off`.
-std::pair<U64, U32> stat_list(U64 info, U64 off, bool base)
-{
-    if (!info) return {0, 0};
-    if (base) {
-        U64 stats = rp(info + off), row0 = stats ? rp(stats) : 0;
-        return {row0 ? rp(row0 + 0x58) : 0, row0 ? r32(row0 + 0x60) : 0};
-    }
-    U64 p = rp(info + off);
-    return {p ? rp(p) : 0, p ? r32(p + 8) : 0};
-}
-extern ItemInfoFn g_item_info;
-std::string item_name(U16 key);
-
-std::pair<int, int> item_resistance(U16 key)
-{
-    if (auto f = g_item_resist.find(key); f != g_item_resist.end()) return f->second;
-    std::pair<int, int> r{0, 0};
-    U16 k = key;
-    U64 info = g_item_info ? g_item_info(0, k) : 0;
-    auto [list, n] = stat_list(info, kOffItemPassives, false);
-    auto [base, nb] = stat_list(info, kOffItemStats, true); // (the resistance is the same in every refinement row)
-    auto sum = [&](U64 l, U32 cnt, U32 ice, U32 fire) {
-        for (U32 i = 0; l && i < cnt && i < 16; ++i) {
-            U32 kind = 0, level = 0;
-            if (!rd(l + i * 8ull, kind) || !rd(l + i * 8ull + 4, level) || level > 100) continue;
-            if ((kind & 0xFFFF) == ice) r.first += static_cast<int>(level);
-            else if ((kind & 0xFFFF) == fire) r.second += static_cast<int>(level);
-        }
-    };
-    sum(list, n, kPassiveIce, kPassiveFire);
-    sum(base, nb, kBaseIce, kBaseFire);
-    if (g_item_info) g_item_resist[key] = r; // (not cached before the lookup is there)
-    if (r.first || r.second) LOG("resistance of item %u \"%s\": ice %d, fire %d", key, item_name(key).c_str(), r.first, r.second);
-    return r;
-}
-
-// The ids of the resistance stats can renumber on a patch, and the lists can move in the item info: both are read from
-// items whose values are known (found by permanent id). First the lists' offsets: for each kind (passive / base), the
-// offset where every reference of that kind has an entry with its id and level (one offset only, else the built-in one
-// stays). Then the ids: a reference counts when exactly one of its entries has the known level; references must agree;
-// without that the built-in id stays.
-void calibrate_resist_ids()
-{
-    struct Ref { U32 pid; U32 level; bool base; U32* id; };
-    const Ref refs[] = {{0xF4B2F, 10, false, &kPassiveIce}, {0xF4B2E, 10, false, &kPassiveFire}, {0xF4EC4, 3, true, &kBaseIce},
-                        {0xF43FC, 5, true, &kBaseIce},      {0xF43BF, 7, true, &kBaseFire}};
-    for (bool base : {false, true}) {
-        U64& off = base ? kOffItemStats : kOffItemPassives;
-        std::vector<U64> hits;
-        for (U64 o = 0x80; o < 0x300; o += 8) {
-            int refs_of_kind = 0, matched = 0;
-            for (const Ref& r : refs) {
-                if (r.base != base) continue;
-                ++refs_of_kind;
-                U16 key = key_of_pid(r.pid);
-                auto [list, n] = stat_list(key != 0xFFFF && g_item_info ? g_item_info(0, key) : 0, o, base);
-                bool has = false;
-                for (U32 i = 0; list && n <= 64 && i < n; ++i) {
-                    U32 kind = 0, level = 0;
-                    has |= rd(list + i * 8ull, kind) && rd(list + i * 8ull + 4, level) && level == r.level &&
-                           (kind & 0xFFFF) == *r.id;
-                }
-                matched += has;
-            }
-            if (refs_of_kind && matched == refs_of_kind) hits.push_back(o);
-        }
-        if (hits.size() == 1 && hits[0] != off) LOG("self-test: the %s stat list moved: +%llX -> +%llX", base ? "base" : "passive", off, hits[0]);
-        if (hits.size() == 1) off = hits[0];
-        else LOG("self-test: the %s stat list found at %zu offsets; +%llX kept", base ? "base" : "passive", hits.size(), off);
-    }
-    std::map<U32*, U32> found;
-    std::set<U32*> clash;
-    int answered = 0;
-    for (const Ref& r : refs) {
-        U16 key = key_of_pid(r.pid);
-        U64 info = key != 0xFFFF && g_item_info ? g_item_info(0, key) : 0;
-        auto [list, n] = stat_list(info, r.base ? kOffItemStats : kOffItemPassives, r.base);
-        U32 id = 0;
-        int hits = 0;
-        for (U32 i = 0; list && i < n && i < 16; ++i) {
-            U32 kind = 0, level = 0;
-            if (rd(list + i * 8ull, kind) && rd(list + i * 8ull + 4, level) && level == r.level) id = kind & 0xFFFF, ++hits;
-        }
-        if (hits != 1) continue;
-        ++answered;
-        if (auto f = found.find(r.id); f != found.end() && f->second != id) clash.insert(r.id);
-        found[r.id] = id;
-    }
-    bool moved = false;
-    for (const auto& [var, id] : found)
-        if (!clash.count(var) && *var != id) {
-            LOG("self-test: a resistance id moved: %X -> %X", *var, id);
-            *var = id, moved = true;
-        }
-    if (moved) g_item_resist.clear();
-    LOG("self-test: resistance ids from %d of %zu references (%zu disagree): passive ice %X fire %X, base ice %X fire %X "
-        "(lists at +%llX / +%llX)", answered, std::size(refs), clash.size(), kPassiveIce, kPassiveFire, kBaseIce, kBaseFire,
-        kOffItemPassives, kOffItemStats);
-}
-
-// Abyss gears belong to one COPY of an item: its sockets are at copy+0x60 -> 6-byte entries {u16 gear key (0xFFFF:
-// empty), u16, u8 socket, u8}. A gear is an item too, its resistance in its own lists (Flameward II, key 3244: Fire
-// Lv 2 as a passive). The copy is found by uid + key: worn, or in a bag (storage / wardrobe too). Re-read at each
-// wheel open (gears can be put in / taken out between). Companions' worn copies are not searched (a piece they wear
-// counts without its gears).
-
-std::map<U64, std::pair<int, int>> g_gear_resist; // uid -> its gears' {ice, fire}
-U64 find_copy(U64 uid, U16 key);
-
-std::pair<int, int> gear_resistance(U64 uid, U16 key)
-{
-    if (auto f = g_gear_resist.find(uid); f != g_gear_resist.end()) return f->second;
-    std::pair<int, int> r{0, 0};
-    U64 copy = find_copy(uid, key);
-    U64 sockets = copy ? rp(copy + 0x60) : 0;
-    for (U32 i = 0; sockets && i < 5; ++i) {
-        U16 gear = 0xFFFF;
-        if (!rd(sockets + i * 6ull, gear) || gear == 0xFFFF || gear == 0) continue;
-        auto [gi, gf] = item_resistance(gear);
-        r.first += gi, r.second += gf;
-    }
-    g_gear_resist[uid] = r;
-    if (r.first || r.second) LOG("abyss gears of %s (uid %llX): ice %d, fire %d", item_name(key).c_str(), uid, r.first, r.second);
-    return r;
-}
-
-void outfit_resistance(const Outfit& o, int& ice, int& fire)
-{
-    ice = fire = 0;
-    for (const OutfitItem& it : o.items) {
-        if (!loads_piece(o, it.slot)) continue; // (weapons it leaves aren't worn by it)
-        auto [i, f] = item_resistance(it.key);
-        auto [gi, gf] = gear_resistance(it.uid, it.key);
-        ice += i + gi, fire += f + gf;
-    }
-}
-
-// The outfit's Climate badge: Auto from its resistance (Lv. 10 plain, Lv. 15 phase thermometer; the stronger side),
-// or the manual Cold / Heat (plain), or none.
-const char* climate_badge(const Outfit& o)
-{
-    if (o.climate == 1) return "om-cold-c";
-    if (o.climate == 2) return "om-heat-c";
-    if (o.climate == 3) return nullptr;
-    int ice = 0, fire = 0;
-    outfit_resistance(o, ice, fire);
-    bool cold = ice >= fire;
-    int lv = cold ? ice : fire;
-    // (the plain thermometer is the FULL meter, the "phase" one the half: Lv 10-14 half, Lv 15+ full; user 23:4x)
-    const char* badge = lv >= 15 ? (cold ? "om-cold-c" : "om-heat-c") : lv >= 10 ? (cold ? "om-cold2-c" : "om-heat2-c") : nullptr;
-    static std::map<std::string, std::string> logged; // (once per outfit and result)
-    std::string what = std::to_string(ice) + "/" + std::to_string(fire) + (badge ? badge : "-");
-    if (logged[o.name] != what) {
-        logged[o.name] = what;
-        std::string pieces;
-        for (const OutfitItem& it : o.items) {
-            auto [i, f] = item_resistance(it.key);
-            if (i || f) pieces += " " + item_name(it.key) + " (ice " + std::to_string(i) + ", fire " + std::to_string(f) + ")";
-        }
-        LOG("climate \"%s\" (auto): ice %d, fire %d -> %s;%s", o.name.c_str(), ice, fire, badge ? badge : "no badge",
-            pieces.empty() ? " no resistant pieces" : pieces.c_str());
-    }
-    return badge;
-}
-
-const char* icon_name_of(U64 item)
-{
-    __try {
-        return g_icon_name ? g_icon_name(item) : nullptr;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return nullptr;
-    }
-}
-
-// A piece's icon texture: from its copy (worn or in a bag), else from a bare item with its key (not in the inventory).
-std::string piece_icon(const OutfitItem& it)
-{
-    U64 copy = it.slot == kBackShieldSlot ? back_shield_item() : find_copy(it.uid, it.key);
-    if (!copy && it.key == 0xFFFF) return {}; // (nothing saved there)
-    alignas(16) unsigned char bare[200] = {};
-    std::memcpy(bare, &it.uid, 8);
-    std::memcpy(bare + 8, &it.key, 2);
-    long long one = 1;
-    std::memcpy(bare + 0x10, &one, 8);
-    const char* name = icon_name_of(copy ? copy : reinterpret_cast<U64>(bare));
-    return name ? cstr(reinterpret_cast<U64>(name)) : std::string();
-}
 
 const char* look_badge(std::uint8_t look)
 {
@@ -1658,7 +1050,6 @@ const char* g_store_why = ""; // why (for the message in game)
 
 std::vector<U32> g_placeholder_ids;         // the file's, until the item table is there
 extern std::string g_language;
-extern std::vector<U16> g_placeholder_keys;
 extern bool g_uninstalled;
 const char* peek_key_id();
 
@@ -4415,33 +3806,6 @@ const char* slot_name(U16 slot)
     }
     return lang::t("slot.piece");
 }
-using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
-using LocTextFn = const char*(__fastcall*)(U64, U64);
-ItemInfoFn g_item_info = nullptr; // set by install() after a prologue check
-std::map<U16, std::string> g_item_names;
-
-const char* item_name_raw(U16 key)
-{
-    __try {
-        U64 info = g_item_info(0, key);
-        if (!info || info == *reinterpret_cast<U64*>(g_base + kRvaDefaultItemInfo)) return nullptr;
-        U64 text = *reinterpret_cast<U64*>(info + 0x90); // localized name, vfunc 1 (text, 0) -> UTF-8
-        if (!text) return nullptr;
-        return reinterpret_cast<LocTextFn>(*reinterpret_cast<U64*>(*reinterpret_cast<U64*>(text) + 8))(text, 0);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return nullptr;
-    }
-}
-
-std::string item_name(U16 key)
-{
-    if (!g_item_info || key == 0xFFFF) return {};
-    if (auto f = g_item_names.find(key); f != g_item_names.end()) return f->second;
-    const char* s = item_name_raw(key);
-    std::string n = s ? std::string(s, strnlen(s, 256)) : std::string();
-    LOG("item %u: name \"%s\"", key, n.c_str());
-    return g_item_names[key] = n;
-}
 
 // "Cloak (Leather Cloak), Ring 1 (Silver Ring)": the outfit's pieces in these slots.
 std::string slot_list(const Outfit& o, const std::vector<U16>& slots)
@@ -4459,7 +3823,6 @@ std::string slot_list(const Outfit& o, const std::vector<U16>& slots)
     }
     return s;
 }
-void report(U64 self, const std::string& text);
 
 // leave: the outfit's piece can't be put on there (a worn piece that isn't the outfit's still comes off);
 // keep: untouched (a piece taken from another character is on its way there).
@@ -4855,26 +4218,6 @@ void eye_press(U64 self, U32 i)
     } else if (k == pieces.size() + 1) {
         eye_leave(self);
     }
-}
-
-// Shows text in the game's own toast notification (and the log).
-void notify(U64 self, const std::string& text)
-{
-    LOG("notify: %s", text.c_str());
-    if (!g_toast) return;
-    __try {
-        U64 ui = reinterpret_cast<UiMgrFn>(*reinterpret_cast<U64*>(*reinterpret_cast<U64*>(self) + kVfUiMgr))(self);
-        if (ui) g_toast(ui, text.c_str(), 0);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        LOG("notify: toast faulted");
-    }
-}
-
-// A report after the fact (pieces left, not taken, overwritten): silenced by "Messages: Off" (still logged).
-void report(U64 self, const std::string& text)
-{
-    if (g_messages) notify(self, text);
-    else LOG("(message off) %s", text.c_str());
 }
 
 // --- Rename prompt: the game's own TextEditModalMessage (as its naming prompts open it) ----------
@@ -7193,81 +6536,7 @@ U64 __fastcall gear_mode_hook(U64 self, U64 a, U64 b, U64 c)
 // --- Diagnostics hooks --------------------------------------------------------------------------
 bool g_dumped_qsi = false;
 
-// The saved keys against the permanent ids: a piece whose key no longer names its item goes to the key that does (keys are
-// renumbered by patches). A saved piece with no id yet gets one only when that exact uid + key is in the inventory, so an
-// entry saved before a renumbering can't record a wrong id. The file is copied to OutfitManager_backups before a repair.
-void repair_keys()
-{
-    if (!item_rows()) return;
-    if (!g_placeholder_ids.empty()) {
-        std::lock_guard<std::mutex> lock(g_keys_mu);
-        for (U32 id : g_placeholder_ids)
-            if (U16 k = key_of_pid(id); k != 0xFFFF && std::find(g_placeholder_keys.begin(), g_placeholder_keys.end(), k) == g_placeholder_keys.end())
-                g_placeholder_keys.push_back(k);
-        g_placeholder_ids.clear();
-    }
-    static std::map<std::pair<U64, U16>, bool> owned; // (uid, key) looked for this session
-    int fixed = 0, stamped = 0, gone = 0;
-    std::string repairs;
-    for (Outfit& o : g_outfits)
-        for (OutfitItem& it : o.items) {
-            if (it.pid) {
-                if (pid_of(it.key) == it.pid) continue;
-                U16 k = key_of_pid(it.pid);
-                if (k == 0xFFFF) {
-                    ++gone;
-                    LOG("key repair: \"%s\" equipment-%u: item id %X is no longer in the game (key %u kept)", o.name.c_str(), it.slot, it.pid, it.key);
-                    continue;
-                }
-                repairs += " " + std::to_string(it.key) + "->" + std::to_string(k);
-                it.key = k;
-                ++fixed;
-            } else if (std::pair<U64, U16> id{it.uid, it.key}; owned.try_emplace(id, false).second) {
-                owned[id] = find_copy(it.uid, it.key) != 0;
-            }
-            if (!it.pid && owned[{it.uid, it.key}]) {
-                it.pid = pid_of(it.key);
-                stamped += it.pid != 0;
-            }
-        }
-    if (fixed) {
-        std::wstring dir = g_store_path.substr(0, g_store_path.find_last_of(L"\\/")) + L"\\OutfitManager_backups";
-        CreateDirectoryW(dir.c_str(), nullptr);
-        SYSTEMTIME t;
-        GetLocalTime(&t);
-        wchar_t name[64];
-        swprintf_s(name, L"\\OutfitManager.outfits.%04u%02u%02u-%02u%02u%02u", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
-        bool copied = CopyFileW(g_store_path.c_str(), (dir + name).c_str(), FALSE) != 0;
-        LOG("key repair: %d pieces:%s (file copied first: %s)", fixed, repairs.c_str(), copied ? "yes" : "NO");
-        g_item_resist.clear();
-    }
-    if (stamped) LOG("key repair: %d pieces got their permanent id", stamped);
-    if (fixed || stamped) save_outfits();
-}
-
-// --- Self-test ----------------------------------------------------------------------------------------------------
-// A patch can move a field no pattern can see. So at the first menu open each one is read on the real thing, read-only:
-// what doesn't look right turns its feature off (with the usual toast) instead of working on the wrong memory. A check
-// that can't be made yet (no player, nothing worn) stays open for the next menu open.
-
-bool readable_name(const std::string& n)
-{
-    if (n.empty() || n.size() > 128) return false;
-    for (unsigned char c : n)
-        if (c < 0x20 || c == 0x7f) return false;
-    return true;
-}
-
 bool g_tab_checked = false;
-
-// The resistance ids / lists, checked once against items of known values before any climate is worked out (the gear
-// wheel's self-test and the Outfit Arc's opening both call it: 2026-11-06, the arc opened first and read every
-// outfit's resistance as 0, so its thermometers didn't show).
-void ensure_resist_ids()
-{
-    static bool done = false;
-    if (!done && g_item_info && item_rows()) done = true, calibrate_resist_ids();
-}
 
 void self_test(U64 self)
 {
