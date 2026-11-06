@@ -4032,9 +4032,12 @@ using ModelSwapFn = void(__fastcall*)(U64 job, U64, U64, char, std::uint8_t*);
 ModelSwapFn g_model_swap_orig = nullptr;
 std::atomic<bool> g_worn_dirty{true}; // a model swapped (gear changed somewhere): the wheel rechecks what is worn
 std::atomic<bool> g_anchor_dirty{false}; // ... and, with the menu closed, the anchor (anchor_recheck)
+std::atomic<U32> g_model_swaps{0}; // DIAG (A/B load modes): model rebuilds seen, any character's
+
 void __fastcall model_swap_hook(U64 job, U64 a, U64 b, char c, std::uint8_t* state)
 {
     g_model_swap_orig(job, a, b, c, state);
+    ++g_model_swaps; // DIAG (A/B)
     g_worn_dirty = true;
     g_anchor_dirty = true;
     U64 model = rp(rp(rp(job + 8) + 8) + kOffModelRoot);
@@ -4680,7 +4683,16 @@ struct DeferredEquip {
     std::string what; // "Helmet (Wooden Mask...)"
     std::string from; // whose it was
     bool held = false; // refused while another piece held its slot: put on once the game lets go of the slot
+    bool staggered = false; // DIAG (A/B load modes): put on once the last piece's model parts are built
 };
+// DIAG (A/B load modes, 2026-11-06: Kliff's body flashes black while many pieces stream in at once). Ctrl+Alt+F9 in
+// game cycles: 0 swap (the game replaces each piece), 1 take off first (test 1 / 2), 2 one at a time (swap; the next
+// put-on waits for the last one's model rebuild, or 400 ms).
+int g_load_mode = 1;
+U64 g_stagger_at = 0;
+U32 g_stagger_swaps = 0;
+const char* const kLoadModeNames[] = {"swap (the game replaces each piece)", "take off first, then put on",
+                                      "one piece at a time (swap)"};
 // A worn piece a load takes off or replaces: after the load it must still be worn or in a bag (lost_check).
 struct LeavingPiece {
     U64 uid;
@@ -5064,7 +5076,7 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
         // old piece back to a bag position it remembers, and a piece remembering a position that doesn't exist was
         // lost on the way (2026-11-06, a player's log: every lost piece had been put on from one bag position and was
         // swapped out; pieces taken off never got lost). Slots the game won't leave empty keep the swap.
-        bool swap_off = worn && t && !keep_slots.count(w[i].slot);
+        bool swap_off = g_load_mode == 1 && worn && t && !keep_slots.count(w[i].slot); // DIAG (A/B): mode 1 only
         if (worn && (needed || swap_off || (!t && !keep_slots.count(w[i].slot))))
             off.push_back({false, w[i].slot, w[i].key, w[i].uid, swap_off && !needed});
         if (t) on.push_back({true, t->slot, t->key, t->uid});
@@ -5077,6 +5089,8 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
         return;
     }
     LOG("load \"%s\": %zu to take off, %zu to put on", o.name.c_str(), off.size(), on.size());
+    LOG("DIAG load mode: %s", kLoadModeNames[g_load_mode]); // DIAG (A/B)
+    bool stagger_started = false; // DIAG (A/B): mode 2, the first put-on ran
     off.insert(off.end(), on.begin(), on.end());
     std::vector<DeferredEquip> held;
     g_steps_ok = 0;
@@ -5086,7 +5100,13 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
             LOG("  step %zu: put on equipment-%u skipped: its take-off was refused", i + 1, off[i].slot);
             continue;
         }
+        if (g_load_mode == 2 && off[i].equip && stagger_started) { // DIAG (A/B): the rest one at a time
+            held.push_back({off[i].uid, off[i].slot, off[i].key, slot_list(o, {off[i].slot}), "", false, true});
+            continue;
+        }
         if (!run_step(off[i], i + 1)) break;
+        if (g_load_mode == 2 && off[i].equip) // DIAG (A/B)
+            stagger_started = true, g_stagger_at = GetTickCount64(), g_stagger_swaps = g_model_swaps.load();
         if (!off[i].equip && g_step_err && off[i].swap)
             LOG("  (equipment-%u: the outfit's piece swaps it instead)", off[i].slot);
         else if (!off[i].equip && g_step_err)
@@ -6684,8 +6704,32 @@ void pump_async(U64 self)
     }
     bool late = now - g_async.started > kAsyncMs;
     bool acted = false; // a late put-on ran this frame: checked once the game applied it (a later frame)
+    bool stagger_busy = false; // DIAG (A/B): one staggered put-on per frame, in order
     for (size_t i = 0; i < g_async.equips.size();) {
         DeferredEquip& d = g_async.equips[i];
+        if (d.staggered) { // DIAG (A/B): the next piece once the last one's model parts are built (or 400 ms)
+            bool ready = !stagger_busy;
+            if (ready) {
+                U64 sctx[4] = {};
+                U64 actor = acquire_player(sctx);
+                U64 model = actor ? look_model(actor) : 0;
+                bool loading = model && model_loading(model);
+                if (sctx[0]) release_player(sctx);
+                ready = (g_model_swaps.load() != g_stagger_swaps && !loading) || now - g_stagger_at > 400;
+            }
+            stagger_busy = true;
+            if (!ready) {
+                ++i;
+                continue;
+            }
+            LOG("DIAG load \"%s\": next piece after %llu ms", g_async.outfit.c_str(), now - g_stagger_at);
+            run_step({true, d.slot, d.key, d.uid}, 0);
+            g_stagger_at = now, g_stagger_swaps = g_model_swaps.load();
+            acted = true;
+            g_async.started = now;
+            g_async.equips.erase(g_async.equips.begin() + i);
+            continue;
+        }
         if (d.held) { // (the slot's holder is the game's state, read every frame: on as soon as it is free)
             if (slot_claim(d.slot) && !late) {
                 ++i;
@@ -9044,6 +9088,17 @@ void peek_frame(U64 self)
         if (last && now - last > 1000) LOG("DIAG Outfit Arc: status screen frames resumed after %llu ms", now - last);
     }
     g_peek_hud_at = GetTickCount64();
+    { // DIAG (A/B load modes): Ctrl+Alt+F9 cycles how loads put pieces on
+        static bool was = false;
+        bool down_now = game_focused() && (GetAsyncKeyState(VK_F9) & 0x8000) && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+                        (GetAsyncKeyState(VK_MENU) & 0x8000);
+        if (down_now && !was) {
+            g_load_mode = (g_load_mode + 1) % 3;
+            LOG("DIAG load mode now: %s", kLoadModeNames[g_load_mode]);
+            notify(self, std::string("Load mode (test): ") + kLoadModeNames[g_load_mode]);
+        }
+        was = down_now;
+    }
     // The key (the "+" page's Quick Peek): held = open, released = the highlighted outfit goes on. Not while the gear
     // wheel, a question or the naming prompt is open.
     if (g_peek_capture && !g_menu_open) g_peek_capture = false; // (the wheel closed while the setting waited)
