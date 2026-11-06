@@ -159,6 +159,7 @@ struct CharacterOutfits {
     std::vector<Outfit> outfits;
 };
 using Store = std::deque<CharacterOutfits>; // deque: references stay valid when a character is added
+constexpr std::uint8_t kEyeSteps = 3;
 
 // The Armor wheel's 12 slots don't fit one page with the page slot: its accessories get their own. Equipment slots
 // (named from the pieces in them): 7 / 8 earrings, 9 necklace, 10 / 11 rings, 17 circlet, 18 mask; the armour page
@@ -211,12 +212,84 @@ struct PendingWrite {
     U64 started;      // system time (FILETIME) the write was first seen
 };
 
+// --- Worn gear ----------------------------------------------------------------------------------
+struct WornRaw {
+    U16 slot; // equipment-N category
+    U16 key;
+    U64 uid;
+    const char* icon;
+    U16 qslot; // the slot script's quickslot id (+0x190, logged)
+    std::uint8_t type; // slot data category type (+0x960, logged)
+    U16 at[2]; // the two u16 after the item copy (item + 0xc8; maybe its container + position, logged)
+};
+
 // The two hands' weapon slots (equipment-0: MainWeapon_*_R, equipment-1: MainWeapon_*_L). Two one-handed weapons worn
 // in each other's hands count as the outfit's (2026-11-06, a player's log: the game refuses to take either off -
 // "no items available to be equipped after removal" - so a load could never swap them back; every load ended 18 of 20
 // and the outfit showed as modified).
 constexpr U16 kHandR = 0, kHandL = 1;
+
+// --- Appearance ---------------------------------------------------------------------------------
+// Each character's last loaded outfit decides how its pieces look, on our own visibility layer (above the game's,
+// below nothing it uses for its own items: the flight cloak is an item of its own). A piece counts only while that
+// exact piece (uid + key) is worn in its slot; anything else in the slot is left to the game. The game's headgear
+// switch (kRvaBattleVis) runs on loading (before the loading screen shows the character), on battle changes and model
+// rebuilds: the looks are applied right after it, with its in-battle flag for Combat only / Out of combat only.
+using VisSetFn = std::uint8_t(__fastcall*)(U64 model, U64 list, std::uint8_t shown, std::uint8_t layer, U64, U64,
+                                           std::uint8_t);
+using VisReleaseFn = std::uint8_t(__fastcall*)(U64 model, U64 list, std::uint8_t layer, std::uint8_t, std::uint8_t);
+using BattleVisFn = void(__fastcall*)(U64 inv, std::uint8_t in_battle, std::uint8_t show_headgear);
+using SlotHandleFn = int*(__fastcall*)(U64 inv, int* out, short slot);
+
+// The battle state itself (the headgear decision asks it: kRvaBattleCheck(actor)); -1 when it can't be asked.
+using BattleCheckFn = std::uint8_t(__fastcall*)(U64 actor);
+
+// The game's in/out check (drawing / sheathing, per part): a weapon with a look drawn or put away gets its looks synced
+// on the next UI frame (not here: the game is in the middle of laying the character's parts out).
+using EquipVisCheckFn = float(__fastcall*)(U64 vc, const U32* part, std::uint8_t* rec, std::uint8_t drawn);
+
+// The model rebuild job's swap (a job thread): pieces put on outside the wheel (the Armor tab, the game) get their new
+// model parts here, without a headgear switch; their character is synced on the next UI frame.
+using ModelSwapFn = void(__fastcall*)(U64 job, U64, U64, char, std::uint8_t*);
+struct DeferredEquip {
+    U64 uid;
+    U16 slot, key;
+    std::string what; // "Helmet (Wooden Mask...)"
+    std::string from; // whose it was
+    bool held = false; // refused while another piece held its slot: put on once the game lets go of the slot
+};
+// A worn piece a load takes off or replaces: after the load it must still be worn or in a bag (lost_check).
+struct LeavingPiece {
+    U64 uid;
+    U16 key;
+    U16 slot;
+};
+struct AsyncLoad {
+    std::string outfit; // checked: the list may change meanwhile
+    std::vector<U16> leave;
+    std::vector<DeferredEquip> equips;
+    U64 started = 0;
+    bool active = false;
+    std::vector<LeavingPiece> leaving;
+};
 using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
+
+// Every move gives the piece a new uid. The stash knows what it moved, so it follows each piece exactly: the copy of its
+// item in storage that was not there before the requests is the piece (adopt_returned stays the fallback for moves
+// made by hand).
+struct StashSent {
+    U64 uid;
+    U16 key;
+};
+struct StashCheck {
+    std::vector<StashSent> sent;
+    std::vector<U64> before; // uids in storage before the requests
+    U64 at = 0;              // tick of the requests (0: nothing pending)
+};
+
+// The HUD (always up in play) runs the same per-frame base function: a tick for what must finish with the wheel
+// closed (the stash check, which reports). One comparison per frame while nothing is pending.
+using FrameFn = float(__fastcall*)(U64);
 
 // (defined in core.cpp)
 extern U64 g_base;
