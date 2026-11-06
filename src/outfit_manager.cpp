@@ -17,36 +17,7 @@
 // OutfitManager.outfits next to the plugin, one list per character (and per save slot); every game address comes from
 // the resolver (resolver.h), so a game update heals itself or switches the affected feature off.
 
-#include "game.h"
-#include "lang.h"
-#include "log.h"
-#include "resolver.h"
-#include "uibin_patch.h"
-
-#include <windows.h>
-#include <hidsdi.h>
-#include <setupapi.h>
-#include <MinHook.h>
-#include <algorithm>
-#include <intrin.h>
-#include <climits>
-#include <cmath>
-#include <atomic>
-#include <cctype>
-#include <cstdarg>
-#include <cstdint>
-#include <cstdio>
-#include <cstring>
-#include <cwctype>
-#include <deque>
-#include <initializer_list>
-#include <iterator>
-#include <map>
-#include <set>
-#include <sstream>
-#include <mutex>
-#include <string>
-#include <vector>
+#include "om.h"
 
 namespace om {
 
@@ -467,7 +438,6 @@ U16 g_weapon_slots[kMaxWeaponSlots]; // the Weapons wheel's (record 0); 0xFFFF =
 std::atomic<U32> g_weapon_slot_count{0};
 constexpr U32 kWornMax = kOutfitSlots + kMaxWeaponSlots; // worn entries: armour, then weapons
 
-const OutfitItem* outfit_piece(const Outfit& o, U16 slot); // (the outfit's piece in a slot, or nullptr)
 bool is_weapon_slot(U16 slot)
 {
     for (U32 i = 0; i < g_weapon_slot_count; ++i)
@@ -499,12 +469,7 @@ std::atomic<U32> g_outfit_count{0}; // == g_outfits.size()
 // Closing the menu leaves it.
 int g_eye = -1;             // the outfit shown (-1: the outfits)
 int g_cfg = -1;             // the settings view's outfit (the saved count: the "+" slot's, the plugin's; -1: none)
-std::vector<std::uint8_t> cfg_entries();
-std::vector<const char*> cfg_values(std::uint8_t k, U32& cur);
-std::string cfg_value_text(std::uint8_t k, const char* v);
-const char* cfg_name(std::uint8_t k);
-std::string cfg_description(std::uint8_t k);
-std::string cfg_title(std::uint8_t k);
+
 std::uint8_t g_eye_step = 0; // 0 Armour, 1 Weapons, 2 Accessories
 std::uint8_t g_eye_pick = 0; // the page slot's dots: scrolled to choose, a click opens it (g_eye_step follows)
 constexpr std::uint8_t kEyeSteps = 3;
@@ -516,7 +481,6 @@ constexpr U16 kAccessorySlots[] = {7, 8, 9, 10, 11, 17, 18};
 bool is_accessory_slot(U16 slot) { return std::find(std::begin(kAccessorySlots), std::end(kAccessorySlots), slot) != std::end(kAccessorySlots); }
 
 constexpr size_t kBackPiece = ~size_t(0); // (eye_pieces: the back shield, not one of the outfit's items)
-U64 back_shield_item(); // (the worn item in the back shield's slot, or 0)
 
 // The shown page's slots: every slot of its wheel, in slot order, held by the outfit or not (the Weapons page also the
 // back shield).
@@ -551,11 +515,13 @@ std::uint8_t slot_look(const Outfit& o, U16 slot)
     auto f = o.empty_looks.find(slot);
     return f != o.empty_looks.end() ? f->second : std::uint8_t(kLookDefault);
 }
+U64 back_shield_item();
+template <class T>
+bool rd(U64 addr, T& out);
 
 // A slot of the view: the outfit's item there; nothing saved there: an empty item with the slot's look; (kBackPiece)
 // the back shield as an item: what its slot holds now (for the icon and name) with the outfit's back look.
-template <class T>
-bool rd(U64 addr, T& out);
+
 const OutfitItem* eye_item(size_t idx, OutfitItem& tmp)
 {
     Outfit& o = g_outfits[size_t(g_eye)];
@@ -580,6 +546,7 @@ std::uint8_t& eye_look(size_t idx)
         if (it.slot == idx) return it.look;
     return o.empty_looks[static_cast<U16>(idx)];
 }
+std::vector<std::uint8_t> cfg_entries();
 
 // Saved outfits plus one empty "+" slot, until all 12 are used; in the Appearance view the pieces, the page slot and
 // Back (the fullest page, Weapons: 8 slots and the back shield, 11 in all).
@@ -1107,8 +1074,7 @@ U64 g_low_elem[kOutfitSlots] = {};   // the disable element: the worn wedge
 bool g_low_shown[kOutfitSlots] = {};
 const char* g_badge_class[kOutfitSlots] = {}; // badge shown on slot i (nullptr: none)
 std::string g_plus_icon; // the "+" slot's picture: the worn chest while no saved outfit is worn ("" : the silhouette)
-void update_plus_icon(U64 self);
-bool look_changing();
+
 bool g_amber = false; // the anchor (the last loaded / exactly worn outfit) has been changed by hand: its highlight is amber
 // Equipment slots the game refuses to empty ("There are no Items available to be equipped after removal": the main
 // hand, the shield, the dagger, the lantern - seen; more are learned from that refusal and kept in the file): an outfit
@@ -1121,16 +1087,11 @@ std::mutex g_keys_mu;
 U64 g_mark_elem[kOutfitSlots] = {};  // the Appearance marker's element (the charge-count wrap)
 bool g_mark_shown[kOutfitSlots] = {}; // the game re-hides it on focus changes: shown again like the badges
 
-
 void reset_modes() { std::fill(std::begin(g_slot_mode), std::end(g_slot_mode), std::uint8_t(kModeMain)); }
 
 // --- The game's depth menu (the lantern's Auto / On / Off / Back ring) -----------------------------------------------
 // Ours is never opened (the settings and visibility views are on the wheel itself); while the game's own is open (the
 // lantern's), its presses and sectors are the game's.
-void notify(U64 self, const std::string& text);
-U32 outfit_slot_index(U64 self, U64 script);
-bool outfits_current(U64 self);
-U64 focused_script(U64 self);
 
 bool in_depth(U64 self)
 {
@@ -1138,34 +1099,22 @@ bool in_depth(U64 self)
     return kOffRootFocusIdx && rd(self + kOffRootFocusIdx, v) && v;
 }
 
-void save_outfits();
-void publish_looks(const Store& s); // (Appearance)
-U16 current_character(); // (the controlled character: below)
-void mark_worn(int index);
-extern bool g_stash;
 std::atomic<U32> g_peek_key{0};           // the Outfit Arc's key (a virtual-key code; 0 = Off)
-std::string hotkey_name(U32 vk, std::uint8_t mods); // (an outfit's hotkey as shown: below, with the key names)
+
 // The current character's hotkeys for the input filters (another thread): vk | mods << 8 per outfit, 0 = none.
 std::atomic<U32> g_hotkeys[16] = {};
 std::atomic<bool> g_peek_pad{false};       // the Outfit Arc on controllers: hold L1 / LB, press the d-pad's down
-void peek_key_load(const std::string& id); // (from its id in the outfits file)
-const char* peek_key_id();                 // (its id to save; null: Off)
-extern bool g_take_from_companions;
-extern bool g_messages;
-extern std::string g_language;
-const char* stash_text();
-bool companion_pull_ok();
 
 struct Outfit;
-std::string stash_description(const Outfit& o);
-const char* climate_text(const Outfit& o);
-void outfit_resistance(const Outfit& o, int& ice, int& fire);
-const char* weapons_text(const Outfit& o);
-const char* outfit_stash_text(const Outfit& o);
 
 // The settings' descriptions (the settings view's centre caption), by group and entry: {title, description}.
 enum Page { kPageNone, kPageSettings, kPageOutfit, kPageConditions, kPageSettings2 };
 U32 g_depth_outfit = 0; // the saved outfit the conditions' texts are for
+extern bool g_messages;
+extern bool g_stash;
+extern bool g_take_from_companions;
+void outfit_resistance(const Outfit& o, int& ice, int& fire);
+std::string stash_description(const Outfit& o);
 
 std::pair<std::string, std::string> entry_text(int page, U32 index)
 {
@@ -1228,10 +1177,10 @@ bool show_slot_image(U64 self, U64 root, U32 i, const std::string& icon)
     set_class(img, "!cpp-none", !on);
     return on;
 }
+void keep_mode_dots(U64 self);
 
 // The game resets a slot's item image when focus moves (it holds no item for our slots): put the shown
 // chest images back. `force` also re-sets the texture (the reset may clear it without hiding the element).
-void keep_mode_dots(U64 self);
 
 void keep_slot_images(U64 self, bool force)
 {
@@ -1284,18 +1233,13 @@ std::string g_placeholder_class[kOutfitSlots]; // the Visibility view: an empty 
 // the slot's otherwise unused reserve element, below the focus) and the "Equipped" tag in the centre tooltip.
 int g_worn_outfit = -1;
 bool g_worn_changed = false; // the centre tooltip's tag follows on the next pump
-int find_worn_outfit(U64 self);
-// Outfits with a saved piece that is gone (no other copy to offer) are greyed out (om-missing, browser mod CSS).
-bool refresh_missing(U64 self);
-bool outfit_missing(size_t o);
 
-void show_mode_dots(U64 script, U32 count, U32 mode);
+// Outfits with a saved piece that is gone (no other copy to offer) are greyed out (om-missing, browser mod CSS).
+
 // The select shows the dots in pages of +0xf4 (the dots per page; only the lit dot's page is drawn). It stays at the
 // last view's count (closing the wheel keeps it too), so ours is written with the count: one page. (Closing the wheel
 // in the settings / Visibility also left the dots of the next opening's changes unshown: close_hook puts the slots back
 // to the outfits first.) Flag 1 skips the select's sound; 0 plays it, kept for a scroll, where the lit dot moves.
-U32 mode_count(U32 i);
-U32 mode_lit(U32 i);
 
 // Outfits tab: saved outfits, then one empty "+" slot (until all 12 are used); the rest hidden.
 bool g_slots_logged = false;
@@ -1308,8 +1252,7 @@ U32 g_applied_visible = 0; // visible slot count the classes were last set for
 // Levels add up over the worn pieces; 5 / 10 / 15 each cancel one of the cold / heat gauge's three bars, 15 also gives
 // immunity to Freeze / Burn. Item data never changes in a session: cached per key.
 using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
-extern ItemInfoFn g_item_info; // (item key -> item info; set by install)
-std::string item_name(U16 key); // "" if unknown
+
 U32 kPassiveFire = 0x74e, kPassiveIce = 0x74f; // (0x704 / 0x705 before 2026-10-30: Kuku armour Ice 10 = 0x74f, Ziggurat Lightning 1 = 0x750)
 // Base stats (cloaks...): a second list of the same {kind, level}: info +0x188 -> {rows*, n}, row (0x80 each) +0x58 entries, +0x60 count
 // (Plate Cloak of the Shadows: Fire Lv 7; Wolf Cloak: Ice Lv 5).
@@ -1367,8 +1310,6 @@ U16 key_of_pid(U32 pid)
     return f != keys.end() ? f->second : U16(0xFFFF);
 }
 
-
-
 // Where an item's info keeps its stat lists (the 20261104 patch moved both by 8: 0x118 -> 0x120, 0x188 -> 0x190):
 // found again at the first menu open from items whose values are known (calibrate_resist_ids).
 U64 kOffItemPassives = 0x118; // -> {entries*, count} (null when none: the game's helper +2603A00)
@@ -1385,6 +1326,8 @@ std::pair<U64, U32> stat_list(U64 info, U64 off, bool base)
     U64 p = rp(info + off);
     return {p ? rp(p) : 0, p ? r32(p + 8) : 0};
 }
+extern ItemInfoFn g_item_info;
+std::string item_name(U16 key);
 
 std::pair<int, int> item_resistance(U16 key)
 {
@@ -1478,10 +1421,9 @@ void calibrate_resist_ids()
 // Lv 2 as a passive). The copy is found by uid + key: worn, or in a bag (storage / wardrobe too). Re-read at each
 // wheel open (gears can be put in / taken out between). Companions' worn copies are not searched (a piece they wear
 // counts without its gears).
-U64 equipment_list();
-std::map<U64, std::pair<int, int>> g_gear_resist; // uid -> its gears' {ice, fire}
 
-U64 find_copy(U64 uid, U16 key); // (an item copy by uid + key: worn or in a bag; defined with the bag code)
+std::map<U64, std::pair<int, int>> g_gear_resist; // uid -> its gears' {ice, fire}
+U64 find_copy(U64 uid, U16 key);
 
 std::pair<int, int> gear_resistance(U64 uid, U16 key)
 {
@@ -1590,7 +1532,7 @@ size_t badge_index(const char* c)
 
 // Slot i of the Appearance view: a piece (its icon, its look's badge, dimmed when hidden or not in the inventory), the
 // page slot (the silhouette of the page chosen) or Back (the label "Back" and the click prompt, as in the settings).
-bool clear_label(U64 mark);
+
 // A setting's value under its name, in the game's gold caption style: a second text in the slot's label wrap
 // (OmValueText, added to the game's compiled slot by tools/uibin_tab.py; the name's text holds one colour only). The
 // wrap shows with the label. "" hides it; without the element (the patch not mounted) nothing is shown.
@@ -1656,6 +1598,7 @@ const char* key_icon(U32 vk, bool& wide)
     snprintf(buf, sizeof buf, "Common_Icon_Keyguide_PC_%s", n);
     return buf;
 }
+std::string where(U64 a);
 
 // The hotkey as key caps on the slot (OmHkCaps): false if the slot has none or a key has no icon (the text then).
 // where: 1 under a plain anchor, 2 under the eye marker.
@@ -1690,8 +1633,8 @@ bool show_caps(U64 self, U64 root, U32 vk, std::uint8_t mods, int where)
     set_class(box, "!cpp-none", false);
     return true;
 }
+bool show_value(U64 root, const std::string& text, int hotkey = 0, bool caps = false);
 
-bool show_value(U64 root, const std::string& text, int hotkey = 0, bool caps = false); // hotkey: 1 under a plain
                                                                                        // anchor, 2 under the eye
 bool show_value(U64 root, const std::string& text, int hotkey, bool caps)
 {
@@ -1704,6 +1647,10 @@ bool show_value(U64 root, const std::string& text, int hotkey, bool caps)
     set_class(t, "om-hotkey-eye", hotkey == 2);
     return set_class(t, "!cpp-none", text.empty());
 }
+bool clear_label(U64 mark);
+U32 mode_count(U32 i);
+U32 mode_lit(U32 i);
+void show_mode_dots(U64 script, U32 count, U32 mode);
 void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const std::vector<size_t>& pieces)
 {
     U32 k = i < visible ? slot_outfit(i) : kOutfitSlots;
@@ -1772,8 +1719,15 @@ bool clear_label(U64 mark)
     }
     return ok;
 }
-
 void apply_cfg_slot(U64 self, U64 script, U64 root, U32 i, U32 visible);
+U16 current_character();
+int find_worn_outfit(U64 self);
+std::string hotkey_name(U32 vk, std::uint8_t mods);
+void mark_worn(int index);
+bool outfit_missing(size_t o);
+const OutfitItem* outfit_piece(const Outfit& o, U16 slot);
+bool refresh_missing(U64 self);
+void update_plus_icon(U64 self);
 
 void apply_outfit_slots(U64 self, U32 only = kOutfitSlots)
 {
@@ -1928,10 +1882,11 @@ bool wr(U64 addr, T v)
         return false;
     }
 }
+U32 cfg_dots(U32 i, U32* lit);
 
 // Saved outfit: outfit / settings / conditions / appearance; the "+" slot: + / settings 1 / settings 2 (mode 2 there =
 // page 2). The Appearance view: the page slot's three pages, a piece's looks, Back none.
-U32 cfg_dots(U32 i, U32* lit);
+
 U32 mode_count(U32 i)
 {
     if (g_eye >= 0) {
@@ -1954,7 +1909,6 @@ U32 mode_lit(U32 i)
     return k < pieces.size() ? look_pos(eye_look(pieces[k])) : k == pieces.size() ? g_eye_pick : 0xFFFFFFFFu;
 }
 // The dot lit on slot i.
-U32 mode_lit(U32 i);
 
 // The slot's dots: `count` of them, `mode` lit (the game sizes them from the count field when one is lit).
 bool g_dots_logged = false;
@@ -1963,15 +1917,13 @@ bool g_dots_logged = false;
 // never go blank. Our own calls pass through it as well. Our slots are looked up live (the Outfits menu's slot list).
 using SelectorSelectHookFn = void(__fastcall*)(U64, U32, U64);
 SelectorSelectHookFn g_selector_select_orig = nullptr;
-extern std::atomic<bool> g_menu_open;
-extern DWORD g_ui_thread;
 
 // The gear slots' refresh (EquipSlotVt slot 164, 0xef5900: after every equipment change) rebuilds a slot's item list
 // from the inventory and shows its current item (0xef9b80); ours hold none, so it blanked them and the plugin drew them
 // again (they flickered). Everything our slots show is ours: their refresh is skipped; every other slot's runs.
 using SlotRefreshFn = void(__fastcall*)(U64);
 SlotRefreshFn g_slot_refresh_orig = nullptr;
-U64 g_outfits_root_of_slots();
+U32 outfit_slot_index(U64 self, U64 script);
 
 void __fastcall slot_refresh_hook(U64 script)
 {
@@ -1979,6 +1931,8 @@ void __fastcall slot_refresh_hook(U64 script)
     if (root && root == g_outfits_root_of_slots() && outfit_slot_index(root, script) < kOutfitSlots) return;
     g_slot_refresh_orig(script);
 }
+extern std::atomic<bool> g_menu_open;
+extern DWORD g_ui_thread;
 
 void __fastcall selector_select_hook(U64 sel, U32 index, U64 flag)
 {
@@ -2039,8 +1993,6 @@ void keep_mode_dots(U64 self)
 U64 g_ring_bg = 0;
 std::string g_ring_class;
 bool g_ring_logged = false;
-
-bool in_depth(U64 self);
 
 void sync_ring(U64 self)
 {
@@ -2184,16 +2136,12 @@ bool g_store_unreadable = false;
 const char* g_store_why = ""; // why (for the message in game)
 
 // Writes g_published + g_bound (g_store_mu held).
-extern bool g_stash; // (the settings, defined with the loading code)
-extern bool g_take_from_companions;
-extern bool g_messages;
-extern std::string g_language;
 
-extern bool g_uninstalled;
-
-extern std::vector<U16> g_placeholder_keys; // (the game's placeholder items, see is_placeholder)
 std::vector<U32> g_placeholder_ids;         // the file's, until the item table is there
-
+extern std::string g_language;
+extern std::vector<U16> g_placeholder_keys;
+extern bool g_uninstalled;
+const char* peek_key_id();
 
 bool write_store_file()
 {
@@ -2253,10 +2201,11 @@ bool write_store_file()
     if (!ok) LOG("writing the outfit file FAILED");
     return ok;
 }
+void abort_prompts(const char* why);
+void publish_looks(const Store& s);
 
 // Closes the rename prompt / missing-pieces question (nothing renamed or loaded). Their answers refer to an entry of
 // the current outfit list, so they must not outlive it (save loaded, character changed, menu closed).
-void abort_prompts(const char* why);
 
 // UI thread: takes over the active set a game load put in place.
 bool pull_active()
@@ -2310,6 +2259,7 @@ const char* check_store_text(const std::string& text)
     if (v != std::string::npos && std::atoi(text.c_str() + v + 9) > kStoreVersion) return "from a newer Outfit Manager";
     return nullptr;
 }
+void peek_key_load(const std::string& id);
 
 void load_outfits()
 {
@@ -2528,8 +2478,6 @@ std::wstring g_save_root;             // ...\save\<user id>\ (set once, before t
 std::atomic<bool> g_watching{false};
 thread_local bool t_in_file_hook = false; // our own file accesses are not the game's
 thread_local bool t_own_pad = false;      // our own pad reading (XInput, the PlayStation pad's reports): never filtered
-extern std::atomic<bool> g_peek_live;
-bool peek_pad_owned();                    // the open Outfit Arc came from the pad: its d-pad up / down are the arc's
 
 // The game's PlayStation pad handles (opened by path: \\?\hid#vid_054c&pid_....), with their report length.
 struct PadHandle {
@@ -2624,6 +2572,7 @@ using GetOverlappedResultExFn = BOOL(WINAPI*)(HANDLE, LPOVERLAPPED, LPDWORD, DWO
 ReadFileFn g_read_file_orig = nullptr;
 GetOverlappedResultFn g_ov_result_orig = nullptr;
 GetOverlappedResultExFn g_ov_result_ex_orig = nullptr;
+bool peek_pad_owned();
 
 BOOL WINAPI read_file_hook(HANDLE h, LPVOID buf, DWORD n, LPDWORD got, LPOVERLAPPED ov)
 {
@@ -3068,8 +3017,6 @@ bool item_valid(U64 item, U64 empty)
 
 // Equipment list = *(inv+0x90): {.., entry[] @+8, u32 count @+0x10}; entry = 0xd0 bytes, the item (200 bytes)
 // then its u16 equip slot @+0xc8 (0x20c5600 looks worn pieces up like this).
-U64 acquire_player(U64* ctx);
-void release_player(U64* ctx);
 
 U64 equipped_item(U64 list, U16 slot)
 {
@@ -3079,6 +3026,8 @@ U64 equipped_item(U64 list, U16 slot)
         if (*reinterpret_cast<U16*>(e + kOffEntrySlot) == slot) return e;
     return 0;
 }
+U64 acquire_player(U64* ctx);
+void release_player(U64* ctx);
 
 U64 equipment_list()
 {
@@ -3109,12 +3058,12 @@ U64 equipment_list()
 // saved, loaded or reported missing. The one worn is not in the bag, so a key seen there once stays known (kept in the
 // outfit file, for a launch with the fists on), and an item named like a known one counts too.
 constexpr U16 kBagHidden = 13;
-U64 call_inventory(U64 actor);
-std::string item_name(U16 key); // "" if unknown
+
 std::vector<U16> g_placeholder_keys;   // seen in the hidden bag (only ever added to)
 std::vector<std::string> g_placeholder_names;
 bool g_placeholders_new = false; // a key was added: refresh_missing saves the file (not here: callers may hold its lock)
 U64 g_placeholder_read = 0; // tick (re-read every few seconds: cheap, one bag)
+U64 call_inventory(U64 actor);
 
 void read_placeholder_keys()
 {
@@ -3265,6 +3214,7 @@ bool left_anchor(const Outfit& o, const WornRaw* w, int n)
     }
     return total > 0 && kept * 2 < total;
 }
+bool look_changing();
 
 // One state at a time: an outfit worn exactly / the anchor changed by hand (amber) / a new set (no anchor: only the "+"
 // slot's green, with the worn chest: what saving would keep). A new set stays one until an outfit is loaded or worn exactly.
@@ -4085,7 +4035,6 @@ void look_hold(bool on)
     else g_look_hold.erase(inv);
 }
 
-void look_refresh();
 // The player's outfit is still going on the model (from the requests until its last part swapped in).
 bool look_changing()
 {
@@ -4093,6 +4042,7 @@ bool look_changing()
     std::lock_guard<std::mutex> lock(g_appear_mu);
     return inv && g_look_hold.count(inv);
 }
+void look_refresh();
 
 // A load is over: a hold with no part left loading (none came, or all are in) lets go.
 void look_settled()
@@ -4262,7 +4212,6 @@ constexpr U16 kBagCarried = 1, kBagKeyItems = 4, kBagStorage = 7, kBagWardrobe =
 using CompanionEquipFn = U64(__fastcall*)(U64, U64, U64, U64, U64, U64);
 CompanionEquipFn g_companion_equip_orig = nullptr;
 int g_bag_override = -1; // the bag for our running call (UI thread only; -1: none)
-extern DWORD g_ui_thread;
 
 U64 __fastcall companion_equip_hook(U64 target, U64 err, U64 id, U64 bag, U64 pos, U64 slot)
 {
@@ -4562,7 +4511,7 @@ const OutfitItem* outfit_piece(const Outfit& o, U16 slot)
 
 // Runs one request; false if there is no character to run it for. Kliff (kind 1): the client-side functions (they
 // apply at once); companions: the game's UI requests. g_step_err: the last put-on's answer (0 = ok).
-std::string item_name(U16 key); // "" if unknown
+
 int g_step_err = 0;
 int g_steps_ok = 0; // requests that went through (counted per load)
 
@@ -4695,11 +4644,9 @@ struct AsyncLoad {
     bool active = false;
     std::vector<LeavingPiece> leaving;
 };
-void lost_check(U64 self, const std::string& outfit, const std::vector<LeavingPiece>& leaving); // (below)
+
 AsyncLoad g_async;
 struct Outfit;
-void stash_pieces(U64 self, const Outfit* loaded); // (when a load is done)
-void stash_verify(U64 self);
 
 // --- Where the pieces are -----------------------------------------------------------------------
 // A saved piece is somewhere while its uid is: worn by this character, in a bag (carried, storage, wardrobe, other) or
@@ -4838,7 +4785,6 @@ bool playing_main_character()
     return main;
 }
 
-
 // then searches 3 pointer hops out from the controlled actor and the player holder for those actors (pointers) or
 // their u32 ids (actor+0x60).
 
@@ -4846,7 +4792,7 @@ struct PieceCheck {
     std::vector<std::pair<size_t, U64>> copies; // outfit item index -> uid of the copy offered for it
     std::vector<size_t> gone;                   // item indices with no copy
 };
-
+bool have(std::initializer_list<U64> rvas);
 bool stash_pending(U64 uid);
 
 PieceCheck check_pieces(const Outfit& o, const std::vector<Owned>& owned)
@@ -4881,7 +4827,6 @@ U64 g_missing_checked = 0;          // tick
 // A gone piece whose item came back (picked up again, bought back: a copy with a uid above o.seen) is the outfit's
 // piece again, no question asked. Copies owned alongside the original (uid below) still go through the question.
 // Also moves o.seen up while the outfit is complete. True if the outfit changed.
-bool stash_pending(U64 uid); // (a piece the stash just moved: its own check follows it, not the guess below)
 
 bool adopt_returned(Outfit& o, const std::vector<Owned>& owned)
 {
@@ -4912,7 +4857,6 @@ bool adopt_returned(Outfit& o, const std::vector<Owned>& owned)
     }
     return changed;
 }
-
 
 bool refresh_missing(U64 self)
 {
@@ -4961,8 +4905,6 @@ const char* slot_name(U16 slot)
     return lang::t("slot.piece");
 }
 
-std::string item_name(U16 key); // "" if unknown
-
 // --- Item names: the game's item info table (as its own item-name text does) ---
 U64 kRvaItemInfo = 0x3dcfc0;        // (unused, u32 key) -> item info; unknown keys -> the default info
 U64 kRvaDefaultItemInfo = 0x7148c08; // pointer to that default info
@@ -5010,10 +4952,11 @@ std::string slot_list(const Outfit& o, const std::vector<U16>& slots)
     }
     return s;
 }
+void report(U64 self, const std::string& text);
 
 // leave: the outfit's piece can't be put on there (a worn piece that isn't the outfit's still comes off);
 // keep: untouched (a piece taken from another character is on its way there).
-void report(U64 self, const std::string& text); // (a message: unless messages are off)
+
 void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const std::vector<U16>& keep = {})
 {
     const Outfit& o = g_outfits[index];
@@ -5240,6 +5183,10 @@ U64 focused_script(U64 self)
         return 0;
     }
 }
+std::string cfg_description(std::uint8_t k);
+std::string cfg_title(std::uint8_t k);
+std::string cfg_value_text(std::uint8_t k, const char* v);
+std::vector<const char*> cfg_values(std::uint8_t k, U32& cur);
 
 // Shows the focused saved outfit's name in the centre, or what the "+" slot does.
 void center_for_focus(U64 self, U64 script, bool hide_otherwise)
@@ -5330,7 +5277,6 @@ void refresh_wheel(U64 self)
 }
 
 // --- Appearance view: entering, paging, leaving, and the presses in it -----------------------------
-void look_refresh();
 
 void eye_refresh(U64 self)
 {
@@ -5354,8 +5300,8 @@ void eye_enter(U64 self, U32 o)
     LOG("appearance view: \"%s\"", g_outfits[o].name.c_str());
     eye_refresh(self);
 }
-
 void cfg_enter(U64 self, U32 o);
+
 void eye_leave(U64 self)
 {
     LOG("appearance view: back to the settings");
@@ -5556,7 +5502,6 @@ int binding_change(U64 event, U64 binding, unsigned char* copy)
     }
 }
 
-
 void __fastcall binding_input_hook(U64 dispatcher, U64 event, U64 binding)
 {
     g_binding_input_orig(dispatcher, event, binding);
@@ -5696,7 +5641,7 @@ U64 __fastcall text_click_hook(U64 modal, U64 a, U64 elem, U64 flag)
 // Windows makes for the game window (WM_CHAR) are collected; once typing pauses for two frames, the ones the box didn't
 // take are put in at the caret (input +0xd8 / +0xdc: caret and selection end, in characters), which then moves past them
 // (+0xf1: the caret-moved flag the game's own keys set, so the caret is drawn there at once).
-bool game_focused();
+
 WNDPROC g_game_wndproc = nullptr;
 std::mutex g_typed_mu;
 std::wstring g_typed;       // characters since the batch began
@@ -5706,8 +5651,6 @@ int g_typed_quiet = 0;      // frames since the last character
 std::string g_name_text;    // the box text on the last frame
 U32 g_name_caret = 0;       // its caret
 
-extern std::atomic<bool> g_peek_live;
-extern std::atomic<int> g_peek_wheel;
 // The wheel hook is in (the arc open): it alone counts the notches. The window and raw input routes then only keep
 // the wheel from the game (2026-11-06: all three counted, 6 steps per notch, and with 3 outfits the arc went round
 // twice and seemed not to move).
@@ -5729,6 +5672,8 @@ bool hotkey_held_now(U32 vk)
     }
     return bare;
 }
+extern std::atomic<bool> g_peek_live;
+extern std::atomic<int> g_peek_wheel;
 
 LRESULT CALLBACK name_wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
 {
@@ -5757,6 +5702,7 @@ LRESULT CALLBACK name_wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
     }
     return CallWindowProcW(g_game_wndproc, w, m, wp, lp);
 }
+bool game_focused();
 
 // Once, when our prompt first opens (the game window is in front then); stays in place, idle while no prompt is open.
 void watch_game_chars()
@@ -6043,17 +5989,12 @@ void finish_load(U64 self, AskedLoad& p)
     refresh_wheel(self);
 }
 
-void ask_next(U64 self, AskedLoad p);
 enum Confirm { kConfirmNone, kConfirmOverwrite, kConfirmDelete, kConfirmSwap, kConfirmCleanSave, kConfirmUninstall };
 
 // --- Settings view: an outfit's settings (or the plugin's, from the "+" slot) on the wheel ---------------------------
 // The second scroll mode of a slot opens it (no submenu). Its segments: a setting's name and value (its dots are the
 // choices: scroll to change) or an action (the click prompt), then Back (left of the top). The centre names the
 // highlighted setting, its value and what it does.
-void open_rename_prompt(U64 self, size_t index);
-void open_confirm(U64 self, U32 index, int what, U32 other);
-void overwrite_pressed(U64 self, U32 index, bool reset);
-void open_clean_confirm(U64 self, int what);
 
 bool g_overwrite_reset = false; // the settings view's Overwrite: false keeps the outfit's settings, true resets them
 
@@ -6366,6 +6307,9 @@ void cfg_scroll(U64 self, U32 i, int step)
     apply_outfit_slots(self, i);
     center_for_focus(self, focused_script(self), true);
 }
+void open_clean_confirm(U64 self, int what);
+void open_confirm(U64 self, U32 index, int what, U32 other = 0);
+void overwrite_pressed(U64 self, U32 index, bool reset);
 
 // A click on an action: Visibility opens the outfit's pieces; the others the existing prompts (Delete and the "+" slot's
 // clean-ups leave the view first: their answer changes the list).
@@ -6463,10 +6407,11 @@ void apply_cfg_slot(U64 self, U64 script, U64 root, U32 i, U32 visible)
         ok &= swap_class(focus, g_focus_class[i], i < visible ? numbered("om-f%u-%u", visible, i) : "");
     if (!ok) LOG("  settings slot %u: class change skipped (%s)", i, describe(root).c_str());
 }
-void clean_outfits(U64 self);
-void uninstall(U64 self);
-void confirmed(U64 self, U32 index, int what, U32 other);
+
 bool g_ask_next = false; // the next question of g_pending opens on the next pump (not inside a modal's click)
+void clean_outfits(U64 self);
+void confirmed(U64 self, U32 index, int what, U32 other);
+void uninstall(U64 self);
 
 void finish_ask(int answer, const char* why)
 {
@@ -6656,7 +6601,6 @@ void start_loading(U64 self, U32 index)
 }
 
 // pump: the next question of a load, and the asynchronous parts of the last one.
-void open_clean_confirm(U64 self, int what);
 
 // The next question of a load (opened a moment after the last one closed).
 void pump_ask(U64 self)
@@ -6668,6 +6612,8 @@ void pump_ask(U64 self)
         if (p.index < g_outfits.size() && g_outfits[p.index].name == p.name) ask_next(self, std::move(p));
     }
 }
+void lost_check(U64 self, const std::string& outfit, const std::vector<LeavingPiece>& leaving);
+void stash_pieces(U64 self, const Outfit* loaded);
 
 void pump_async(U64 self)
 {
@@ -7155,7 +7101,7 @@ void open_clean_confirm(U64 self, int what)
 
 // Overwrite / Delete / Swap ask first, in the game's yes / no dialog (the loading questions' machinery: finish_ask
 // answers). other: kConfirmSwap's second outfit; kConfirmOverwrite: 1 resets the outfit's settings, 0 keeps them.
-void open_confirm(U64 self, U32 index, int what, U32 other = 0)
+void open_confirm(U64 self, U32 index, int what, U32 other)
 {
     if (g_ask_modal || g_ask_next || index >= g_outfits.size()) return;
     if (what == kConfirmSwap && other >= g_outfits.size()) return;
@@ -7373,7 +7319,6 @@ void pad_prompts(U64 self)
         wr<float>(style, x), wr<float>(style + 8, y); // (the game lays it out from these on its next pass)
 }
 
-
 // Runs on the UI thread from the menu's frequent callbacks.
 // The Outfit Arc setting waiting for a key: the next key or mouse button newly down (left / right excepted).
 void peek_capture_frame(U64 self)
@@ -7548,8 +7493,6 @@ U64 __fastcall cursor_select_hook(U64 self, U64 cursor, U64 flag, U64 idx, U64 a
 using FrameFn = float(__fastcall*)(U64);
 FrameFn g_hud_frame_orig = nullptr;
 
-
-
 // Using a backpack (the Insect Gatherer's opens and collects): no layer call or drawn part tells, the object docked on the
 // bag runs it, so its own state is read (ConditionData_DockingGimmickState's path). Every bag with an object has this tag.
 // A state is the hash of its name (lowercase; hashlittle, seed 0xC5EDE). Anything but a resting state is the bag in use:
@@ -7667,14 +7610,14 @@ U64 __fastcall focus_hook(U64 self, U64 script, U64 a, U64 b, U64 c, U64 d)
     }
     return r;
 }
-
+void scroll_slot(U64 self, U64 slot, U32 i, int step);
 
 // Logs class changes on the menu's root element, SetState on the menu script, and any show/hide-like class change
 // anywhere while the menu is open (capped per open).
 
 // A scroll on a slot: on ours (Outfits tab, outside a submenu) the slot's mode moves on; the rest is the game's.
 // The slot script's root is at +0x28 (the game's scroll handlers read it there).
-void scroll_slot(U64 self, U64 slot, U32 i, int step);
+
 bool scroll_mode(U64 slot, int step)
 {
     if (!g_menu_open || g_busy || GetCurrentThreadId() != g_ui_thread) return false;
@@ -7744,11 +7687,6 @@ U64 __fastcall gear_mode_hook(U64 self, U64 a, U64 b, U64 c)
 // --- Diagnostics hooks --------------------------------------------------------------------------
 bool g_dumped_qsi = false;
 
-void features_toast(U64 self);
-
-
-extern std::map<U64, std::pair<int, int>> g_gear_resist;
-
 // The saved keys against the permanent ids: a piece whose key no longer names its item goes to the key that does (keys are
 // renumbered by patches). A saved piece with no id yet gets one only when that exact uid + key is in the inventory, so an
 // entry saved before a renumbering can't record a wrong id. The file is copied to OutfitManager_backups before a repair.
@@ -7805,7 +7743,6 @@ void repair_keys()
 // A patch can move a field no pattern can see. So at the first menu open each one is read on the real thing, read-only:
 // what doesn't look right turns its feature off (with the usual toast) instead of working on the wrong memory. A check
 // that can't be made yet (no player, nothing worn) stays open for the next menu open.
-void feature_off(const char* name);
 
 bool readable_name(const std::string& n)
 {
@@ -7825,6 +7762,7 @@ void ensure_resist_ids()
     static bool done = false;
     if (!done && g_item_info && item_rows()) done = true, calibrate_resist_ids();
 }
+void feature_off(const char* name);
 
 void self_test(U64 self)
 {
@@ -7893,7 +7831,7 @@ void self_test(U64 self)
 // Before the outfits are shown or loaded (the wheel opening, the quick peek opening): a save just loaded is taken over,
 // the character's own outfits are the ones in use, and their keys are checked against the permanent ids (a save
 // written before a game patch brings back the old keys: a load before this repair fetched the wrong items, 2026-11-05).
-void ensure_resist_ids(); // (below, with the self-test)
+
 void prepare_outfits()
 {
     ensure_resist_ids();
@@ -7902,6 +7840,7 @@ void prepare_outfits()
     if (U16 ch = current_character(); ch != kNoCharacter) switch_character(ch);
     repair_keys();
 }
+void features_toast(U64 self);
 
 U64 __fastcall open_hook(U64 self, U64 a, U64 b, U64 c)
 {
@@ -8156,9 +8095,6 @@ void install_ask_dialog()
     g_open_common_modal = reinterpret_cast<OpenCommonModalFn>(g_base + kRvaOpenCommonModal); // last: enables it
     LOG("missing-pieces question ready (CommonModal slot %d hooked)", kSlotCommonModalClick);
 }
-
-
-
 
 bool install()
 {
@@ -8730,13 +8666,12 @@ struct Peek {
     std::string icon_set[5];         // last icon set per position
 } g_peek;
 bool g_peek_down = false;             // the arc key on the last frame
-extern std::atomic<U32> g_wheel_notches;
-void wheel_hook(bool on);             // (the arc's wheel hook: below)
+
 bool g_peek_by_pad = false;           // the open arc came from the pad (L1 / LB held: it closes when that lets go)
 std::atomic<bool> g_peek_pad_open{false}; // (the same, for the pad filters on other threads)
 bool peek_pad_owned() { return g_peek_live && g_peek_pad_open; }
 U8 g_peek_pad_last = 0;               // the pad's buttons on the last frame (for presses)
-U8 pad_buttons_raw();                 // (XInput and PlayStation pads, below)
+
 std::atomic<bool> g_peek_live{false};  // the arc is open (read by the input filters: the wheel is the arc's)
 std::atomic<U64> g_peek_hud_at{0};     // the status screen's last frame with the arc ready (tick): the key is the arc's
 std::atomic<int> g_peek_wheel{0};      // wheel movement kept from the game while the arc is open (WHEEL_DELTA units)
@@ -8894,6 +8829,7 @@ void peek_open(U64 self)
     LOG("Outfit Arc: open (character %d, %zu outfit(s), worn %d, %zu entries)", int(g_character), g_outfits.size(), p.worn,
         p.entries.size());
 }
+extern std::atomic<U32> g_wheel_notches;
 
 void peek_close(bool choose)
 {
@@ -8957,9 +8893,10 @@ void peek_hotkeys(U64 self, bool free)
         break; // (one load per frame)
     }
 }
+void wheel_hook(bool on);
 
 // The arc opened or closed: the input filters follow (g_peek_live), the wheel hook goes on / off.
-void peek_hotkeys(U64 self, bool free);
+
 void peek_sync_live(bool open)
 {
     if (open == g_peek_live.load()) return;
