@@ -507,6 +507,12 @@ const OutfitItem* outfit_piece(const Outfit& o, U16 slot)
         if (it.slot == slot) return &it;
     return nullptr;
 }
+// DIAG (A/B load modes, 2026-11-06: Kliff's body flashes black while many pieces stream in at once). Ctrl+Alt+F9 in
+// game cycles: 0 swap (the game replaces each piece), 1 take off first (test 1 / 2), 2 one at a time (swap; the next
+// put-on waits for the last one's model rebuild, or 400 ms).
+int g_load_mode = 1;
+U64 g_stagger_at = 0;
+U32 g_stagger_swaps = 0;
 
 Where bag_where(U16 bag)
 {

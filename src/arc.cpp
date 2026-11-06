@@ -433,6 +433,17 @@ void peek_frame(U64 self)
         if (last && now - last > 1000) LOG("DIAG Outfit Arc: status screen frames resumed after %llu ms", now - last);
     }
     g_peek_hud_at = GetTickCount64();
+    { // DIAG (A/B load modes): Ctrl+Alt+F9 cycles how loads put pieces on
+        static bool was = false;
+        bool down_now = game_focused() && (GetAsyncKeyState(VK_F9) & 0x8000) && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
+                        (GetAsyncKeyState(VK_MENU) & 0x8000);
+        if (down_now && !was) {
+            g_load_mode = (g_load_mode + 1) % 3;
+            LOG("DIAG load mode now: %s", kLoadModeNames[g_load_mode]);
+            notify(self, std::string("Load mode (test): ") + kLoadModeNames[g_load_mode]);
+        }
+        was = down_now;
+    }
     // The key (the "+" page's Quick Peek): held = open, released = the highlighted outfit goes on. Not while the gear
     // wheel, a question or the naming prompt is open.
     if (g_peek_capture && !g_menu_open) g_peek_capture = false; // (the wheel closed while the setting waited)

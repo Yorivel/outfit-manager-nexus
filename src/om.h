@@ -304,7 +304,10 @@ struct DeferredEquip {
     std::string what; // "Helmet (Wooden Mask...)"
     std::string from; // whose it was
     bool held = false; // refused while another piece held its slot: put on once the game lets go of the slot
+    bool staggered = false; // DIAG (A/B load modes): put on once the last piece's model parts are built
 };
+const char* const kLoadModeNames[] = {"swap (the game replaces each piece)", "take off first, then put on",
+                                      "one piece at a time (swap)"};
 // A worn piece a load takes off or replaces: after the load it must still be worn or in a bag (lost_check).
 struct LeavingPiece {
     U64 uid;

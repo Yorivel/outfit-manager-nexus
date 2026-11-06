@@ -455,7 +455,7 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
         // old piece back to a bag position it remembers, and a piece remembering a position that doesn't exist was
         // lost on the way (2026-11-06, a player's log: every lost piece had been put on from one bag position and was
         // swapped out; pieces taken off never got lost). Slots the game won't leave empty keep the swap.
-        bool swap_off = worn && t && !keep_slots.count(w[i].slot);
+        bool swap_off = g_load_mode == 1 && worn && t && !keep_slots.count(w[i].slot); // DIAG (A/B): mode 1 only
         if (worn && (needed || swap_off || (!t && !keep_slots.count(w[i].slot))))
             off.push_back({false, w[i].slot, w[i].key, w[i].uid, swap_off && !needed});
         if (t) on.push_back({true, t->slot, t->key, t->uid});
@@ -468,6 +468,8 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
         return;
     }
     LOG("load \"%s\": %zu to take off, %zu to put on", o.name.c_str(), off.size(), on.size());
+    LOG("DIAG load mode: %s", kLoadModeNames[g_load_mode]); // DIAG (A/B)
+    bool stagger_started = false; // DIAG (A/B): mode 2, the first put-on ran
     off.insert(off.end(), on.begin(), on.end());
     std::vector<DeferredEquip> held;
     g_steps_ok = 0;
@@ -477,7 +479,13 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
             LOG("  step %zu: put on equipment-%u skipped: its take-off was refused", i + 1, off[i].slot);
             continue;
         }
+        if (g_load_mode == 2 && off[i].equip && stagger_started) { // DIAG (A/B): the rest one at a time
+            held.push_back({off[i].uid, off[i].slot, off[i].key, slot_list(o, {off[i].slot}), "", false, true});
+            continue;
+        }
         if (!run_step(off[i], i + 1)) break;
+        if (g_load_mode == 2 && off[i].equip) // DIAG (A/B)
+            stagger_started = true, g_stagger_at = GetTickCount64(), g_stagger_swaps = g_model_swaps.load();
         if (!off[i].equip && g_step_err && off[i].swap)
             LOG("  (equipment-%u: the outfit's piece swaps it instead)", off[i].slot);
         else if (!off[i].equip && g_step_err)
@@ -664,8 +672,32 @@ void pump_async(U64 self)
     }
     bool late = now - g_async.started > kAsyncMs;
     bool acted = false; // a late put-on ran this frame: checked once the game applied it (a later frame)
+    bool stagger_busy = false; // DIAG (A/B): one staggered put-on per frame, in order
     for (size_t i = 0; i < g_async.equips.size();) {
         DeferredEquip& d = g_async.equips[i];
+        if (d.staggered) { // DIAG (A/B): the next piece once the last one's model parts are built (or 400 ms)
+            bool ready = !stagger_busy;
+            if (ready) {
+                U64 sctx[4] = {};
+                U64 actor = acquire_player(sctx);
+                U64 model = actor ? look_model(actor) : 0;
+                bool loading = model && model_loading(model);
+                if (sctx[0]) release_player(sctx);
+                ready = (g_model_swaps.load() != g_stagger_swaps && !loading) || now - g_stagger_at > 400;
+            }
+            stagger_busy = true;
+            if (!ready) {
+                ++i;
+                continue;
+            }
+            LOG("DIAG load \"%s\": next piece after %llu ms", g_async.outfit.c_str(), now - g_stagger_at);
+            run_step({true, d.slot, d.key, d.uid}, 0);
+            g_stagger_at = now, g_stagger_swaps = g_model_swaps.load();
+            acted = true;
+            g_async.started = now;
+            g_async.equips.erase(g_async.equips.begin() + i);
+            continue;
+        }
         if (d.held) { // (the slot's holder is the game's state, read every frame: on as soon as it is free)
             if (slot_claim(d.slot) && !late) {
                 ++i;
