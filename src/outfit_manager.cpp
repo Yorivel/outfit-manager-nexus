@@ -8781,6 +8781,9 @@ struct Peek {
     U64 badge[5] = {}, nb[2] = {};   // each slot's climate badge; the highlighted outfit's badges by its label
     std::string badge_set[5], nb_set[2];
     U64 trk = 0, hp_gauge = 0;       // the HP tracker (the peek's home) and its own gauge (hidden while shown)
+    U64 mount_trk = 0;               // the mount's stamina tracker (on a mount: the height the arc takes)
+    bool mount_shown = false;        // ... shown by the plugin (hidden again when the arc closes / Kliff dismounts)
+    float ride_top = 0;              // the arc's wrap moved down by this (layout px) on a mount
     std::string icon_set[5];         // last icon set per position
     bool slide_b = false;            // the scroll's slide: which class set (a / b) the last step used
     std::string slide_set[20];       // its class on each element (frames, icons, badges, then the texts)
@@ -9079,6 +9082,69 @@ void peek_sync_live(bool open)
     wheel_hook(open);
 }
 
+// On a mount the HP tracker (60% up the tracked box: rider and mount together) sits at the rider's head, and the arc
+// with it (2026-11-07). The mount's own stamina tracker sits at 75% of the mount's box - its back, where the rider's
+// hips are, for every mount. So on a mount the arc's wrap is moved down to that tracker's height (its x stays the
+// rider's). The tracker only moves while shown: the plugin shows it with the arc (its spiral stays as the game keeps it,
+// hidden until the mount's stamina changes).
+// Riding: the actor's +0x1270 and its component's +0x358 hold the ridden actor's id (-1 on foot; build 26480954, found
+// by diffing the player on foot / mounted). Both must agree and look like an id, else "not riding": a patch that moves
+// them leaves the arc where it always was.
+constexpr U64 kOffActorMount = 0x1270, kOffCompMount = 0x358;
+
+U32 riding_mount()
+{
+    U64 ctx[4] = {};
+    U64 actor = acquire_player(ctx);
+    U64 a = ~0ull, b = ~0ull;
+    if (actor) {
+        rd(actor + kOffActorMount, a);
+        if (U64 comp = rp(actor + kOffActorComp)) rd(comp + kOffCompMount, b);
+    }
+    if (ctx[0]) release_player(ctx);
+    if (a != b || a == ~0ull || a > 0xFFFFFFFFull || a < 0x10000000ull) return 0;
+    return static_cast<U32>(a);
+}
+
+void peek_ride_place()
+{
+    Peek& p = g_peek;
+    if (!p.mount_trk || !is_element(p.mount_trk)) p.mount_trk = find_by_class(g_peek_root, "cpp-horse-sp-actor-tracker", 4);
+    bool active = (p.open || p.closing_at) && p.mount_trk && p.trk;
+    U32 mount = active ? riding_mount() : 0;
+    float top = 0;
+    if (mount) {
+        if (!p.mount_shown && has_class(p.mount_trk, "!cpp-none")) set_class(p.mount_trk, "!cpp-none", false), p.mount_shown = true;
+        float my = 0, ty = 0;
+        RECT cr{};
+        HWND w = GetForegroundWindow();
+        float k = g_prompt_scale > 0 ? g_prompt_scale
+                                     : (w && GetClientRect(w, &cr) && cr.bottom > 0 ? 1080.0f / float(cr.bottom) : 0.0f);
+        // (the mount's tracker below the HP tracker by a sane amount: its first frame shown can be stale)
+        if (k > 0 && rd(p.mount_trk + 0x74, my) && rd(p.trk + 0x74, ty) && my > ty && my - ty < 1000.0f)
+            top = (my - ty) * k;
+        { // DIAG (horse arc, 2026-11-07): the heights and where the arc ends up, once a second while riding
+            static U64 at = 0;
+            U64 now = GetTickCount64();
+            if (now - at > 1000) {
+                at = now;
+                float al = 0, at_ = 0, ar = 0, ab = 0;
+                if (p.arc) rd(p.arc + kOffElemRect, al), rd(p.arc + kOffElemRect + 4, at_), rd(p.arc + kOffElemRect + 8, ar),
+                    rd(p.arc + kOffElemRect + 0xc, ab);
+                LOG("DIAG ride: mount %08X, HP tracker y %.0f, mount tracker y %.0f, k %.3f -> top %.1f; arc box %.0f,%.0f - %.0f,%.0f",
+                    mount, ty, my, k, top, al, at_, ar, ab);
+            }
+        }
+    } else if (p.mount_shown && p.mount_trk) {
+        set_class(p.mount_trk, "!cpp-none", true); // (hidden again, as the game keeps it)
+        p.mount_shown = false;
+    }
+    U64 gh = p.wrap ? rp(p.wrap + 0x20) : 0, style = gh ? rp(gh + 0x20) : 0;
+    float cur = 0;
+    if (style && rd(style + 8, cur) && std::fabs(cur - top) > 0.5f) wr<float>(style + 8, top); // (laid out on its next pass)
+    p.ride_top = top;
+}
+
 void peek_frame(U64 self)
 {
     U64 root = rp(self + 8);
@@ -9174,6 +9240,7 @@ void peek_frame(U64 self)
         p.closing_at = 0;
         set_class(p.trk, "!cpp-none", true); // (the HP tracker hidden again, as the game keeps it)
     }
+    peek_ride_place(); // (on a mount: the arc at the mount's back; else back where it was)
 }
 
 float __fastcall gauge_frame_hook(U64 self)
