@@ -8982,6 +8982,10 @@ void peek_frame(U64 self)
     }
     if (g_peek_root == ~0ull || !peek_elements()) return;
     Peek& p = g_peek;
+    { // DIAG (pad arc, 2026-11-06): the status screen's frames stopping and resuming (a faded HUD?)
+        U64 now = GetTickCount64(), last = g_peek_hud_at.load();
+        if (last && now - last > 1000) LOG("DIAG Outfit Arc: status screen frames resumed after %llu ms", now - last);
+    }
     g_peek_hud_at = GetTickCount64();
     // The key (the "+" page's Quick Peek): held = open, released = the highlighted outfit goes on. Not while the gear
     // wheel, a question or the naming prompt is open.
@@ -8994,6 +8998,10 @@ void peek_frame(U64 self)
     // left raises the lantern, up calls the horse, right the items); up / down then move, letting go of L1 wears it.
     U8 pad = g_peek_pad && game_focused() ? pad_buttons_raw() : 0, pressed = pad & ~g_peek_pad_last;
     g_peek_pad_last = pad;
+    if ((pressed & kPadL1) || ((pad & kPadL1) && (pressed & kPadDown))) // DIAG (pad arc): every LB / LB + down press
+        LOG("DIAG Outfit Arc: pad %02X pressed %02X (arc %s; menu %d, question %d, naming %d; focused %d)", pad, pressed,
+            p.open ? "open" : "closed", int(g_menu_open.load()), g_ask_modal ? 1 : 0, g_name_modal ? 1 : 0,
+            int(game_focused()));
     if (down && !g_peek_down && !p.open && free) {
         g_peek_wheel = 0;
         g_peek_by_pad = false;
