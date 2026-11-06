@@ -9112,34 +9112,56 @@ void peek_ride_place()
 {
     Peek& p = g_peek;
     if (!p.mount_trk || !is_element(p.mount_trk)) p.mount_trk = find_by_class(g_peek_root, "cpp-horse-sp-actor-tracker", 4);
-    bool active = (p.open || p.closing_at) && p.mount_trk && p.trk;
+    bool shown = (p.open || p.closing_at) && p.trk;
+    bool active = shown && p.mount_trk;
     U32 mount = active ? riding_mount() : 0;
-    float top = 0;
-    if (mount) {
-        if (!p.mount_shown && has_class(p.mount_trk, "!cpp-none")) set_class(p.mount_trk, "!cpp-none", false), p.mount_shown = true;
-        float my = 0, ty = 0;
-        RECT cr{};
-        HWND w = GetForegroundWindow();
-        float k = g_prompt_scale > 0 ? g_prompt_scale
-                                     : (w && GetClientRect(w, &cr) && cr.bottom > 0 ? 1080.0f / float(cr.bottom) : 0.0f);
-        // (the mount's tracker below the HP tracker by a sane amount: its first frame shown can be stale)
-        if (k > 0 && rd(p.mount_trk + 0x74, my) && rd(p.trk + 0x74, ty) && my > ty && my - ty < 1000.0f)
-            top = (my - ty) * k;
-        { // DIAG (horse arc, 2026-11-07): the heights and where the arc ends up, once a second while riding
-            static U64 at = 0;
-            U64 now = GetTickCount64();
-            if (now - at > 1000) {
-                at = now;
-                float al = 0, at_ = 0, ar = 0, ab = 0;
-                if (p.arc) rd(p.arc + kOffElemRect, al), rd(p.arc + kOffElemRect + 4, at_), rd(p.arc + kOffElemRect + 8, ar),
-                    rd(p.arc + kOffElemRect + 0xc, ab);
-                LOG("DIAG ride: mount %08X, HP tracker y %.0f, mount tracker y %.0f, k %.3f -> top %.1f; arc box %.0f,%.0f - %.0f,%.0f",
-                    mount, ty, my, k, top, al, at_, ar, ab);
-            }
-        }
-    } else if (p.mount_shown && p.mount_trk) {
+    U64 now = GetTickCount64();
+    // A dismount: the riding flag drops as it starts, while the HP tracker stays up at the rider's head until the rider is
+    // off (2026-11-07: the arc snapped up there). So for up to 2.5 s after riding the arc keeps the mount's height while
+    // the HP tracker is still above it.
+    static U64 rode_at = 0;
+    if (mount) rode_at = now;
+    bool follow = active && (mount || (rode_at && now - rode_at < 2500));
+    if (follow && !p.mount_shown && has_class(p.mount_trk, "!cpp-none")) set_class(p.mount_trk, "!cpp-none", false), p.mount_shown = true;
+    if (!follow && p.mount_shown && p.mount_trk) {
         set_class(p.mount_trk, "!cpp-none", true); // (hidden again, as the game keeps it)
         p.mount_shown = false;
+    }
+    float ty = 0, my = 0, top = 0;
+    RECT cr{};
+    HWND w = GetForegroundWindow();
+    float k = g_prompt_scale > 0 ? g_prompt_scale
+                                 : (w && GetClientRect(w, &cr) && cr.bottom > 0 ? 1080.0f / float(cr.bottom) : 0.0f);
+    bool have_hp = shown && rd(p.trk + 0x74, ty) && ty > 0;
+    // (the mount's tracker below the HP tracker by a sane amount: its first frame shown can be stale)
+    bool use_mount = follow && have_hp && rd(p.mount_trk + 0x74, my) && my > ty + 20.0f && my - ty < 1000.0f;
+    // Aimed in screen space and eased (about 0.1 s): mounting / dismounting glide, and a jump of the HP tracker itself
+    // doesn't jerk the arc. Opening: straight at the height; closed: reset at once.
+    static float eased = 0;
+    static U64 last_at = 0;
+    static bool was_shown = false;
+    if (have_hp && k > 0) {
+        float target = use_mount ? my : ty;
+        if (was_shown && last_at) {
+            float dt = std::min(0.1f, float(now - last_at) / 1000.0f);
+            eased += (target - eased) * (1.0f - std::exp(-dt / 0.035f));
+        } else {
+            eased = target;
+        }
+        top = (eased - ty) * k;
+        if (std::fabs(top) < 0.25f) top = 0;
+    }
+    was_shown = shown && have_hp, last_at = now;
+    if (mount || use_mount) { // DIAG (horse arc, 2026-11-07): the heights and where the arc ends up, once a second
+        static U64 at = 0;
+        if (now - at > 1000) {
+            at = now;
+            float al = 0, at_ = 0, ar = 0, ab = 0;
+            if (p.arc) rd(p.arc + kOffElemRect, al), rd(p.arc + kOffElemRect + 4, at_), rd(p.arc + kOffElemRect + 8, ar),
+                rd(p.arc + kOffElemRect + 0xc, ab);
+            LOG("DIAG ride: mount %08X, HP tracker y %.0f, mount tracker y %.0f, k %.3f -> top %.1f; arc box %.0f,%.0f - %.0f,%.0f",
+                mount, ty, my, k, top, al, at_, ar, ab);
+        }
     }
     U64 gh = p.wrap ? rp(p.wrap + 0x20) : 0, style = gh ? rp(gh + 0x20) : 0;
     float cur = 0;
