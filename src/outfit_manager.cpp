@@ -3367,6 +3367,11 @@ bool same_pieces(const Outfit& a, const Outfit& b)
     return pieces(a, false) == pieces(b, false) || (weapons && pieces(a, false) == pieces(b, true));
 }
 
+// Saving (+, Overwrite): is the worn gear (b) already saved as a? Also agreeing on the weapons: an outfit that leaves
+// them (Weapons: Leave, or saved before weapons) is not the same as one that loads them (2026-11-06, a player: with
+// only the weapon changed, + found the armour "already saved" and nothing was saved; the weapon never loaded).
+bool same_saved(const Outfit& a, const Outfit& b) { return uses_weapons(a) == uses_weapons(b) && same_pieces(a, b); }
+
 // The saved outfit whose pieces are the worn ones, or -1.
 int find_worn_outfit(U64 self)
 {
@@ -4161,6 +4166,7 @@ struct LoadStep {
     U16 slot; // equip slot
     U16 key;
     U64 uid;
+    bool swap = false; // (a take-off ahead of the outfit's piece: refused, the put-on still swaps it)
 };
 constexpr int kFault = INT32_MIN;
 
@@ -4463,6 +4469,68 @@ void log_bags(U64 mgr)
     }
 }
 
+// DIAG (lost pieces, 2026-11-06): everywhere a piece copy is, read raw: every equipment-list entry (taken-off ones too)
+// and every bag position, ignoring the count and key checks the normal scans make. For the log only.
+void diag_where(U64 mgr, const char* when, U64 uid, U16 key)
+{
+    std::string out;
+    char b[160];
+    if (U64 list = equipment_list()) {
+        U64 e = rp(list + 8);
+        U32 n = r32(list + 0x10);
+        for (U32 i = 0; e && i < n && i < 64; ++i) {
+            U64 it = e + i * 0xd0ull, id = 0;
+            if (!rd(it, id) || id != uid) continue;
+            U16 k = 0xFFFF, sl = 0xFFFF, x = 0;
+            long long cnt = 0;
+            rd(it + 8, k), rd(it + 0x10, cnt), rd(it + kOffEntrySlot, sl), rd(it + kOffEntrySlot + 2, x);
+            std::snprintf(b, sizeof b, " equipment list [%u]: key %u count %lld slot %u (+CA %u);", i, k, cnt, sl, x);
+            out += b;
+        }
+    }
+    U64 bags = mgr ? rp(mgr + kOffMgrBags) : 0;
+    U32 nb = mgr ? r32(mgr + 0x20) : 0;
+    for (U32 i = 0; bags && i < nb && i < 64; ++i) {
+        U64 bag = rp(bags + i * 8ull);
+        U64 items = bag ? rp(bag) : 0;
+        short cap = 0;
+        U16 bid = 0xFFFF;
+        if (bag) rd(bag + kOffBagCount, cap), rd(bag + 0x10, bid);
+        for (short q = 0; items && q < cap && q < 4096; ++q) {
+            U64 it = items + q * 200ull, id = 0;
+            if (!rd(it, id) || id != uid) continue;
+            U16 k = 0xFFFF;
+            long long cnt = 0;
+            rd(it + 8, k), rd(it + 0x10, cnt);
+            std::snprintf(b, sizeof b, " bag %u (id %u) pos %d: key %u count %lld;", i, bid, q, k, cnt);
+            out += b;
+        }
+    }
+    LOG("  DIAG %s: key %u \"%s\" uid %llX is at:%s", when, key, item_name(key).c_str(), uid,
+        out.empty() ? " nowhere" : out.c_str());
+}
+
+// DIAG (lost pieces): who is in a bag position now (bag index into the inventory's list, as find_in_bags reports it).
+std::string diag_pos(U64 mgr, U16 bag_id, short pos)
+{
+    U64 bags = mgr ? rp(mgr + kOffMgrBags) : 0;
+    U32 nb = mgr ? r32(mgr + 0x20) : 0;
+    for (U32 i = 0; bags && i < nb && i < 64; ++i) {
+        U64 bag = rp(bags + i * 8ull);
+        U16 bid = 0xFFFF;
+        short cap = 0;
+        if (!bag || !rd(bag + 0x10, bid) || bid != bag_id || !rd(bag + kOffBagCount, cap) || pos >= cap) continue;
+        U64 it = rp(bag) + pos * 200ull, id = 0;
+        U16 k = 0xFFFF;
+        long long cnt = 0;
+        rd(it, id), rd(it + 8, k), rd(it + 0x10, cnt);
+        char b[128];
+        std::snprintf(b, sizeof b, "key %u \"%s\" uid %llX count %lld", k, k != 0xFFFF ? item_name(k).c_str() : "", id, cnt);
+        return b;
+    }
+    return "unreadable";
+}
+
 // The equipment list's per-slot occupancy, as the equip check reads it (0x20ce9a0): +0x18 bucket count, +0x1c
 // entries, +0x28 buckets (0x100 bytes each: u32 n, then n x {u32 slot, u32 index}), +0x30 entry pointers (entry+4:
 // the slot it holds). A piece can hold a second slot (the wheel greys it out); a piece for a held slot is refused
@@ -4535,6 +4603,7 @@ bool run_step(const LoadStep& s, size_t number)
         g_steps_ok += err == 0; // (a change went through: a model swap follows)
         LOG("  step %zu: take off equipment-%u (key %u uid %llX): %s", number, s.slot, s.key, s.uid,
             error_text(err).c_str());
+        diag_where(call_inventory(actor), "right after its take-off", s.uid, s.key); // DIAG (lost pieces)
         bool learned = false;
         if (err == kErrNoItemAfterRemoval) {
             std::lock_guard<std::mutex> keys(g_keys_mu);
@@ -4561,6 +4630,7 @@ bool run_step(const LoadStep& s, size_t number)
             g_step_err = err;
             LOG("  step %zu: put on equipment-%u: key %u \"%s\" uid %llX from bag %u pos %d: %s", number, s.slot,
                 s.key, item_name(s.key).c_str(), s.uid, at.bag, at.pos, error_text(err).c_str());
+            LOG("  DIAG bag %u pos %d after the put-on: %s", at.bag, at.pos, diag_pos(mgr, at.bag, at.pos).c_str()); // DIAG
         }
     }
     if (ctx[0]) release_player(ctx);
@@ -4990,7 +5060,13 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
         }
         bool needed = false; // the worn piece goes to another slot of the outfit
         for (const OutfitItem& it : o.items) needed |= worn && it.uid == w[i].uid && it.key == w[i].key;
-        if (worn && (needed || (!t && !keep_slots.count(w[i].slot)))) off.push_back({false, w[i].slot, w[i].key, w[i].uid});
+        // A worn piece is taken off before the outfit's goes on (not swapped by the equip): the game's swap sends the
+        // old piece back to a bag position it remembers, and a piece remembering a position that doesn't exist was
+        // lost on the way (2026-11-06, a player's log: every lost piece had been put on from one bag position and was
+        // swapped out; pieces taken off never got lost). Slots the game won't leave empty keep the swap.
+        bool swap_off = worn && t && !keep_slots.count(w[i].slot);
+        if (worn && (needed || swap_off || (!t && !keep_slots.count(w[i].slot))))
+            off.push_back({false, w[i].slot, w[i].key, w[i].uid, swap_off && !needed});
         if (t) on.push_back({true, t->slot, t->key, t->uid});
         if (worn && (t || !keep_slots.count(w[i].slot))) leaving.push_back({w[i].uid, w[i].key, w[i].slot}); // (checked after)
     }
@@ -5011,7 +5087,10 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
             continue;
         }
         if (!run_step(off[i], i + 1)) break;
-        if (!off[i].equip && g_step_err) refused.insert(off[i].slot);
+        if (!off[i].equip && g_step_err && off[i].swap)
+            LOG("  (equipment-%u: the outfit's piece swaps it instead)", off[i].slot);
+        else if (!off[i].equip && g_step_err)
+            refused.insert(off[i].slot);
         if (!off[i].equip || !g_step_err || g_step_err == kFault) continue;
         U64 e = slot_claim(off[i].slot);
         if (!e) continue; // (refused for another reason: verify reports it)
@@ -6666,6 +6745,11 @@ void lost_check(U64 self, const std::string& outfit, const std::vector<LeavingPi
         return;
     }
     int lost = 0;
+    U64 dctx[4] = {}; // DIAG (lost pieces): where each piece that left ended up
+    U64 dactor = acquire_player(dctx);
+    U64 dmgr = dactor ? call_inventory(dactor) : 0;
+    if (dctx[0]) release_player(dctx);
+    for (const LeavingPiece& p : leaving) diag_where(dmgr, "after the load", p.uid, p.key);
     for (const LeavingPiece& p : leaving) {
         bool found = false;
         for (const Owned& x : owned) found |= x.uid == p.uid && x.key == p.key;
@@ -6897,7 +6981,7 @@ void save_new_outfit(U64 self)
     Outfit o;
     if (!snapshot(self, o)) return;
     for (const Outfit& s : g_outfits)
-        if (same_pieces(s, o)) {
+        if (same_saved(s, o)) {
             notify(self, lang::f("toast.already_saved", {{"outfit", s.name}}));
             return;
         }
@@ -7118,7 +7202,7 @@ void confirmed(U64 self, U32 index, int what, U32 other)
     Outfit o;
     if (!snapshot(self, o)) return;
     for (size_t j = 0; j < g_outfits.size(); ++j)
-        if (same_pieces(g_outfits[j], o)) {
+        if (same_saved(g_outfits[j], o)) {
             notify(self, lang::f(j == index ? "toast.already_holds" : "toast.already_saved", {{"outfit", g_outfits[j].name}}));
             return;
         }
@@ -7149,7 +7233,7 @@ void overwrite_pressed(U64 self, U32 index, bool reset)
     Outfit o;
     if (index >= g_outfits.size() || !snapshot(self, o)) return;
     for (size_t j = 0; j < g_outfits.size(); ++j)
-        if (same_pieces(g_outfits[j], o)) {
+        if (same_saved(g_outfits[j], o)) {
             if (j == index) notify(self, lang::f("toast.already_holds", {{"outfit", g_outfits[j].name}}));
             else open_confirm(self, index, kConfirmSwap, static_cast<U32>(j));
             return;
