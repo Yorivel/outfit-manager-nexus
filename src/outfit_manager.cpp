@@ -5629,6 +5629,10 @@ U32 g_name_caret = 0;       // its caret
 
 extern std::atomic<bool> g_peek_live;
 extern std::atomic<int> g_peek_wheel;
+// The wheel hook is in (the arc open): it alone counts the notches. The window and raw input routes then only keep
+// the wheel from the game (2026-11-06: all three counted, 6 steps per notch, and with 3 outfits the arc went round
+// twice and seemed not to move).
+std::atomic<bool> g_wheel_hooked{false};
 extern std::atomic<U64> g_peek_hud_at;
 
 // Is (vk) with the modifiers held now one of the current outfits' hotkeys (in play)?
@@ -5658,7 +5662,7 @@ LRESULT CALLBACK name_wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
     // The Outfit Arc: while it is open the wheel is its (not the camera's); its key's messages are its own in play.
     if (m == WM_MOUSEWHEEL) {
         if (g_peek_live) {
-            g_peek_wheel += GET_WHEEL_DELTA_WPARAM(wp);
+            if (!g_wheel_hooked) g_peek_wheel += GET_WHEEL_DELTA_WPARAM(wp); // (else the hook counts it)
             return 0;
         }
     }
@@ -8642,6 +8646,7 @@ struct Peek {
     std::string icon_set[5];         // last icon set per position
 } g_peek;
 bool g_peek_down = false;             // the arc key on the last frame
+extern std::atomic<U32> g_wheel_notches;
 void wheel_hook(bool on);             // (the arc's wheel hook: below)
 bool g_peek_by_pad = false;           // the open arc came from the pad (L1 / LB held: it closes when that lets go)
 std::atomic<bool> g_peek_pad_open{false}; // (the same, for the pad filters on other threads)
@@ -8815,8 +8820,9 @@ void peek_close(bool choose)
     p.closing_at = GetTickCount64();
     p.open = false;
     bool load = choose && e >= 0 && e != p.worn && static_cast<size_t>(e) < g_outfits.size();
-    LOG("Outfit Arc: closed on %s%s", e < 0 ? "the current outfit" : ("outfit " + std::to_string(e + 1)).c_str(),
-        !choose ? "" : load ? "; putting it on" : " (nothing to change)");
+    LOG("Outfit Arc: closed on %s%s (%s, wheel notches %u)", e < 0 ? "the current outfit" : ("outfit " + std::to_string(e + 1)).c_str(),
+        !choose ? "" : load ? "; putting it on" : " (nothing to change)", g_peek_by_pad ? "pad" : "key",
+        g_wheel_notches.load());
     // as a click on it in the wheel: where each piece is, the questions (pieces on other characters, copies), the load
     if (load) start_loading(p.self, static_cast<U32>(e));
 }
@@ -8873,6 +8879,7 @@ void peek_hotkeys(U64 self, bool free);
 void peek_sync_live(bool open)
 {
     if (open == g_peek_live.load()) return;
+    if (open) g_wheel_notches = 0;
     g_peek_live = open;
     wheel_hook(open);
 }
@@ -8985,7 +8992,7 @@ UINT WINAPI raw_input_hook(HRAWINPUT h, UINT cmd, LPVOID data, PUINT size, UINT 
         if (in->header.dwType == RIM_TYPEMOUSE) {
             RAWMOUSE& m = in->data.mouse;
             if (g_peek_live && (m.usButtonFlags & RI_MOUSE_WHEEL)) {
-                g_peek_wheel += static_cast<SHORT>(m.usButtonData);
+                // (not counted here: the game reads each raw event several times; the hook / window route counts)
                 m.usButtonFlags &= ~RI_MOUSE_WHEEL;
                 m.usButtonData = 0;
             }
@@ -9005,6 +9012,7 @@ UINT WINAPI raw_input_hook(HRAWINPUT h, UINT cmd, LPVOID data, PUINT size, UINT 
 // pad, the game in its pad mode passed no wheel to its window, so the window / raw input filters saw none and the arc
 // didn't move). Installed when the arc opens, removed when it closes (its own thread: such a hook needs a message loop).
 std::atomic<DWORD> g_wheel_thread_id{0};
+std::atomic<U32> g_wheel_notches{0}; // notches the hook took this opening (on the close's log line)
 HANDLE g_wheel_open_event = nullptr;
 
 LRESULT CALLBACK wheel_ll_proc(int code, WPARAM wp, LPARAM lp)
@@ -9012,6 +9020,7 @@ LRESULT CALLBACK wheel_ll_proc(int code, WPARAM wp, LPARAM lp)
     if (code == HC_ACTION && wp == WM_MOUSEWHEEL && g_peek_live && game_focused()) {
         const MSLLHOOKSTRUCT* m = reinterpret_cast<const MSLLHOOKSTRUCT*>(lp);
         g_peek_wheel += static_cast<SHORT>(HIWORD(m->mouseData));
+        ++g_wheel_notches;
         return 1; // (kept from the game: no window message, no raw input)
     }
     return CallNextHookEx(nullptr, code, wp, lp);
@@ -9025,10 +9034,15 @@ DWORD WINAPI wheel_thread(LPVOID)
     for (;;) {
         WaitForSingleObject(g_wheel_open_event, INFINITE);
         HHOOK h = SetWindowsHookExW(WH_MOUSE_LL, &wheel_ll_proc, g_self, 0);
-        if (!h) LOG("Outfit Arc: wheel hook failed (%lu)", GetLastError());
+        if (!h) LOG("Outfit Arc: wheel hook failed (%lu); the window's wheel messages count instead", GetLastError());
+        g_wheel_hooked = h != nullptr;
+        // (a close's message can be left over from an opening the hook never saw: it only counts with the arc closed,
+        // 2026-11-06: a stale one ended the next opening's hook at once and the wheel did nothing for it)
         while (g_peek_live && GetMessageW(&msg, nullptr, 0, 0) > 0)
-            if (msg.message == WM_APP) break; // (the arc closed)
+            if (msg.message == WM_APP && !g_peek_live) break; // (the arc closed)
         if (h) UnhookWindowsHookEx(h);
+        g_wheel_hooked = false;
+        while (PeekMessageW(&msg, nullptr, WM_APP, WM_APP, PM_REMOVE)) {} // (none left for the next opening)
     }
 }
 

@@ -2,6 +2,13 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
+## 0.4.2 (2026-11-06)
+
+- Fix: scrolling the Outfit Arc with the mouse wheel did nothing in 0.4.1 (the selection flickered and landed back on the worn outfit). Each wheel notch was counted several times (6 steps per notch); with 3 outfits that goes round the arc exactly twice. One notch is one outfit again. Controllers were not affected.
+- Fix: an opening of the Outfit Arc could miss the mouse wheel entirely when a close from an earlier opening was still pending.
+- Technical: the wheel is now counted only by the low-level mouse hook that exists while the arc is open; the game window's messages and its raw input still keep the wheel from the camera but no longer count it (they count only if the hook could not be installed). A leftover close message no longer ends the next opening's hook. The close's log line now says how the arc was opened (key / pad) and how many wheel notches it took.
+- Tested on: Crimson Desert 1.0.0.3549 (Steam build 26448710) with DMM 4.7.3.
+
 ## 0.4.1 (2026-11-06)
 
 - Fix: hidden pieces showed again on the character you switch away from (switching Kliff, Damiane and Oongka through the gear wheel). The wheel compared the new character's gear with the old character's outfits, took it for a new set and dropped that character's visibility settings. Thanks for the report!
