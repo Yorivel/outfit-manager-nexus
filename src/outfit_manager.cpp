@@ -9087,114 +9087,25 @@ void peek_sync_live(bool open)
 // hips are, for every mount. So on a mount the arc's wrap is moved down to that tracker's height (its x stays the
 // rider's). The tracker only moves while shown: the plugin shows it with the arc (its spiral stays as the game keeps it,
 // hidden until the mount's stamina changes).
-// Riding: the actor's +0x1270 and its component's +0x358 hold the ridden actor's id (-1 on foot; build 26480954, found
-// by diffing the player on foot / mounted). Both must agree and look like an id, else "not riding": a patch that moves
-// them leaves the arc where it always was.
-constexpr U64 kOffActorMount = 0x1270, kOffCompMount = 0x358;
+// Riding (build 26480954, found by diffing the player on foot / mounted in two sessions; fields straight in the actor
+// held the mount's id in one session and 0 in the next - list entries): in the actor's component, [comp+0x1B8]+0x30 is a
+// riding flag (0 / 1) and [comp+0x1A0]+0xC8 the ridden actor's id (-1 on foot). Riding only when both say so; anything
+// else (a patch moving them) is "not riding", which leaves the arc where it always was.
+constexpr U64 kOffCompRide = 0x1B8, kOffRideFlag = 0x30, kOffCompRidden = 0x1A0, kOffRiddenId = 0xC8;
 
 U32 riding_mount()
 {
     U64 ctx[4] = {};
     U64 actor = acquire_player(ctx);
-    U64 a = ~0ull, b = ~0ull;
-    if (actor) {
-        rd(actor + kOffActorMount, a);
-        if (U64 comp = rp(actor + kOffActorComp)) rd(comp + kOffCompMount, b);
+    U8 flag = 0xFF;
+    U64 id = 0;
+    if (U64 comp = actor ? rp(actor + kOffActorComp) : 0) {
+        if (U64 r = rp(comp + kOffCompRide)) rd(r + kOffRideFlag, flag);
+        if (U64 m = rp(comp + kOffCompRidden)) rd(m + kOffRiddenId, id);
     }
     if (ctx[0]) release_player(ctx);
-    if (a != b || a == ~0ull || a > 0xFFFFFFFFull || a < 0x10000000ull) return 0;
-    return static_cast<U32>(a);
-}
-
-// DIAG (ride search 2, 2026-11-07): a field one pointer deep (or directly) in the actor / its component / the HP tracker
-// with one value at every opening on foot and another at every opening mounted (foot = the HP tracker below y 900).
-// The last session's survivors are logged too: actor+0x1270 / comp+0x358 held the mount's id there, 0 in the next session.
-constexpr int kRsN[3] = {0x600, 0x600, 0x80}, kRsDeep = 0x40;
-struct RsCell {
-    U64 foot, horse;
-    U8 seen; // 1 foot, 2 horse, 4 inconsistent
-};
-std::vector<RsCell> g_rs[3];
-int g_rs_opens = 0;
-
-bool rs_snap(U64 a, U64* out, int n)
-{
-    __try {
-        for (int i = 0; i < n; ++i) out[i] = *reinterpret_cast<volatile U64*>(a + i * 8ull);
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-void rs_take(RsCell& c, U64 v, bool foot)
-{
-    if (c.seen & 4) return;
-    U8 bit = foot ? 1 : 2;
-    U64& slot = foot ? c.foot : c.horse;
-    if (!(c.seen & bit)) slot = v, c.seen |= bit;
-    else if (slot != v) c.seen |= 4;
-    if ((c.seen & 3) == 3 && c.foot == c.horse) c.seen |= 4;
-}
-
-void ride_search(bool foot, U64 actor, U64 comp, U64 trk, float ty)
-{
-    const U64 src[3] = {actor, comp, trk};
-    static const char* nm[3] = {"actor", "comp", "tracker"};
-    { // the last session's survivors: (source, pointer at, field; -1 = the field itself)
-        static const struct { int k; int ptr; int off; } old[] = {
-            {0, -1, 0x1268}, {0, -1, 0x1270}, {0, -1, 0x12A0}, {0, 0x2BD8, 0x10}, {1, -1, 0x310}, {1, -1, 0x358},
-            {1, -1, 0x9C8}, {1, 0x1A0, 0xC0}, {1, 0x1A0, 0xC8}, {1, 0x1A0, 0xF8}, {1, 0x1A0, 0x138}, {1, 0x1A0, 0x140},
-            {1, 0x1A0, 0x170}, {1, 0x1A0, 0x198}, {1, 0x1A0, 0x1E8}, {1, 0x1B8, 0x18}, {1, 0x1B8, 0x30}, {1, 0x200, 0x100},
-            {1, 0x200, 0x148}, {1, 0x280, 0x18}, {2, 0x18, 0x20}};
-        std::string out;
-        char b[80];
-        for (const auto& o : old) {
-            U64 base = src[o.k], v = 0;
-            if (base && o.ptr >= 0) base = rp(base + U64(o.ptr));
-            bool ok = base && rd(base + U64(o.off), v);
-            if (o.ptr >= 0) std::snprintf(b, sizeof b, " [%s+%X]+%X=%llX", nm[o.k], o.ptr, o.off, ok ? (unsigned long long)v : 0ull);
-            else std::snprintf(b, sizeof b, " %s+%X=%llX", nm[o.k], o.off, ok ? (unsigned long long)v : 0ull);
-            out += ok ? b : " ?";
-        }
-        LOG("DIAG ride old candidates (%s):%s", foot ? "on foot" : "mounted", out.c_str());
-    }
-    static U64 top[0x600], deep[kRsDeep];
-    for (int k = 0; k < 3; ++k) {
-        if (!src[k]) continue;
-        int n = kRsN[k];
-        if (g_rs[k].empty()) g_rs[k].assign(size_t(n) * (1 + kRsDeep), RsCell{0, 0, 0});
-        if (!rs_snap(src[k], top, n)) continue;
-        for (int i = 0; i < n; ++i) {
-            rs_take(g_rs[k][size_t(i)], top[i], foot);
-            if (!plausible(top[i]) || (top[i] & 7) || !rs_snap(top[i], deep, kRsDeep)) {
-                for (int j = 0; j < kRsDeep; ++j) g_rs[k][size_t(n) + size_t(i) * kRsDeep + j].seen |= 4;
-                continue;
-            }
-            for (int j = 0; j < kRsDeep; ++j) rs_take(g_rs[k][size_t(n) + size_t(i) * kRsDeep + j], deep[j], foot);
-        }
-    }
-    ++g_rs_opens;
-    std::string out;
-    int left = 0;
-    char b[96];
-    for (int k = 0; k < 3; ++k) {
-        int n = kRsN[k];
-        for (size_t c = 0; c < g_rs[k].size(); ++c) {
-            const RsCell& h = g_rs[k][c];
-            if (h.seen != 3) continue;
-            if (++left > 80) continue;
-            if (c < size_t(n))
-                std::snprintf(b, sizeof b, " %s+%X foot %llX horse %llX;", nm[k], unsigned(c * 8), (unsigned long long)h.foot,
-                              (unsigned long long)h.horse);
-            else
-                std::snprintf(b, sizeof b, " [%s+%X]+%X foot %llX horse %llX;", nm[k], unsigned((c - n) / kRsDeep * 8),
-                              unsigned((c - n) % kRsDeep * 8), (unsigned long long)h.foot, (unsigned long long)h.horse);
-            out += b;
-        }
-    }
-    LOG("DIAG ride search, opening %d %s (HP tracker y %.0f): %d candidates left%s", g_rs_opens, foot ? "on foot" : "mounted",
-        ty, left, out.c_str());
+    if (flag != 1 || id == ~0ull || id > 0xFFFFFFFFull || id < 0x10000000ull) return 0;
+    return static_cast<U32>(id);
 }
 
 void peek_ride_place()
@@ -9202,22 +9113,6 @@ void peek_ride_place()
     Peek& p = g_peek;
     if (!p.mount_trk || !is_element(p.mount_trk)) p.mount_trk = find_by_class(g_peek_root, "cpp-horse-sp-actor-tracker", 4);
     bool active = (p.open || p.closing_at) && p.mount_trk && p.trk;
-    { // DIAG (ride search 2): 0.6 s after each opening (the HP tracker has moved by then)
-        static bool was = false;
-        static U64 due = 0;
-        U64 now = GetTickCount64();
-        if (p.open && !was) due = now + 600;
-        was = p.open;
-        float ty = 0;
-        if (due && now >= due && p.open && p.trk && rd(p.trk + 0x74, ty) && ty > 0) {
-            due = 0;
-            U64 ctx[4] = {};
-            U64 actor = acquire_player(ctx);
-            U64 comp = actor ? rp(actor + kOffActorComp) : 0;
-            ride_search(ty > 900.f, actor, comp, p.trk, ty);
-            if (ctx[0]) release_player(ctx);
-        }
-    }
     U32 mount = active ? riding_mount() : 0;
     float top = 0;
     if (mount) {
