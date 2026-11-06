@@ -200,3 +200,4 @@ desc.hotkey.on = 플레이 중 {hotkey}을(를) 누르면 이 의상을 착용�
 desc.hotkey.wait = 사용할 키나 조합을 누르세요(Ctrl, Alt, Shift와 키 또는 마우스 버튼). Esc는 취소, Backspace는 지우기입니다.
 toast.hotkey_moved = {hotkey}을(를) "{outfit}"에서 여기로 옮겼습니다
 toast.hotkey_arc = {hotkey}은(는) 의상 아크를 엽니다. 다른 키를 고르세요
+toast.piece_lost = {piece}이(가) 가방에 들어오지 않았습니다. 없어졌다면 저장하지 말고 게임을 다시 시작하면 돌아옵니다.

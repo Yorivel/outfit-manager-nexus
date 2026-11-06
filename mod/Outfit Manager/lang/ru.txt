@@ -217,3 +217,4 @@ desc.hotkey.on = Нажмите {hotkey} во время игры, чтобы н
 desc.hotkey.wait = Нажмите клавишу или сочетание (Ctrl, Alt, Shift и клавиша или кнопка мыши). Esc отменяет, Backspace удаляет.
 toast.hotkey_moved = {hotkey} перенесена сюда с «{outfit}»
 toast.hotkey_arc = {hotkey} открывает Дугу нарядов; выберите другую клавишу
+toast.piece_lost = {piece} не попал в ваши сумки. Если предмета нет, не сохраняйтесь: перезапустите игру, чтобы вернуть его.

@@ -217,3 +217,4 @@ desc.hotkey.on = Naciśnij {hotkey} podczas gry, aby założyć ten strój. Klik
 desc.hotkey.wait = Naciśnij klawisz lub kombinację (Ctrl, Alt, Shift i klawisz lub przycisk myszy). Esc anuluje, Backspace usuwa.
 toast.hotkey_moved = {hotkey} przeniesiono tutaj z „{outfit}”
 toast.hotkey_arc = {hotkey} otwiera Łuk strojów; wybierz inny klawisz
+toast.piece_lost = {piece} nie trafił do twoich toreb. Jeśli go brakuje, nie zapisuj: uruchom grę ponownie, aby go odzyskać.

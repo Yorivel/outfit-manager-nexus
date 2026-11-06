@@ -203,3 +203,4 @@ desc.hotkey.on = Oynarken bu kıyafeti giymek için {hotkey} tuşuna bas. Başka
 desc.hotkey.wait = Kullanmak istediğin tuşa veya kombinasyona bas (Ctrl, Alt, Shift ve bir tuş ya da fare düğmesi). Esc iptal eder, Geri tuşu siler.
 toast.hotkey_moved = {hotkey} "{outfit}" kıyafetinden buraya taşındı
 toast.hotkey_arc = {hotkey} Kıyafet Yayı'nı açar; başka bir tuş seç
+toast.piece_lost = {piece} çantalarına ulaşmadı. Eksikse kaydetme: geri almak için oyunu yeniden başlat.

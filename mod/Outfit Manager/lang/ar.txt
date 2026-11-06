@@ -211,3 +211,4 @@ desc.hotkey.on = اضغط {hotkey} أثناء اللعب لارتداء هذا �
 desc.hotkey.wait = اضغط على المفتاح أو المجموعة المراد استخدامها (Ctrl وAlt وShift مع مفتاح أو زر فأرة). Esc للإلغاء، Backspace للمسح.
 toast.hotkey_moved = نُقل {hotkey} إلى هنا من "{outfit}"
 toast.hotkey_arc = {hotkey} يفتح قوس الأزياء؛ اختر مفتاحًا آخر
+toast.piece_lost = لم يصل {piece} إلى حقائبك. إن كان مفقودًا فلا تحفظ: أعد تشغيل اللعبة لاستعادته.

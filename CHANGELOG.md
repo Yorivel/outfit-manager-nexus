@@ -2,6 +2,18 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
+## 0.4.1 (2026-11-06)
+
+- Fix: hidden pieces showed again on the character you switch away from (switching Kliff, Damiane and Oongka through the gear wheel). The wheel compared the new character's gear with the old character's outfits, took it for a new set and dropped that character's visibility settings. Thanks for the report!
+- Fix: two one-handed weapons worn in each other's hands. The game refuses to take either off, so every load left both hands as they were, ended with "18 of 20" in the log and the outfit showed as changed (amber). Weapons swapped between the hands now count as the outfit's: loads leave them alone and the outfit shows as worn.
+- Safety: after every load the mod checks that each piece it took off or swapped out is still worn, in a bag or with a companion. If the game loses one on the way to your bags, you get a message telling you not to save (restarting the game brings it back), and the log names the piece. This is for a rare case where a piece swapped out by a load vanished: it could not be spawned again and came back after a restart. We could not reproduce it, so this catches it and tells you, and the next log will show exactly which step lost it.
+- Safety: if the game refuses to take a piece off during a load, nothing is put on in that slot in the same load.
+- Translations: the new message in all 15 languages.
+- Technical: the character switch: the wheel's refresh and the "+" slot's check now skip the worn-outfit comparison while the controlled character isn't the one whose outfit list is loaded (the model-swap recheck already did). The race: the wheel refreshed in the 15 ms between the switch and the mod picking up the new character's list.
+- Technical: hands_crossed(): equipment-0 / equipment-1 (MainWeapon_*_R / _L) holding the outfit's two weapons crossed count as matching in the load, its check ("slots match") and the worn-outfit detection.
+- Technical: the loss check runs when a load is done, before Stash moves anything, against the same inventory read as the missing-pieces question (worn, every bag, companions); log line "loss check: N piece(s) left their slots, M lost".
+- Tested on: Crimson Desert 1.0.0.3549 (Steam build 26448710) with DMM 4.7.3.
+
 ## 0.4.0 (2026-11-06)
 
 - New: the Outfit Arc. Hold a key and your outfits fan out on an arc beside your character; scroll to pick one and let go to wear it, without opening the gear wheel. It opens on the outfit you're wearing and wraps around, in the same order as the Outfits tab. If what you wear isn't a saved outfit, a "Current Outfit" entry comes first, and letting go on it changes nothing.

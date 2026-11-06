@@ -187,3 +187,4 @@
 {"desc.hotkey.wait", "Press the key or combination to use (Ctrl, Alt, Shift and a key or mouse button). Esc cancels, Backspace clears it."},
 {"toast.hotkey_moved", "{hotkey} moved here from \"{outfit}\""},
 {"toast.hotkey_arc", "{hotkey} opens the Outfit Arc; choose another key"},
+{"toast.piece_lost", "{piece} didn't reach your bags. If it's missing, don't save: restart the game to get it back."},

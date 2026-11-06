@@ -200,3 +200,4 @@ desc.hotkey.on = 游戏中按 {hotkey} 即可换上此套装。点击以选择�
 desc.hotkey.wait = 按下要使用的按键或组合（Ctrl、Alt、Shift 加一个按键或鼠标按钮）。Esc 取消，Backspace 清除。
 toast.hotkey_moved = {hotkey} 已从“{outfit}”移到此处
 toast.hotkey_arc = {hotkey} 用于打开套装弧，请选择其他按键
+toast.piece_lost = {piece}没有回到你的背包。如果它不见了，请不要存档：重启游戏即可找回。

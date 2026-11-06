@@ -203,3 +203,4 @@ desc.hotkey.on = Pressione {hotkey} durante o jogo para vestir este traje. Cliqu
 desc.hotkey.wait = Pressione a tecla ou combinação a usar (Ctrl, Alt, Shift e uma tecla ou botão do mouse). Esc cancela, Backspace apaga.
 toast.hotkey_moved = {hotkey} foi movido para cá de "{outfit}"
 toast.hotkey_arc = {hotkey} abre o Arco de trajes; escolha outra tecla
+toast.piece_lost = {piece} não chegou às suas bolsas. Se estiver faltando, não salve: reinicie o jogo para recuperá-lo.

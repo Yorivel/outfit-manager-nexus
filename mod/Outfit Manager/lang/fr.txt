@@ -203,3 +203,4 @@ desc.hotkey.on = Appuyez sur {hotkey} en jeu pour porter cette tenue. Cliquez po
 desc.hotkey.wait = Appuyez sur la touche ou la combinaison à utiliser (Ctrl, Alt, Maj et une touche ou un bouton de souris). Échap annule, Retour arrière l'efface.
 toast.hotkey_moved = {hotkey} a été déplacé ici depuis « {outfit} »
 toast.hotkey_arc = {hotkey} ouvre l'Arc des tenues ; choisissez une autre touche
+toast.piece_lost = {piece} n'est pas arrivé dans vos sacs. S'il manque, ne sauvegardez pas : relancez le jeu pour le récupérer.

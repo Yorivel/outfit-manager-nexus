@@ -203,3 +203,4 @@ desc.hotkey.on = Premi {hotkey} mentre giochi per indossare questo completo. Fai
 desc.hotkey.wait = Premi il tasto o la combinazione da usare (Ctrl, Alt, Maiusc e un tasto o pulsante del mouse). Esc annulla, Backspace la cancella.
 toast.hotkey_moved = {hotkey} spostata qui da "{outfit}"
 toast.hotkey_arc = {hotkey} apre l'Arco dei completi; scegli un altro tasto
+toast.piece_lost = {piece} non è arrivato nelle tue borse. Se manca, non salvare: riavvia il gioco per recuperarlo.

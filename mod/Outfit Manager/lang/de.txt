@@ -203,3 +203,4 @@ desc.hotkey.on = Drücke im Spiel {hotkey}, um dieses Outfit anzuziehen. Klicke,
 desc.hotkey.wait = Drücke die gewünschte Taste oder Kombination (Strg, Alt, Umschalt und eine Taste oder Maustaste). Esc bricht ab, Rücktaste löscht es.
 toast.hotkey_moved = {hotkey} wurde von „{outfit}“ hierher verschoben
 toast.hotkey_arc = {hotkey} öffnet den Outfit-Bogen; wähle eine andere Taste
+toast.piece_lost = {piece} ist nicht in deinen Taschen angekommen. Falls es fehlt, nicht speichern: Starte das Spiel neu, um es zurückzubekommen.

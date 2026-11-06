@@ -200,3 +200,4 @@ desc.hotkey.on = プレイ中に {hotkey} を押すとこの衣装に着替え�
 desc.hotkey.wait = 使うキーまたは組み合わせを押してください（Ctrl、Alt、Shift とキーまたはマウスボタン）。Esc でキャンセル、Backspace で解除。
 toast.hotkey_moved = {hotkey} を「{outfit}」からここへ移しました
 toast.hotkey_arc = {hotkey} は衣装アークを開きます。別のキーを選んでください
+toast.piece_lost = {piece}がバッグに戻りませんでした。見当たらない場合はセーブせずにゲームを再起動すると戻ります。

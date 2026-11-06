@@ -203,3 +203,4 @@ desc.hotkey.on = Pulsa {hotkey} mientras juegas para ponerte este atuendo. Haz c
 desc.hotkey.wait = Pulsa la tecla o combinación que quieras usar (Ctrl, Alt, Mayús y una tecla o botón del ratón). Esc cancela, Retroceso lo borra.
 toast.hotkey_moved = {hotkey} se ha movido aquí desde «{outfit}»
 toast.hotkey_arc = {hotkey} abre el Arco de atuendos; elige otra tecla
+toast.piece_lost = {piece} no ha llegado a tus bolsas. Si falta, no guardes: reinicia el juego para recuperarlo.

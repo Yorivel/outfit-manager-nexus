@@ -1140,6 +1140,7 @@ bool in_depth(U64 self)
 
 void save_outfits();
 void publish_looks(const Store& s); // (Appearance)
+U16 current_character(); // (the controlled character: below)
 void mark_worn(int index);
 extern bool g_stash;
 std::atomic<U32> g_peek_key{0};           // the Outfit Arc's key (a virtual-key code; 0 = Off)
@@ -1785,13 +1786,17 @@ void apply_outfit_slots(U64 self, U32 only = kOutfitSlots)
     U32 visible = visible_slots();
     if (only >= kOutfitSlots) { // (the whole wheel)
         g_applied_visible = visible;
-        if (int w = find_worn_outfit(self); w != g_worn_outfit) {
+        // (during a character switch the worn gear is already the new character's while the list is still the old
+        // one's: comparing them would read as "a new set" and drop the old character's looks, 2026-11-06)
+        U16 now_char = current_character();
+        bool same_char = now_char == kNoCharacter || g_character == kNoCharacter || now_char == g_character;
+        if (int w = same_char ? find_worn_outfit(self) : g_worn_outfit; w != g_worn_outfit) {
             LOG("worn outfit: %d -> %d", g_worn_outfit, w);
             g_worn_outfit = w;
             g_worn_changed = true;
             if (w >= 0) mark_worn(w); // (put together by hand: its looks apply too; none worn keeps the last loaded)
         }
-        update_plus_icon(self);
+        if (same_char) update_plus_icon(self);
         refresh_missing(self);
         U64 body = rp(rp(rp(self + kOffRootBodies) + tab * 8ull) + 8);
         bool list_ok = body && is_element(body) && swap_class(body, g_list_class, numbered("om-list-%u", visible));
@@ -3268,6 +3273,7 @@ void update_plus_icon(U64 self)
     g_plus_icon.clear();
     g_amber = false;
     if (g_worn_outfit >= 0) return;
+    if (U16 ch = current_character(); ch != kNoCharacter && g_character != kNoCharacter && ch != g_character) return; // (switching)
     WornRaw w[kWornMax];
     int n = read_worn(self, w, kWornMax);
     if (int a = anchor_outfit(); a >= 0) {
@@ -3321,18 +3327,44 @@ bool snapshot(U64 self, Outfit& o)
     return true;
 }
 
+// The two hands' weapon slots (equipment-0: MainWeapon_*_R, equipment-1: MainWeapon_*_L). Two one-handed weapons worn
+// in each other's hands count as the outfit's (2026-11-06, a player's log: the game refuses to take either off -
+// "no items available to be equipped after removal" - so a load could never swap them back; every load ended 18 of 20
+// and the outfit showed as modified).
+constexpr U16 kHandR = 0, kHandL = 1;
+
+// Are slot's (a hand) and the other hand's worn weapons the outfit's, crossed?
+bool hands_crossed(const Outfit& o, const WornRaw* w, int n, U16 slot)
+{
+    if (slot != kHandR && slot != kHandL) return false;
+    U16 other = slot == kHandR ? kHandL : kHandR;
+    const WornRaw *ws = nullptr, *wo = nullptr;
+    for (int k = 0; k < n; ++k) {
+        if (w[k].slot == slot) ws = &w[k];
+        if (w[k].slot == other) wo = &w[k];
+    }
+    const OutfitItem *ts = outfit_piece(o, slot), *to = outfit_piece(o, other);
+    return ws && wo && ts && to && ws->key != 0xFFFF && wo->key != 0xFFFF && ts->uid != to->uid &&
+           ws->uid == to->uid && ws->key == to->key && wo->uid == ts->uid && wo->key == ts->key;
+}
+
 // The same pieces in the same slots (by uid: a duplicate of a piece is another piece). The weapon slots count only
-// when both load weapons (an outfit set to Leave, or saved before weapons, matches on its armour).
+// when both load weapons (an outfit set to Leave, or saved before weapons, matches on its armour). The two hands'
+// weapons also match crossed (hands_crossed).
 bool same_pieces(const Outfit& a, const Outfit& b)
 {
     bool weapons = uses_weapons(a) && uses_weapons(b);
-    auto pieces = [&](const Outfit& o) {
+    auto pieces = [&](const Outfit& o, bool swap) {
         std::vector<std::pair<U16, U64>> v;
-        for (const OutfitItem& it : o.items)
-            if (weapons || !is_weapon_slot(it.slot)) v.push_back({it.slot, it.uid});
+        for (const OutfitItem& it : o.items) {
+            if (!weapons && is_weapon_slot(it.slot)) continue;
+            U16 sl = swap && it.slot == kHandR ? kHandL : swap && it.slot == kHandL ? kHandR : it.slot;
+            v.push_back({sl, it.uid});
+        }
+        std::sort(v.begin(), v.end());
         return v;
     };
-    return pieces(a) == pieces(b);
+    return pieces(a, false) == pieces(b, false) || (weapons && pieces(a, false) == pieces(b, true));
 }
 
 // The saved outfit whose pieces are the worn ones, or -1.
@@ -4552,6 +4584,7 @@ bool verify_loading(U64 self, const Outfit& o, const std::vector<U16>& leave, bo
         ++counted;
         const OutfitItem* t = outfit_piece(o, w[i].slot);
         bool ok = t ? w[i].key == t->key && w[i].uid == t->uid : w[i].key == 0xFFFF;
+        ok |= hands_crossed(o, w, n, w[i].slot); // (its weapons in each other's hands: as worn)
         match += ok;
         if (!ok) {
             char b[128];
@@ -4578,13 +4611,21 @@ struct DeferredEquip {
     std::string from; // whose it was
     bool held = false; // refused while another piece held its slot: put on once the game lets go of the slot
 };
+// A worn piece a load takes off or replaces: after the load it must still be worn or in a bag (lost_check).
+struct LeavingPiece {
+    U64 uid;
+    U16 key;
+    U16 slot;
+};
 struct AsyncLoad {
     std::string outfit; // checked: the list may change meanwhile
     std::vector<U16> leave;
     std::vector<DeferredEquip> equips;
     U64 started = 0;
     bool active = false;
+    std::vector<LeavingPiece> leaving;
 };
+void lost_check(U64 self, const std::string& outfit, const std::vector<LeavingPiece>& leaving); // (below)
 AsyncLoad g_async;
 struct Outfit;
 void stash_pieces(U64 self, const Outfit* loaded); // (when a load is done)
@@ -4922,6 +4963,7 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
     look_hold(true); // (until the model swaps: the old pieces keep their looks, the new ones hide at once)
     mark_worn(static_cast<int>(index)); // (its looks: each piece as soon as it is on)
     std::vector<LoadStep> off, on;
+    std::vector<LeavingPiece> leaving; // the worn pieces this load replaces or takes off (must still be owned after)
     std::set<U16> keep_slots; // (slots the game refuses to empty: asking only brings its error message and a wait)
     {
         std::lock_guard<std::mutex> keys(g_keys_mu);
@@ -4938,6 +4980,10 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
             t ? t->key : 0xFFFF, t ? item_name(t->key).c_str() : "", t ? t->uid : 0,
             kept ? " (a taken piece comes here)" : left ? " (outfit piece unavailable)" : "");
         if (kept || (worn && t && w[i].uid == t->uid && w[i].key == t->key)) continue;
+        if (hands_crossed(o, w, n, w[i].slot)) { // (its weapons, in each other's hands: left as they are)
+            LOG("  equipment-%u: the outfit's weapon is in the other hand; left as it is", w[i].slot);
+            continue;
+        }
         if (left) {
             if (worn && !keep_slots.count(w[i].slot)) off.push_back({false, w[i].slot, w[i].key, w[i].uid}); // not the outfit's: off
             continue;
@@ -4946,6 +4992,7 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
         for (const OutfitItem& it : o.items) needed |= worn && it.uid == w[i].uid && it.key == w[i].key;
         if (worn && (needed || (!t && !keep_slots.count(w[i].slot)))) off.push_back({false, w[i].slot, w[i].key, w[i].uid});
         if (t) on.push_back({true, t->slot, t->key, t->uid});
+        if (worn && (t || !keep_slots.count(w[i].slot))) leaving.push_back({w[i].uid, w[i].key, w[i].slot}); // (checked after)
     }
     if (off.empty() && on.empty() && !g_async.active) {
         LOG("load \"%s\": already worn", o.name.c_str());
@@ -4957,8 +5004,14 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
     off.insert(off.end(), on.begin(), on.end());
     std::vector<DeferredEquip> held;
     g_steps_ok = 0;
+    std::set<U16> refused; // (slots whose take-off the game refused: nothing goes on there in this load)
     for (size_t i = 0; i < off.size(); ++i) {
+        if (off[i].equip && refused.count(off[i].slot)) {
+            LOG("  step %zu: put on equipment-%u skipped: its take-off was refused", i + 1, off[i].slot);
+            continue;
+        }
         if (!run_step(off[i], i + 1)) break;
+        if (!off[i].equip && g_step_err) refused.insert(off[i].slot);
         if (!off[i].equip || !g_step_err || g_step_err == kFault) continue;
         U64 e = slot_claim(off[i].slot);
         if (!e) continue; // (refused for another reason: verify reports it)
@@ -4974,6 +5027,7 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
     // reach the worn list late when there are many (11 take-offs checked at once: "1 of 11").
     g_async = {o.name, leave, std::move(g_async.equips), GetTickCount64(), true};
     for (DeferredEquip& d : held) g_async.equips.push_back(std::move(d));
+    g_async.leaving = std::move(leaving);
 }
 
 // --- Centre tooltip -----------------------------------------------------------------------------
@@ -6588,10 +6642,36 @@ void pump_async(U64 self)
     }
     if (!g_async.equips.empty() || acted) return;
     if (verify_loading(self, *it, g_async.leave, late) || late) {
+        lost_check(self, g_async.outfit, g_async.leaving);
         g_async = {};
         look_settled();
         stash_pieces(self, &*it);
     }
+}
+
+// After a load: every piece it took off or replaced must still be somewhere (worn, a bag, a companion). One that is
+// nowhere was lost by the game on the way to the bag (2026-11-06, a player's log: a piece swapped out by a load
+// vanished; it couldn't be spawned again and came back after a restart, so the game still had it, in no bag). Named
+// in the log, and the player is told: restarting without saving brings it back.
+void lost_check(U64 self, const std::string& outfit, const std::vector<LeavingPiece>& leaving)
+{
+    if (leaving.empty()) return;
+    std::vector<Owned> owned;
+    if (!read_owned(self, owned)) {
+        LOG("load \"%s\": loss check skipped (inventory unreadable)", outfit.c_str());
+        return;
+    }
+    int lost = 0;
+    for (const LeavingPiece& p : leaving) {
+        bool found = false;
+        for (const Owned& x : owned) found |= x.uid == p.uid && x.key == p.key;
+        if (found) continue;
+        ++lost;
+        LOG("load \"%s\": LOST: key %u \"%s\" uid %llX left equipment-%u and is in no bag; the game still holds it "
+            "(restart without saving)", outfit.c_str(), p.key, item_name(p.key).c_str(), p.uid, p.slot);
+        notify(self, lang::f("toast.piece_lost", {{"piece", item_name(p.key)}}));
+    }
+    LOG("load \"%s\": loss check: %zu piece(s) left their slots, %d lost", outfit.c_str(), leaving.size(), lost);
 }
 
 // --- Stash: after a load, every saved piece (any outfit, any character) left in the carried bag goes to storage,
