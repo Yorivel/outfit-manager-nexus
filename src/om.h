@@ -370,6 +370,18 @@ struct StashDest {
 // closed (the stash check, which reports). One comparison per frame while nothing is pending.
 using FrameFn = float(__fastcall*)(U64);
 
+// Controllers: the stick picks a slot (the game's own cursor) and L2 / R2 scroll it through the game's own handler once
+// the L2 / R2 prompts show (pad_prompts). The wheel has no confirm button of its own, so the pad is read directly and
+// Cross / A counts as Space:
+//  - Xbox pads (and anything shown as one, e.g. Steam Input's virtual pad): XInput, loaded at run time; a port that
+//    reads as disconnected is skipped for 2 s (polling an empty port is slow).
+//  - PlayStation pads (DualSense, DualSense Edge, DualShock 4; the game reads them natively, XInput never sees them):
+//    their HID input reports, read by a thread that waits for the pad (no polling); the latest buttons are kept here.
+constexpr U8 kPadCross = 1;   // the bits pad_buttons() returns: Cross / A held,
+constexpr U8 kPadL1 = 4;      // L1 / LB held (the Outfit Arc's modifier),
+constexpr U8 kPadUp = 8;      // the d-pad's up (or a diagonal with it),
+constexpr U8 kPadDown = 16;   // and down
+
 // (defined in core.cpp)
 extern U64 g_base;
 extern HMODULE g_self;

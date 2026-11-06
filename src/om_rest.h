@@ -4,10 +4,6 @@
 
 namespace om {
 
-extern std::atomic<U32> g_peek_key;
-extern std::atomic<bool> g_peek_pad;
-extern std::atomic<bool> g_pad_in_use, g_pad_is_ps, g_prompt_changed;
-void note_pad_handle(LPCWSTR path, HANDLE h);
 U64 equipped_item(U64 list, U16 slot);
 extern std::vector<U16> g_placeholder_keys;
 int read_worn(U64 self, WornRaw* out, int max);
@@ -31,14 +27,8 @@ extern U64 g_missing_checked;
 bool refresh_missing(U64 self);
 bool outfit_missing(size_t o);
 std::string slot_list(const Outfit& o, const std::vector<U16>& slots);
-void watch_game_chars();
 std::string piece_label(const Outfit& o, U16 slot);
 void finish_load(U64 self, AskedLoad& p);
-void peek_key_load(const std::string& id);
-const char* peek_key_id();
-std::string peek_key_name(U32 vk);
-std::string hotkey_name(U32 vk, std::uint8_t mods);
-std::uint8_t mods_now();
 void start_loading(U64 self, U32 index);
 void pump_async(U64 self);
 extern StashCheck g_stash_check;
@@ -48,6 +38,5 @@ extern std::wstring g_log_path;
 void self_test(U64 self);
 void prepare_outfits();
 void features_toast(U64 self);
-bool game_focused();
 
 } // namespace om

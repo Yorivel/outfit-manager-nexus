@@ -8,6 +8,8 @@
 #include "looks_view.h"
 #include "settings.h"
 #include "wheel_hooks.h"
+#include "pads.h"
+#include "arc.h"
 #include "om_rest.h"
 
 namespace om {

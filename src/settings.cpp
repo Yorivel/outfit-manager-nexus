@@ -10,6 +10,9 @@
 #include "actions.h"
 #include "wheel_draw.h"
 #include "wheel_hooks.h"
+#include "input.h"
+#include "pads.h"
+#include "arc.h"
 #include "om_rest.h"
 
 namespace om {
