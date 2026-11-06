@@ -93,6 +93,7 @@ int slot_of_name(const std::wstring& name)
 std::wstring slot_save_path(U32 slot) { return g_save_root + L"slot" + std::to_wstring(slot) + L"\\save.save"; }
 
 // The pending read becomes the active set (g_store_mu held).
+constexpr U64 kNewGameSaveMax = 64 * 1024; // (a save this small is a new game's starting save)
 void apply_load(const char* why)
 {
     PendingLoad l = g_pending_load;
@@ -108,7 +109,16 @@ void apply_load(const char* why)
     int from = -1;
     for (const auto& [s, b] : g_bound)
         if (b.id.same(id) && (from < 0 || s == slot)) from = static_cast<int>(s);
-    if (pw != g_pending_writes.end()) {
+    // A new game: the game writes a fresh starting save (about 5 KB; a played save is hundreds of KB and more) and loads
+    // it at once - no save of the player's is read. Without this it took the outfits of the save played before, and
+    // the new game's first autosave kept them (2026-11-06).
+    U64 size = now.size ? now.size : id.size;
+    if (size && size < kNewGameSaveMax) {
+        g_published.clear();
+        if (pw != g_pending_writes.end()) pw->store.clear(); // (the starting save itself keeps none either)
+        g_bound[slot] = {id, g_published};
+        how = "a new game's starting save: no outfits";
+    } else if (pw != g_pending_writes.end()) {
         g_published = pw->store;
         how = "restored (saved moments ago)";
     } else if (g_bound.empty()) {
