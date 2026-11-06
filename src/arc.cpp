@@ -119,6 +119,8 @@ struct Peek {
     std::string badge_set[5], nb_set[2];
     U64 trk = 0, hp_gauge = 0;       // the HP tracker (the peek's home) and its own gauge (hidden while shown)
     std::string icon_set[5];         // last icon set per position
+    bool slide_b = false;            // the scroll's slide: which class set (a / b) the last step used
+    std::string slide_set[20];       // its class on each element (frames, icons, badges, then the texts)
 } g_peek;
 bool g_peek_down = false;             // the arc key on the last frame
 
@@ -235,10 +237,12 @@ void peek_draw(U64 self)
 // time; none between, so each plays again from its start.
 enum class PeekAnim { None, In, Out };
 constexpr U64 kPeekOutMs = 270; // the closing fade (peek_gen.py OUT_TOTAL, 0.25 s) and a little more
+void peek_slide_clear();
 
 void peek_animate(PeekAnim a)
 {
     Peek& p = g_peek;
+    peek_slide_clear(); // (the opening's classes play again; a slide's would win over them)
     bool in = a == PeekAnim::In;
     set_class(p.arc, "om-peek-in-arc", in);
     for (int k = 0; k < 5; ++k) {
@@ -253,6 +257,58 @@ void peek_animate(PeekAnim a)
         if (b) set_class(b, "om-peek-in-name", in); // (with the texts)
     if (U64 box = find_by_class(p.wrap, "om-hk-caps", 1)) set_class(box, "om-peek-in-name", in);
     set_class(p.wrap, "om-peek-out-wrap", a == PeekAnim::Out);
+}
+
+// The scroll's slide (2026-11-06, the user's pick of the mockups: without it a step showed no direction). Each slot's
+// frame, icon and badge glides from where its new outfit was, or comes in from beyond the arc's end; the texts rise or
+// drop in. The a / b class sets alternate, so a step right after another starts its own slide (tools/peek_gen.py).
+// dir: +1 the outfits moved up (the next outfit), -1 down.
+U64 peek_slide_element(int i)
+{
+    Peek& p = g_peek;
+    if (i < 5) return p.frame[i];
+    if (i < 10) return p.icon[i - 5];
+    if (i < 15) return p.badge[i - 10];
+    if (i == 15) return p.label;
+    if (i == 16) return p.name;
+    if (i < 19) return p.nb[i - 17];
+    return find_by_class(p.wrap, "om-hk-caps", 1);
+}
+
+void peek_slide_clear()
+{
+    Peek& p = g_peek;
+    for (int i = 0; i < 20; ++i) {
+        if (p.slide_set[i].empty()) continue;
+        if (U64 el = peek_slide_element(i)) set_class(el, p.slide_set[i].c_str(), false);
+        p.slide_set[i].clear();
+    }
+}
+
+void peek_slide(int dir)
+{
+    Peek& p = g_peek;
+    int n = int(p.entries.size());
+    if (n < 2) return; // (one outfit: nothing moves)
+    p.slide_b = !p.slide_b;
+    char ab = p.slide_b ? 'b' : 'a', ud = dir > 0 ? 'u' : 'd';
+    int lo = -std::min(2, (n - 1) / 2), hi = std::min(2, n / 2); // (the positions shown, as peek_draw)
+    char cls[48];
+    for (int i = 0; i < 20; ++i) {
+        U64 el = peek_slide_element(i);
+        if (!el) continue;
+        if (i < 15) {
+            int k = i % 5, from = k + dir - 2;
+            const char* part = i < 5 ? "frame" : i < 10 ? "icon" : "badge";
+            std::snprintf(cls, sizeof cls, "om-peek-sl%c-%c%c-%s-%d", ab, from >= lo && from <= hi ? 'm' : 'e', ud,
+                          part, k);
+        } else {
+            std::snprintf(cls, sizeof cls, "om-peek-sl%c-t%c", ab, ud);
+        }
+        if (!p.slide_set[i].empty() && p.slide_set[i] != cls) set_class(el, p.slide_set[i].c_str(), false);
+        set_class(el, cls, true);
+        p.slide_set[i] = cls;
+    }
 }
 
 void peek_open(U64 self)
@@ -432,6 +488,7 @@ void peek_frame(U64 self)
             long long m = (static_cast<long long>(p.sel) - steps) % n;
             p.sel = static_cast<size_t>(m < 0 ? m + n : m);
             peek_draw(self);
+            peek_slide(steps < 0 ? 1 : -1); // (towards you: the next outfit, the arc's outfits move up)
         }
     }
     peek_sync_live(p.open);

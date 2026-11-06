@@ -85,6 +85,69 @@ def slot_motion(k, base_op, pulse):
     return total, fn
 
 
+# The scroll's slide (2026-11-06, the user's pick of round 14's mockups): on a step every slot's frame, icon and badge
+# glides from where its new outfit was (position, size, opacity) to its own place; an outfit coming in at an end of the
+# arc fades in from one step beyond it, or from a position not shown (fewer than 5 outfits). The texts rise / drop in.
+# Classes (set by the plugin on each step): om-peek-sl<a|b>-<m|e><u|d>-<frame|icon|badge>-<k> and
+# om-peek-sl<a|b>-t<u|d>; a / b alternate so a step right after another restarts; m = moved from a shown neighbour,
+# e = entered; u = the outfits moved up (the next outfit), d = down.
+SLIDE_S, SLIDE_STEPS, SLIDE_TEXT_DY = 0.18, 12, 9.0
+
+
+def frac_slot(kf):
+    """A fractional position along the arc (beyond 0..4: past an end): its centre, frame size, base opacity."""
+    a = math.radians((kf - 2) * STEP)
+    d = abs(kf - 2)
+    if d <= 2:
+        i = min(int(d), 1)
+        t = d - i
+        size = SIZES[i] + (SIZES[i + 1] - SIZES[i]) * t
+        op = OPACITY[i] + (OPACITY[i + 1] - OPACITY[i]) * t
+    else:
+        size, op = SIZES[2] * 0.75, 0.0
+    return C[0] - R * math.cos(a), C[1] + R * math.sin(a), size, op
+
+
+def slide_css():
+    out = []
+    ease = lambda t: 1 - (1 - t) ** 3  # OutCubic, sampled (the game's keyframes are linear between stops)
+    for ab in 'ab':
+        for dd, step in (('u', 1), ('d', -1)):
+            for k in range(5):
+                x, y, f, op = frac_slot(k)
+                for me in 'me':
+                    if me == 'm' and not 0 <= k + step <= 4:
+                        continue
+                    sx, sy, sf, sop = frac_slot(k + step)
+                    if me == 'e':
+                        sop = 0.0
+                    for part, ox, oy, scale_op in (('frame', 0, 0, 1.0), ('icon', 0, 0, 1.0 if k == 2 else 0.9),
+                                                   ('badge', 0.36, 0.34, 1.0)):
+                        own_op = op * scale_op
+                        src_op = sop * scale_op
+                        dx = (sx + sf * ox) - (x + f * ox)
+                        dy = (sy + sf * oy) - (y + f * oy)
+                        sc0 = sf / f
+                        name = f'om-peek-sl{ab}-{me}{dd}-{part}-{k}'
+
+                        def fn(t, dx=dx, dy=dy, sc0=sc0, src_op=src_op, own_op=own_op):
+                            e = ease(t / SLIDE_S)
+                            sc = sc0 + (1 - sc0) * e
+                            return {'opacity': f'{src_op + (own_op - src_op) * e:.3f}',
+                                    'translate-x': f'{dx * (1 - e):.2f}px', 'translate-y': f'{dy * (1 - e):.2f}px',
+                                    'scale-x': f'{sc:.3f}', 'scale-y': f'{sc:.3f}'}
+                        out.append(keyframes(name, SLIDE_S, fn, SLIDE_STEPS))
+                        out.append(f'.{name} {{ animation-name: {name}; animation-duration: {SLIDE_S:.2f}s; '
+                                   'animation-timing-function: Linear; animation-fill-mode: forwards; }')
+            name = f'om-peek-sl{ab}-t{dd}'
+            out.append(keyframes(name, SLIDE_S, lambda t, step=step: {
+                'opacity': f'{ease(t / SLIDE_S):.3f}',
+                'translate-y': f'{step * SLIDE_TEXT_DY * (1 - ease(t / SLIDE_S)):.2f}px'}, SLIDE_STEPS))
+            out.append(f'.{name} {{ animation-name: {name}; animation-duration: {SLIDE_S:.2f}s; '
+                       'animation-timing-function: Linear; animation-fill-mode: forwards; }')
+    return out
+
+
 def frame(selected):
     n = 126
     im = Image.new('RGBA', (n, n), (0, 0, 0, 0))
@@ -234,6 +297,7 @@ def css():
                f'top: {y - 26:.1f}px; width: 320px; height: 20px; text-align: right; font-size: 14px; color: {GOLD}; }}')
     out.append(f'.om-peek-name {{ position: absolute; left: {right - 320:.1f}px; '
                f'top: {y - 6:.1f}px; width: 320px; height: 30px; text-align: right; font-size: 22px; color: {IVORY}; }}')
+    out += slide_css()  # (last: a slide's class wins over the opening's)
     return '\n'.join(out) + '\n'
 
 
