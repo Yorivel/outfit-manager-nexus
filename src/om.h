@@ -184,6 +184,33 @@ struct SlotImage {
 // immunity to Freeze / Burn. Item data never changes in a session: cached per key.
 using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
 
+// Save binding. The game's save writes / loads are seen on its own threads (file hook, folder watch), so they work
+// on g_published, a copy of the active set the UI thread publishes after each change (all under g_store_mu).
+// A load replaces g_published and bumps g_generation; the UI thread then takes it over (pull_active).
+// A save is recognised by its save.save content (hash), with size + write time as the quick check.
+struct SaveId {
+    U64 size = 0, time = 0, hash = 0; // 0 = not known
+    bool same(const SaveId& o) const
+    {
+        if (hash && o.hash) return hash == o.hash;
+        return size && size == o.size && time == o.time;
+    }
+};
+struct BoundSet {
+    SaveId id;
+    Store store;
+};
+// A save the game is writing; it is bound once the file stays put. Kept in the outfit file too, so a write the
+// game was not left time to finish (quit / crash right after saving) is bound on the next start.
+struct PendingWrite {
+    U32 slot;
+    std::wstring path;
+    Store store;      // the active outfits when the game started writing
+    SaveId id;        // last size + time seen
+    U64 since;        // tick of the last change
+    U64 started;      // system time (FILETIME) the write was first seen
+};
+
 // The two hands' weapon slots (equipment-0: MainWeapon_*_R, equipment-1: MainWeapon_*_L). Two one-handed weapons worn
 // in each other's hands count as the outfit's (2026-11-06, a player's log: the game refuses to take either off -
 // "no items available to be equipped after removal" - so a load could never swap them back; every load ended 18 of 20

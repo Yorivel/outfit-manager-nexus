@@ -2,6 +2,7 @@
 #include "om.h"
 #include "items.h"
 #include "addrs.h"
+#include "store.h"
 #include "om_rest.h"
 
 namespace om {
