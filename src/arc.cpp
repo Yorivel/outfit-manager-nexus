@@ -4,14 +4,15 @@
 #include "addrs.h"
 #include "ui.h"
 #include "items.h"
+#include "gear.h"
 #include "looks_view.h"
+#include "load.h"
 #include "prompts.h"
 #include "settings.h"
 #include "wheel_draw.h"
 #include "wheel_hooks.h"
 #include "input.h"
 #include "pads.h"
-#include "om_rest.h"
 
 namespace om {
 

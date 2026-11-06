@@ -4,12 +4,12 @@
 #include "addrs.h"
 #include "ui.h"
 #include "store.h"
+#include "load.h"
 #include "actions.h"
 #include "settings.h"
 #include "wheel_draw.h"
 #include "wheel_hooks.h"
 #include "input.h"
-#include "om_rest.h"
 
 namespace om {
 

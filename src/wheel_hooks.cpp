@@ -4,9 +4,12 @@
 #include "addrs.h"
 #include "ui.h"
 #include "items.h"
+#include "gear.h"
 #include "store.h"
 #include "looks.h"
 #include "looks_view.h"
+#include "load.h"
+#include "stash.h"
 #include "prompts.h"
 #include "actions.h"
 #include "settings.h"
@@ -14,7 +17,6 @@
 #include "pads.h"
 #include "selftest.h"
 #include "setup.h"
-#include "om_rest.h"
 
 namespace om {
 

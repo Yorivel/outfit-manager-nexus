@@ -4,9 +4,10 @@
 #include "addrs.h"
 #include "ui.h"
 #include "items.h"
+#include "gear.h"
 #include "looks.h"
+#include "load.h"
 #include "wheel_hooks.h"
-#include "om_rest.h"
 
 namespace om {
 

@@ -2,12 +2,14 @@
 #include "om.h"
 #include "looks.h"
 #include "addrs.h"
+#include "gear.h"
 #include "store.h"
 #include "looks_view.h"
+#include "load.h"
+#include "stash.h"
 #include "prompts.h"
 #include "wheel_draw.h"
 #include "wheel_hooks.h"
-#include "om_rest.h"
 
 namespace om {
 

@@ -6,6 +6,8 @@
 #include "items.h"
 #include "store.h"
 #include "looks_view.h"
+#include "load.h"
+#include "stash.h"
 #include "prompts.h"
 #include "actions.h"
 #include "wheel_draw.h"
@@ -13,7 +15,6 @@
 #include "input.h"
 #include "pads.h"
 #include "arc.h"
-#include "om_rest.h"
 
 namespace om {
 

@@ -281,11 +281,23 @@ using EquipVisCheckFn = float(__fastcall*)(U64 vc, const U32* part, std::uint8_t
 // The model rebuild job's swap (a job thread): pieces put on outside the wheel (the Armor tab, the game) get their new
 // model parts here, without a headgear switch; their character is synced on the next UI frame.
 using ModelSwapFn = void(__fastcall*)(U64 job, U64, U64, char, std::uint8_t*);
+constexpr int kFault = INT32_MIN;
+
+constexpr U16 kBagCarried = 1, kBagKeyItems = 4, kBagStorage = 7, kBagWardrobe = 14;
 
 // A companion's piece in storage / the wardrobe: the UI request derives the bag from the item's type (the carried bag),
 // but the request under it (0x9e0290) takes a bag id, as Kliff's direct equip does. For our call it gets the piece's
 // own bag (hooked; every other call passes through untouched), so the game's own path does the rest.
 using CompanionEquipFn = U64(__fastcall*)(U64, U64, U64, U64, U64, U64);
+
+// Bag = {item[] (200 bytes each) @0, short capacity @+0xc, u16 id @+0x10}; the inventory manager lists them.
+struct ItemAt {
+    U16 bag;
+    short pos;
+    U64 item; // its 200 bytes in the bag
+};
+
+constexpr U64 bag_bit(U16 bag) { return bag < 64 ? 1ull << bag : 0; }
 struct DeferredEquip {
     U64 uid;
     U16 slot, key;
@@ -306,6 +318,30 @@ struct AsyncLoad {
     U64 started = 0;
     bool active = false;
     std::vector<LeavingPiece> leaving;
+};
+
+// --- Where the pieces are -----------------------------------------------------------------------
+// A saved piece is somewhere while its uid is: worn by this character, in a bag (carried, storage, wardrobe, other) or
+// worn by another character. One that is nowhere (sold, dropped, dismantled) can be replaced by another copy of the
+// same item (key) that the outfit does not use yet. (Moving an item into / out of storage or the wardrobe gives it a
+// new uid: adopt_returned follows it.)
+enum class Where : std::uint8_t { Worn, Carried, Storage, Wardrobe, Other, Companion };
+std::string where(U64 a);
+struct Owned {
+    U64 uid;
+    U16 key;
+    Where where;
+    U16 who = kNoCharacter; // Companion: whose
+    U64 actor = 0;          // Companion: their actor
+    U16 slot = 0xFFFF;      // Companion: the equip slot they wear it in
+};
+
+// then searches 3 pointer hops out from the controlled actor and the player holder for those actors (pointers) or
+// their u32 ids (actor+0x60).
+
+struct PieceCheck {
+    std::vector<std::pair<size_t, U64>> copies; // outfit item index -> uid of the copy offered for it
+    std::vector<size_t> gone;                   // item indices with no copy
 };
 using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
 

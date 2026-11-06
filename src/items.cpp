@@ -2,9 +2,9 @@
 #include "om.h"
 #include "items.h"
 #include "addrs.h"
+#include "gear.h"
 #include "store.h"
 #include "wheel_draw.h"
-#include "om_rest.h"
 
 namespace om {
 
