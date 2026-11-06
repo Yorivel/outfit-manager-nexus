@@ -281,6 +281,11 @@ using EquipVisCheckFn = float(__fastcall*)(U64 vc, const U32* part, std::uint8_t
 // The model rebuild job's swap (a job thread): pieces put on outside the wheel (the Armor tab, the game) get their new
 // model parts here, without a headgear switch; their character is synced on the next UI frame.
 using ModelSwapFn = void(__fastcall*)(U64 job, U64, U64, char, std::uint8_t*);
+
+// A companion's piece in storage / the wardrobe: the UI request derives the bag from the item's type (the carried bag),
+// but the request under it (0x9e0290) takes a bag id, as Kliff's direct equip does. For our call it gets the piece's
+// own bag (hooked; every other call passes through untouched), so the game's own path does the rest.
+using CompanionEquipFn = U64(__fastcall*)(U64, U64, U64, U64, U64, U64);
 struct DeferredEquip {
     U64 uid;
     U16 slot, key;
@@ -381,6 +386,17 @@ constexpr U8 kPadCross = 1;   // the bits pad_buttons() returns: Cross / A held,
 constexpr U8 kPadL1 = 4;      // L1 / LB held (the Outfit Arc's modifier),
 constexpr U8 kPadUp = 8;      // the d-pad's up (or a diagonal with it),
 constexpr U8 kPadDown = 16;   // and down
+
+// --- Gear-wheel UI, patched in memory -----------------------------------------------------------
+// The game builds its screens from compiled UI files (ui/bin__/*.uibinary). The Outfits tab header and the value text
+// are added to the gear wheel's files while the game loads them (uibin_patch.cpp), onto whatever copy it loads: its
+// own, or another mod's that DMM chose. The mod ships none of these files, so it doesn't conflict over them, and a game
+// update that changes them needs no new version as long as the elements copied are still there.
+// The loader reads a file (path from "%#%#%#_%#.uibinary") and wraps the bytes in a stream on its stack
+// {vt, .., data +0x20, size u32 +0x28, pos u32 +0x2c} for the parser (its only call). The hook gives the parser a
+// patched copy instead (kept for the whole run: what the parser makes may point into it). The path is the loader's
+// local: inline, or on the heap when long; where both are relative to the stream is read from the loader's code.
+using UiParseFn = U64(__fastcall*)(U64 loader, U64 stream);
 
 // (defined in core.cpp)
 extern U64 g_base;

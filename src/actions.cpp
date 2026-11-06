@@ -8,6 +8,7 @@
 #include "settings.h"
 #include "wheel_draw.h"
 #include "wheel_hooks.h"
+#include "setup.h"
 #include "om_rest.h"
 
 namespace om {

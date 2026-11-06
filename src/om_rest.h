@@ -20,6 +20,9 @@ void release_player(U64* ctx);
 U16 character_of(U64 actor);
 U16 current_character();
 std::string where(U64 a);
+extern CompanionEquipFn g_companion_equip_orig;
+U64 __fastcall companion_equip_hook(U64 target, U64 err, U64 id, U64 bag, U64 pos, U64 slot);
+U64 call_inventory(U64 actor);
 U64 find_copy(U64 uid, U16 key);
 const OutfitItem* outfit_piece(const Outfit& o, U16 slot);
 extern AsyncLoad g_async;
@@ -34,9 +37,6 @@ void pump_async(U64 self);
 extern StashCheck g_stash_check;
 void stash_verify(U64 self);
 std::vector<StashDest> stash_destinations();
-extern std::wstring g_log_path;
-void self_test(U64 self);
 void prepare_outfits();
-void features_toast(U64 self);
 
 } // namespace om
