@@ -177,3 +177,29 @@ feature.missing_pieces = la question des pièces manquantes
 feature.companions = tenues des compagnons
 feature.appearance = apparence
 feature.settings = réglages des tenues (défilement)
+
+# Outfit Arc
+peek.label = TENUE {n}
+peek.unsaved_label = NON ENREGISTRÉE
+peek.unsaved = Tenue actuelle
+setting.peekkey = Arc des tenues
+setting.peekpad = Arc des tenues
+value.press_key = Appuyez sur une touche...
+value.peekpad = {button} + Bas
+key.mouse3 = Bouton du milieu
+key.mouse4 = Souris 4
+key.mouse5 = Souris 5
+desc.peekkey.off = Maintenez une touche pour afficher vos tenues sur un arc à côté de votre personnage, faites défiler pour en choisir une et relâchez pour la porter. Cliquez pour choisir la touche.
+desc.peekkey.on = Maintenez cette touche pour afficher vos tenues sur un arc à côté de votre personnage. Faites défiler pour choisir, relâchez pour la porter. Cliquez pour choisir une autre touche.
+desc.peekpad.off = Maintenez {button} et appuyez vers le bas sur la croix directionnelle pour afficher vos tenues sur un arc à côté de votre personnage. Faites défiler pour l'activer.
+desc.peekpad.on = Maintenez {button} et appuyez vers le bas sur la croix directionnelle pour afficher vos tenues sur un arc à côté de votre personnage. Haut et bas s'y déplacent ; relâchez {button} pour porter la tenue en surbrillance.
+desc.peekkey.wait = Appuyez sur la touche ou le bouton de souris à utiliser. Échap annule, Retour arrière la désactive.
+
+# Hotkeys
+setting.hotkey = Raccourci
+value.no_hotkey = Aucun
+desc.hotkey.off = Cliquez puis appuyez sur une touche (avec Ctrl, Alt ou Maj si vous voulez) pour porter cette tenue avec elle en jeu.
+desc.hotkey.on = Appuyez sur {hotkey} en jeu pour porter cette tenue. Cliquez pour en choisir un autre ; Retour arrière l'efface alors.
+desc.hotkey.wait = Appuyez sur la touche ou la combinaison à utiliser (Ctrl, Alt, Maj et une touche ou un bouton de souris). Échap annule, Retour arrière l'efface.
+toast.hotkey_moved = {hotkey} a été déplacé ici depuis « {outfit} »
+toast.hotkey_arc = {hotkey} ouvre l'Arc des tenues ; choisissez une autre touche

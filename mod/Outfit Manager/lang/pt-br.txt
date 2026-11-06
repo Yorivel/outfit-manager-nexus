@@ -177,3 +177,29 @@ feature.missing_pieces = a pergunta sobre peças faltando
 feature.companions = trajes dos companheiros
 feature.appearance = aparência
 feature.settings = configurações dos trajes (rolar)
+
+# Outfit Arc
+peek.label = TRAJE {n}
+peek.unsaved_label = NÃO SALVO
+peek.unsaved = Traje atual
+setting.peekkey = Arco de trajes
+setting.peekpad = Arco de trajes
+value.press_key = Pressione uma tecla...
+value.peekpad = {button} + Baixo
+key.mouse3 = Botão do meio
+key.mouse4 = Mouse 4
+key.mouse5 = Mouse 5
+desc.peekkey.off = Segure uma tecla para mostrar seus trajes em um arco ao lado do personagem; role para escolher um e solte para vesti-lo. Clique para escolher a tecla.
+desc.peekkey.on = Segure esta tecla para mostrar seus trajes em um arco ao lado do personagem. Role para escolher, solte para vestir. Clique para escolher outra tecla.
+desc.peekpad.off = Segure {button} e pressione para baixo no direcional para mostrar seus trajes em um arco ao lado do personagem. Role para ativar.
+desc.peekpad.on = Segure {button} e pressione para baixo no direcional para mostrar seus trajes em um arco ao lado do personagem. Cima e baixo se movem nele; solte {button} para vestir o traje destacado.
+desc.peekkey.wait = Pressione a tecla ou o botão do mouse a usar. Esc cancela, Backspace desativa.
+
+# Hotkeys
+setting.hotkey = Atalho
+value.no_hotkey = Nenhum
+desc.hotkey.off = Clique e pressione uma tecla (com Ctrl, Alt ou Shift, se quiser) para vestir este traje com ela durante o jogo.
+desc.hotkey.on = Pressione {hotkey} durante o jogo para vestir este traje. Clique para escolher outro; Backspace o apaga.
+desc.hotkey.wait = Pressione a tecla ou combinação a usar (Ctrl, Alt, Shift e uma tecla ou botão do mouse). Esc cancela, Backspace apaga.
+toast.hotkey_moved = {hotkey} foi movido para cá de "{outfit}"
+toast.hotkey_arc = {hotkey} abre o Arco de trajes; escolha outra tecla

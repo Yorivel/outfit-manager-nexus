@@ -177,3 +177,29 @@ feature.missing_pieces = la pregunta de piezas que faltan
 feature.companions = atuendos de compañeros
 feature.appearance = apariencia
 feature.settings = ajustes de atuendos (desplazar)
+
+# Outfit Arc
+peek.label = ATUENDO {n}
+peek.unsaved_label = SIN GUARDAR
+peek.unsaved = Atuendo actual
+setting.peekkey = Arco de atuendos
+setting.peekpad = Arco de atuendos
+value.press_key = Pulsa una tecla...
+value.peekpad = {button} + Abajo
+key.mouse3 = Botón central
+key.mouse4 = Ratón 4
+key.mouse5 = Ratón 5
+desc.peekkey.off = Mantén una tecla para mostrar tus atuendos en un arco junto a tu personaje; desplaza para elegir uno y suelta para ponértelo. Haz clic para elegir la tecla.
+desc.peekkey.on = Mantén esta tecla para mostrar tus atuendos en un arco junto a tu personaje. Desplaza para elegir, suelta para ponértelo. Haz clic para elegir otra tecla.
+desc.peekpad.off = Mantén {button} y pulsa abajo en la cruceta para mostrar tus atuendos en un arco junto a tu personaje. Desplaza para activarlo.
+desc.peekpad.on = Mantén {button} y pulsa abajo en la cruceta para mostrar tus atuendos en un arco junto a tu personaje. Arriba y abajo se mueven por él; suelta {button} para ponerte el atuendo resaltado.
+desc.peekkey.wait = Pulsa la tecla o el botón del ratón que quieras usar. Esc cancela, Retroceso lo desactiva.
+
+# Hotkeys
+setting.hotkey = Atajo
+value.no_hotkey = Ninguno
+desc.hotkey.off = Haz clic y pulsa una tecla (con Ctrl, Alt o Mayús si quieres) para ponerte este atuendo con ella mientras juegas.
+desc.hotkey.on = Pulsa {hotkey} mientras juegas para ponerte este atuendo. Haz clic para elegir otro; Retroceso lo borra.
+desc.hotkey.wait = Pulsa la tecla o combinación que quieras usar (Ctrl, Alt, Mayús y una tecla o botón del ratón). Esc cancela, Retroceso lo borra.
+toast.hotkey_moved = {hotkey} se ha movido aquí desde «{outfit}»
+toast.hotkey_arc = {hotkey} abre el Arco de atuendos; elige otra tecla

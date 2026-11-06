@@ -45,6 +45,21 @@
 /* A setting's value under its name: the label wrap's second text (OmValueText, tools/uibin_tab.py), the game's gold
    caption style; its box as the old value pictures had (30px high, from 2px under the slot's centre). */
 .quickslot-item-name.om-value-text { bottom: -32px; height: 30px; line-height: 30px; }
+/* An outfit's hotkey on its slot, under the icon (OmValueText again): om-hotkey-plain when the wrap is a bare anchor at
+   the slot's centre, om-hotkey-eye when the wrap is the eye marker (offsets measured in game, 2026-11-06: the text sat 158 px right and
+   34 px above where the plain one does). */
+.quickslot-item-name.om-value-text.om-hotkey-plain { bottom: -64px; height: 22px; line-height: 22px; font-size: 15px; }
+/* The hotkey as the game's key caps (OmHkCaps, a row centred under the icon): modifier caps 36x22 (the game's 120x72
+   icons), the key's cap 22x22 (wide keys 36x22), "+" between; tinted like the game's key guide icons. Plain: the wrap
+   is an anchor at the slot's centre; eye: the wrap is the eye marker's 50px box (12px left, 4px under the centre). */
+.om-hk-caps { position: absolute; width: 180px; height: 22px; display: flex; flex-direction: row; justify-content: center; align-items: center; }
+.om-hk-caps-plain { left: -90px; top: 42px; }
+.om-hk-caps-eye { left: -78px; top: 38px; }
+.om-hk-mod { position: relative; width: 36px; height: 22px; background-color: #f6f0f0; background-blend-mode: multiply; }
+.om-hk-key { position: relative; width: 22px; height: 22px; background-color: #f6f0f0; background-blend-mode: multiply; }
+.om-hk-wide { width: 36px; }
+.om-hk-plus { position: relative; width: 12px; height: 22px; line-height: 22px; text-align: center; font-size: 15px; }
+.quickslot-item-name.om-value-text.om-hotkey-eye { bottom: -10px; height: 22px; line-height: 22px; font-size: 15px; translate-x: -150px; }
 /* A value setting's value under its name: the game's value text (tools/value_text_gen.py textures, 126x30). */
 .self-center.om-prompt-c { display: block; opacity: 1; left: 50%; top: 50%; width: 34px; height: 34px; rotate-z: 0deg; translate-x: -17px; translate-y: 4px; background-image: textureid(Common_Icon_Keyguide_PC_Mouse_left); }
 /* (Unused, kPlusSlotCentred = true: the "+" slot as an "add" button: no silhouette, its symbol centred, 72px box.) */

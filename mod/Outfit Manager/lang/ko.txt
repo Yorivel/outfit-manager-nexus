@@ -174,3 +174,29 @@ feature.missing_pieces = 없는 부위 확인
 feature.companions = 동료 의상
 feature.appearance = 외형
 feature.settings = 의상 설정 (스크롤)
+
+# Outfit Arc
+peek.label = 의상 {n}
+peek.unsaved_label = 저장 안 됨
+peek.unsaved = 현재 의상
+setting.peekkey = 의상 아크
+setting.peekpad = 의상 아크
+value.press_key = 키를 누르세요...
+value.peekpad = {button} + 아래
+key.mouse3 = 마우스 가운데 버튼
+key.mouse4 = 마우스 4
+key.mouse5 = 마우스 5
+desc.peekkey.off = 키를 누르고 있으면 캐릭터 옆 호 위에 의상이 표시됩니다. 스크롤해 고르고, 떼면 착용합니다. 클릭해 키를 선택합니다.
+desc.peekkey.on = 이 키를 누르고 있으면 캐릭터 옆 호 위에 의상이 표시됩니다. 스크롤해 고르고, 떼면 착용합니다. 클릭해 다른 키를 선택합니다.
+desc.peekpad.off = {button}을(를) 누른 채 방향 버튼 아래를 누르면 캐릭터 옆 호 위에 의상이 표시됩니다. 스크롤해 켭니다.
+desc.peekpad.on = {button}을(를) 누른 채 방향 버튼 아래를 누르면 캐릭터 옆 호 위에 의상이 표시됩니다. 위아래로 이동하고, {button}을(를) 떼면 선택한 의상을 착용합니다.
+desc.peekkey.wait = 사용할 키나 마우스 버튼을 누르세요. Esc는 취소, Backspace는 끄기입니다.
+
+# Hotkeys
+setting.hotkey = 단축키
+value.no_hotkey = 없음
+desc.hotkey.off = 클릭한 뒤 키를 누르면(원하면 Ctrl, Alt, Shift와 함께) 플레이 중 그 키로 이 의상을 착용합니다.
+desc.hotkey.on = 플레이 중 {hotkey}을(를) 누르면 이 의상을 착용합니다. 클릭해 다른 키를 고르고, Backspace로 지웁니다.
+desc.hotkey.wait = 사용할 키나 조합을 누르세요(Ctrl, Alt, Shift와 키 또는 마우스 버튼). Esc는 취소, Backspace는 지우기입니다.
+toast.hotkey_moved = {hotkey}을(를) "{outfit}"에서 여기로 옮겼습니다
+toast.hotkey_arc = {hotkey}은(는) 의상 아크를 엽니다. 다른 키를 고르세요

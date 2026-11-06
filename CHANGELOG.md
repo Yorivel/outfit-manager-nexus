@@ -2,6 +2,26 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
+## 0.4.0 (2026-11-06)
+
+- New: the Outfit Arc. Hold a key and your outfits fan out on an arc beside your character; scroll to pick one and let go to wear it, without opening the gear wheel. It opens on the outfit you're wearing and wraps around, in the same order as the Outfits tab. If what you wear isn't a saved outfit, a "Current Outfit" entry comes first, and letting go on it changes nothing.
+- New: the Outfit Arc on controllers: hold L1 / LB and press down on the d-pad; up and down move along it, letting go of L1 / LB wears the highlighted outfit.
+- The Outfit Arc's binding is on the gear wheel's + settings page, Off by default (in every layout, every key is already used by something). Click it and press any key or mouse button (middle, 4 or 5); Esc cancels, Backspace turns it off. The page shows the binding of the input you're using (keyboard and mouse, or your controller's own button names).
+- Loading from the Outfit Arc works exactly like a click in the wheel: pieces come from your bags, storage, wardrobe or companions, with the same questions. It closes by itself when you switch character or open the gear wheel.
+- While the Outfit Arc is open, the mouse wheel and the d-pad's up and down only move the arc: the camera doesn't zoom and the horse isn't called.
+- The Outfit Arc shows the same badges as the wheel: each outfit's climate thermometer on its slot (manual Cold / Heat, or Auto from its resistance), and beside the highlighted outfit's name its thermometer, the eye for custom looks and its hotkey.
+- New: per-outfit hotkeys. On an outfit's settings page, click Hotkey and press a key (with Ctrl, Alt or Shift if you like, or the key alone); pressing it while you play puts that outfit on. Hotkeys belong to the outfit, so each character has their own and they follow your saves.
+- Hotkeys show on the outfit's slot in the gear wheel as the game's own key icons. One combination belongs to one outfit: giving it to another moves it there. The Outfit Arc's key can't also be a hotkey.
+- A hotkey's key doesn't also do its normal action in the game. A key alone (say X) still works while you hold Shift to sprint, unless Shift + X is another outfit's hotkey. Overwrite with "Keep settings" keeps the hotkey; "Reset all" clears it. Hotkeys don't work in menus, while naming an outfit, or with the Outfit Arc open.
+- Fix: after a game patch renumbers items, a save written before the patch brings back outfits with the old item numbers. The gear wheel repaired them when it opened, but anything that loaded before that could fetch the wrong pieces. The repair now runs for every way of loading.
+- Translations: the new lines in all 14 languages (AI-made like the rest; corrections welcome).
+- Technical: the Outfit Arc's elements are added in memory to the status screen (statusgaugeview2_game.uibinary, the same loader hook as the gear wheel's tab), inside the HP tracker so the arc follows the character. Its art and layout ship as an XML merge and a CSS merge, like the rest of the mod.
+- Technical: the arc runs from the status screen's frame call, found by its class name (UIGamePlayControlRootStatusGauge) and checked against an address the resolver already finds. A load started from the arc finishes even if the gear wheel was never opened (the UI thread is now known from the status screen).
+- Technical: inputs are read from Windows, not the game: keyboard keys from the game window's messages (the game reads them there too), the mouse wheel through a low-level mouse hook that only exists while the arc is open (in controller mode the game passes no wheel to its window). The arc key and hotkey keys are filtered out of the game's window messages and raw mouse input while you play.
+- Technical: controllers: PlayStation pads (DualSense, DualShock 4) are read from their HID reports, Xbox pads through XInput. While the arc is open from the pad, the d-pad's up and down are taken out of what the game reads: the PlayStation pad's reports (ReadFile / GetOverlappedResult on the game's own pad handle; the Bluetooth checksum is rewritten) and XInput's button state (xinput1_4). No game addresses are involved.
+- Technical: the hotkey key caps: the gear-wheel patch adds a row of seven image elements next to each slot's value text; the plugin fills them with the game's key guide icons (Common_Icon_Keyguide_PC_*). Keys the game has no icon for (F13-F24) show as text.
+- Tested on: Crimson Desert 1.0.0.3549 (Steam build 26448710, the 5 November patch) with DMM 4.7.3. Controllers: DualSense (native); Xbox through Steam Input.
+
 ## 0.3.3 (2026-11-05)
 
 - Compatibility: works alongside other mods that change the gear wheel, in any load order. Tested with Better Radial Menus: both mods now apply in full, with no conflict in DMM.

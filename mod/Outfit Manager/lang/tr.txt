@@ -177,3 +177,29 @@ feature.missing_pieces = eksik parça sorusu
 feature.companions = yoldaşların kıyafetleri
 feature.appearance = görünüm
 feature.settings = kıyafet ayarları (kaydırma)
+
+# Outfit Arc
+peek.label = KIYAFET {n}
+peek.unsaved_label = KAYDEDİLMEDİ
+peek.unsaved = Mevcut kıyafet
+setting.peekkey = Kıyafet Yayı
+setting.peekpad = Kıyafet Yayı
+value.press_key = Bir tuşa basın...
+value.peekpad = {button} + Aşağı
+key.mouse3 = Orta fare tuşu
+key.mouse4 = Fare 4
+key.mouse5 = Fare 5
+desc.peekkey.off = Kıyafetlerini karakterinin yanında bir yay üzerinde göstermek için bir tuşu basılı tut; seçmek için kaydır, giymek için bırak. Tuşu seçmek için tıkla.
+desc.peekkey.on = Kıyafetlerini karakterinin yanında bir yay üzerinde göstermek için bu tuşu basılı tut. Seçmek için kaydır, giymek için bırak. Başka bir tuş seçmek için tıkla.
+desc.peekpad.off = Kıyafetlerini karakterinin yanında bir yay üzerinde göstermek için {button} tuşunu basılı tutup yön tuşlarında aşağıya bas. Açmak için kaydır.
+desc.peekpad.on = Kıyafetlerini karakterinin yanında bir yay üzerinde göstermek için {button} tuşunu basılı tutup yön tuşlarında aşağıya bas. Yukarı ve aşağı yay üzerinde hareket eder; vurgulanan kıyafeti giymek için {button} tuşunu bırak.
+desc.peekkey.wait = Kullanmak istediğin tuşa veya fare düğmesine bas. Esc iptal eder, Geri tuşu kapatır.
+
+# Hotkeys
+setting.hotkey = Kısayol
+value.no_hotkey = Yok
+desc.hotkey.off = Tıkla, sonra oynarken bu kıyafeti giymek için bir tuşa bas (istersen Ctrl, Alt veya Shift ile).
+desc.hotkey.on = Oynarken bu kıyafeti giymek için {hotkey} tuşuna bas. Başka birini seçmek için tıkla; Geri tuşu onu siler.
+desc.hotkey.wait = Kullanmak istediğin tuşa veya kombinasyona bas (Ctrl, Alt, Shift ve bir tuş ya da fare düğmesi). Esc iptal eder, Geri tuşu siler.
+toast.hotkey_moved = {hotkey} "{outfit}" kıyafetinden buraya taşındı
+toast.hotkey_arc = {hotkey} Kıyafet Yayı'nı açar; başka bir tuş seç

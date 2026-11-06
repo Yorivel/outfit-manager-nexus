@@ -441,6 +441,10 @@ struct Outfit {
     bool load_weapons = true;
     std::uint8_t climate = 0; // Conditions: 0 Auto (from its resistance), 1 Cold, 2 Heat (manual), 3 Off (a badge only)
     std::uint8_t stash = 0;   // Conditions: Stash, 0 = the global setting, 1 on, 2 off
+    // Its hotkey (the outfit's settings, 2026-11-06): a key or mouse button (virtual-key code; 0 = none) and the
+    // modifiers held with it (kModCtrl / kModAlt / kModShift; none: the key alone). Pressed in play, the outfit loads.
+    U16 hk_vk = 0;
+    std::uint8_t hk_mods = 0;
     // The character's last loaded outfit (one per character, kept per save): its pieces' looks apply wherever the exact
     // piece is worn in its slot, also after other slots were changed by hand.
     bool worn = false;
@@ -1138,6 +1142,13 @@ void save_outfits();
 void publish_looks(const Store& s); // (Appearance)
 void mark_worn(int index);
 extern bool g_stash;
+std::atomic<U32> g_peek_key{0};           // the Outfit Arc's key (a virtual-key code; 0 = Off)
+std::string hotkey_name(U32 vk, std::uint8_t mods); // (an outfit's hotkey as shown: below, with the key names)
+// The current character's hotkeys for the input filters (another thread): vk | mods << 8 per outfit, 0 = none.
+std::atomic<U32> g_hotkeys[16] = {};
+std::atomic<bool> g_peek_pad{false};       // the Outfit Arc on controllers: hold L1 / LB, press the d-pad's down
+void peek_key_load(const std::string& id); // (from its id in the outfits file)
+const char* peek_key_id();                 // (its id to save; null: Off)
 extern bool g_take_from_companions;
 extern bool g_messages;
 extern std::string g_language;
@@ -1582,11 +1593,114 @@ bool clear_label(U64 mark);
 // A setting's value under its name, in the game's gold caption style: a second text in the slot's label wrap
 // (OmValueText, added to the game's compiled slot by tools/uibin_tab.py; the name's text holds one colour only). The
 // wrap shows with the label. "" hides it; without the element (the patch not mounted) nothing is shown.
-bool show_value(U64 root, const std::string& text)
+// The game's key icon for a key (Common_Icon_Keyguide_PC_<name>), wide: a wide cap (120 px) instead of a square one;
+// null: the game has none (the text is shown instead).
+const char* key_icon(U32 vk, bool& wide)
 {
+    static char buf[64];
+    wide = false;
+    const char* n = nullptr;
+    if ((vk >= '0' && vk <= '9') || (vk >= 'A' && vk <= 'Z')) {
+        snprintf(buf, sizeof buf, "Common_Icon_Keyguide_PC_%c", char(vk));
+        return buf;
+    }
+    if (vk >= VK_F1 && vk <= VK_F12) {
+        snprintf(buf, sizeof buf, "Common_Icon_Keyguide_PC_F%u", vk - VK_F1 + 1);
+        return buf;
+    }
+    if (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD9) {
+        snprintf(buf, sizeof buf, "Common_Icon_Keyguide_PC_num%u", vk - VK_NUMPAD0);
+        return buf;
+    }
+    switch (vk) {
+    case VK_CONTROL: n = "Ctrl"; wide = true; break;
+    case VK_MENU: n = "Alt"; wide = true; break;
+    case VK_SHIFT: n = "Shift"; wide = true; break;
+    case VK_TAB: n = "Tab"; wide = true; break;
+    case VK_CAPITAL: n = "Caps"; wide = true; break;
+    case VK_BACK: n = "Backspace"; wide = true; break;
+    case VK_INSERT: n = "Insert"; wide = true; break;
+    case VK_DELETE: n = "Del"; wide = true; break;
+    case VK_HOME: n = "Home"; wide = true; break;
+    case VK_END: n = "End"; wide = true; break;
+    case VK_PRIOR: n = "Pageup"; wide = true; break;
+    case VK_NEXT: n = "Pagedown"; wide = true; break;
+    case VK_SPACE: n = "Spacer"; wide = true; break;
+    case VK_RETURN: n = "Enter"; break;
+    case VK_LEFT: n = "Left"; break;
+    case VK_RIGHT: n = "Right"; break;
+    case VK_UP: n = "Up"; break;
+    case VK_DOWN: n = "Down"; break;
+    case VK_OEM_3: n = "Backquote"; break;
+    case VK_OEM_MINUS: n = "Hyphen"; break;
+    case VK_OEM_PLUS: n = "Plus"; break;
+    case VK_OEM_4: n = "Lbracket"; break;
+    case VK_OEM_6: n = "Rbracket"; break;
+    case VK_OEM_5: n = "Backslash"; break;
+    case VK_OEM_1: n = "Semicolon"; break;
+    case VK_OEM_7: n = "Doublequotes"; break;
+    case VK_OEM_COMMA: n = "Comma"; break;
+    case VK_OEM_PERIOD: n = "Dot"; break;
+    case VK_OEM_2: n = "Slash"; break;
+    case VK_MULTIPLY: n = "num_Asterisk"; break;
+    case VK_ADD: n = "num_Plus"; break;
+    case VK_SUBTRACT: n = "num_Minus"; break;
+    case VK_DECIMAL: n = "num_Dot"; break;
+    case VK_DIVIDE: n = "num_Slash"; break;
+    case VK_MBUTTON: n = "Mouse_Wheel"; break;
+    case VK_XBUTTON1: n = "Mouse_x1"; break;
+    case VK_XBUTTON2: n = "Mouse_x2"; break;
+    default: return nullptr;
+    }
+    snprintf(buf, sizeof buf, "Common_Icon_Keyguide_PC_%s", n);
+    return buf;
+}
+
+// The hotkey as key caps on the slot (OmHkCaps): false if the slot has none or a key has no icon (the text then).
+// where: 1 under a plain anchor, 2 under the eye marker.
+bool show_caps(U64 self, U64 root, U32 vk, std::uint8_t mods, int where)
+{
+    U64 box = find_by_class(root, "om-hk-caps");
+    if (!box) return false;
+    bool wide = false;
+    const char* key = key_icon(vk, wide);
+    if (!key) return set_class(box, "!cpp-none", true), false;
+    const U32 mvk[3] = {VK_CONTROL, VK_MENU, VK_SHIFT};
+    const std::uint8_t bit[3] = {1, 2, 4};
+    for (int k = 0; k < 3; ++k) {
+        U64 cap = find_by_class(box, ("om-hk-c" + std::to_string(2 * k)).c_str(), 1);
+        U64 plus = find_by_class(box, ("om-hk-c" + std::to_string(2 * k + 1)).c_str(), 1);
+        bool on = (mods & bit[k]) != 0;
+        bool w = false;
+        if (cap && on) set_image_raw(self, cap, key_icon(mvk[k], w));
+        if (cap) set_class(cap, "!cpp-none", !on);
+        if (plus) {
+            if (on && g_set_text) g_set_text(plus, "+", 0);
+            set_class(plus, "!cpp-none", !on);
+        }
+    }
+    U64 cap = find_by_class(box, "om-hk-c6", 1);
+    if (!cap) return false;
+    set_image_raw(self, cap, key_icon(vk, wide));
+    set_class(cap, "om-hk-wide", wide);
+    set_class(cap, "!cpp-none", false);
+    set_class(box, "om-hk-caps-plain", where == 1);
+    set_class(box, "om-hk-caps-eye", where == 2);
+    set_class(box, "!cpp-none", false);
+    return true;
+}
+
+bool show_value(U64 root, const std::string& text, int hotkey = 0, bool caps = false); // hotkey: 1 under a plain
+                                                                                       // anchor, 2 under the eye
+bool show_value(U64 root, const std::string& text, int hotkey, bool caps)
+{
+    if (!caps)
+        if (U64 box = find_by_class(root, "om-hk-caps")) set_class(box, "!cpp-none", true);
     U64 t = find_by_class(root, "om-value-text");
     if (!t) return true;
     if (!text.empty() && g_set_text) g_set_text(t, text.c_str(), 0);
+    set_class(t, "om-hotkey-plain", hotkey == 1); // (an outfit's hotkey on its slot: under the icon)
+    set_class(t, "om-hotkey-eye", hotkey == 2);
     return set_class(t, "!cpp-none", text.empty());
 }
 void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const std::vector<size_t>& pieces)
@@ -1726,8 +1840,11 @@ void apply_outfit_slots(U64 self, U32 only = kOutfitSlots)
         // it has one, else on the badge spot; on the charge-count wrap (unused by our slots), a second badge element.
         U64 mark = find_parent_of_class(root, "charged-count");
         badge_ok &= clear_label(mark);
+        // (an outfit's hotkey shows under its icon: in the same wrap, an anchor when no eye shows there)
+        const Outfit* ho = saved && mode == kModeMain ? &g_outfits[slot_outfit(i)] : nullptr;
+        bool hk = ho && ho->hk_vk;
+        bool looks = false;
         if (mark) {
-            bool looks = false;
             if (saved && mode == kModeMain)
                 for (U16 s = 0; s < 32; ++s) looks |= slot_look(g_outfits[slot_outfit(i)], s) != kLookDefault;
             bool climate = want && (!std::strncmp(want, "om-cold", 7) || !std::strncmp(want, "om-heat", 7));
@@ -1735,11 +1852,15 @@ void apply_outfit_slots(U64 self, U32 only = kOutfitSlots)
             badge_ok &= set_class(mark, "self-center", true);
             badge_ok &= set_class(mark, "om-eye-c", looks && !stacked);
             badge_ok &= set_class(mark, "om-eye2-c", stacked);
-            badge_ok &= set_class(mark, "!cpp-none", !looks);
+            badge_ok &= set_class(mark, "om-label-wrap", hk && !looks);
+            badge_ok &= set_class(mark, "!cpp-none", !looks && !hk);
         }
         g_mark_elem[i] = mark, g_mark_shown[i] = mark && saved && mode == kModeMain &&
-                                                 (has_class(mark, "om-eye-c") || has_class(mark, "om-eye2-c"));
-        show_value(root, "");
+                                                 (has_class(mark, "om-eye-c") || has_class(mark, "om-eye2-c") || hk);
+        // (hk: the hotkey's text lives in this wrap too; the game hides it on focus changes, 2026-11-06)
+        bool caps = hk && show_caps(self, root, ho->hk_vk, ho->hk_mods, looks ? 2 : 1); // (the game's key icons)
+        show_value(root, hk && !caps ? hotkey_name(ho->hk_vk, ho->hk_mods) : std::string(), hk && !caps ? (looks ? 2 : 1) : 0,
+                   caps);
         bool missing = saved && outfit_missing(slot_outfit(i));
         g_slot_image[i].missing = missing;
         bool ok = set_class(root, "!cpp-none", i >= visible) && badge_ok;
@@ -2037,6 +2158,7 @@ void write_lists(std::string& out, const Store& s)
                 if (o.has_weapons) put(out, "weapons\t%d\n", o.load_weapons ? 1 : 0);
                 if (o.climate) put(out, "climate\t%u\n", o.climate);
                 if (o.stash) put(out, "stash\t%u\n", o.stash);
+                if (o.hk_vk) put(out, "hotkey\t%u\t%u\n", o.hk_vk, o.hk_mods);
                 if (o.worn) put(out, "worn\t1\n");
                 if (o.back_look) put(out, "backlook\t%u\n", o.back_look);
                 if (o.has_back) put(out, "backshield\t%u\n", o.has_back);
@@ -2101,6 +2223,8 @@ bool write_store_file()
     put(out, "setting\tstash\t%d\nsetting\tcompanions\t%d\nsetting\tmessages\t%d\n", g_stash ? 1 : 0,
         g_take_from_companions ? 1 : 0, g_messages ? 1 : 0);
     if (!g_language.empty()) put(out, "setting\tlanguage\t%s\n", g_language.c_str());
+    if (const char* id = peek_key_id()) put(out, "setting\tpeekkey\t%s\n", id);
+    if (g_peek_pad) put(out, "setting\tpeekpad\t1\n");
     write_lists(out, g_published);
     for (const auto& [slot, b] : g_bound) {
         put(out, "save\t%u\t%llu\t%llX\t%llX\n", slot, b.id.size, b.id.time, b.id.hash);
@@ -2281,6 +2405,8 @@ void load_outfits()
                 else if (v[1] == "companions") g_take_from_companions = x != 0;
                 else if (v[1] == "messages") g_messages = x != 0;
                 else if (v[1] == "language") g_language = v[2];
+                else if (v[1] == "peekkey") peek_key_load(v[2]);
+                else if (v[1] == "peekpad") g_peek_pad = x != 0;
                 // (other names: settings of another build, e.g. the dropped "hotkey": ignored)
             } else if (v[0] == "character" && v.size() >= 2) {
                 cur = &list_for(*store, static_cast<U16>(std::strtoul(v[1].c_str(), nullptr, 10)));
@@ -2301,6 +2427,10 @@ void load_outfits()
                 unsigned x = static_cast<unsigned>(std::strtoul(v[1].c_str(), nullptr, 10));
                 if (v[0] == "climate" && x <= 3) list.back().climate = static_cast<std::uint8_t>(x);
                 if (v[0] == "keep" && x <= 3) list.back().stash = x == 0 ? 0 : x == 1 ? 2 : 1; // (older: Keep in)
+            } else if (!list.empty() && v[0] == "hotkey" && v.size() >= 3) {
+                unsigned vk = static_cast<unsigned>(std::strtoul(v[1].c_str(), nullptr, 10));
+                unsigned m = static_cast<unsigned>(std::strtoul(v[2].c_str(), nullptr, 10));
+                if (vk > 0 && vk < 256 && m < 8) list.back().hk_vk = static_cast<U16>(vk), list.back().hk_mods = static_cast<std::uint8_t>(m);
             } else if (!list.empty() && v[0] == "worn") {
                 list.back().worn = true;
             } else if (!list.empty() && v[0] == "backlook" && v.size() >= 2) {
@@ -2392,6 +2522,208 @@ std::atomic<bool> g_save_work{false}; // a load or write is pending
 std::wstring g_save_root;             // ...\save\<user id>\ (set once, before the watch thread starts)
 std::atomic<bool> g_watching{false};
 thread_local bool t_in_file_hook = false; // our own file accesses are not the game's
+thread_local bool t_own_pad = false;      // our own pad reading (XInput, the PlayStation pad's reports): never filtered
+extern std::atomic<bool> g_peek_live;
+bool peek_pad_owned();                    // the open Outfit Arc came from the pad: its d-pad up / down are the arc's
+
+// The game's PlayStation pad handles (opened by path: \\?\hid#vid_054c&pid_....), with their report length.
+struct PadHandle {
+    std::atomic<HANDLE> h{nullptr};
+    DWORD len = 0;
+    bool dualsense = false;
+};
+PadHandle g_pad_handles[8];
+
+void note_pad_handle(LPCWSTR path, HANDLE h)
+{
+    if (!path || h == INVALID_HANDLE_VALUE || t_own_pad) return;
+    std::wstring l = path;
+    for (wchar_t& c : l) c = static_cast<wchar_t>(std::towlower(c));
+    if (l.find(L"vid_054c") == std::wstring::npos) return;
+    PHIDP_PREPARSED_DATA pp = nullptr;
+    HIDP_CAPS caps{};
+    DWORD len = 0;
+    if (HidD_GetPreparsedData(h, &pp)) {
+        if (HidP_GetCaps(pp, &caps) == HIDP_STATUS_SUCCESS) len = caps.InputReportByteLength;
+        HidD_FreePreparsedData(pp);
+    }
+    if (!len) return;
+    bool ds = l.find(L"pid_0ce6") != std::wstring::npos || l.find(L"pid_0df2") != std::wstring::npos;
+    for (PadHandle& p : g_pad_handles) {
+        HANDLE none = nullptr;
+        if (p.h.load() == h) return;
+        if (p.h.compare_exchange_strong(none, h)) {
+            p.len = len, p.dualsense = ds;
+            LOG("Outfit Arc: the game's PlayStation pad handle %p (reports of %lu bytes)", static_cast<void*>(h), len);
+            return;
+        }
+    }
+}
+
+const PadHandle* pad_handle(HANDLE h)
+{
+    if (!h) return nullptr;
+    for (const PadHandle& p : g_pad_handles)
+        if (p.h.load() == h) return &p;
+    return nullptr;
+}
+
+U32 crc32_bytes(U32 crc, const unsigned char* d, size_t n)
+{
+    crc = ~crc;
+    for (size_t i = 0; i < n; ++i) {
+        crc ^= d[i];
+        for (int k = 0; k < 8; ++k) crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1)));
+    }
+    return ~crc;
+}
+
+// A report with the d-pad's up / down taken out (a diagonal keeps its left / right). Bluetooth reports carry a CRC
+// (seeded with 0xA1): written again.
+void strip_pad_report(unsigned char* r, DWORD n, bool dualsense)
+{
+    int face = -1;
+    if (dualsense) {
+        if (r[0] == 0x01 && n >= 64) face = 8;
+        else if (r[0] == 0x31 && n >= 11) face = 9;
+        else if (r[0] == 0x01 && n >= 7) face = 5;
+    } else {
+        if (r[0] == 0x01 && n >= 7) face = 5;
+        else if (r[0] == 0x11 && n >= 9) face = 7;
+    }
+    if (face < 0 || DWORD(face) >= n) return;
+    static const unsigned char kNoUpDown[9] = {8, 2, 2, 2, 8, 6, 6, 6, 8};
+    unsigned char d = r[face] & 0x0F;
+    if (d > 8 || kNoUpDown[d] == d) return;
+    r[face] = static_cast<unsigned char>((r[face] & 0xF0) | kNoUpDown[d]);
+    if ((r[0] == 0x31 || r[0] == 0x11) && n >= 78) {
+        unsigned char seed = 0xA1;
+        U32 c = crc32_bytes(crc32_bytes(0, &seed, 1) , r, 74);
+        // (crc32_bytes chains: the seed byte, then the report's first 74 bytes)
+        std::memcpy(r + 74, &c, 4);
+    }
+}
+
+// Overlapped reads of a pad handle: the buffer is filled later; filtered when the game asks for the result.
+struct PendingRead {
+    std::atomic<OVERLAPPED*> ov{nullptr};
+    unsigned char* buf = nullptr;
+    DWORD len = 0;
+    bool dualsense = false;
+};
+PendingRead g_pending_reads[16];
+
+using ReadFileFn = BOOL(WINAPI*)(HANDLE, LPVOID, DWORD, LPDWORD, LPOVERLAPPED);
+using GetOverlappedResultFn = BOOL(WINAPI*)(HANDLE, LPOVERLAPPED, LPDWORD, BOOL);
+using GetOverlappedResultExFn = BOOL(WINAPI*)(HANDLE, LPOVERLAPPED, LPDWORD, DWORD, BOOL);
+ReadFileFn g_read_file_orig = nullptr;
+GetOverlappedResultFn g_ov_result_orig = nullptr;
+GetOverlappedResultExFn g_ov_result_ex_orig = nullptr;
+
+BOOL WINAPI read_file_hook(HANDLE h, LPVOID buf, DWORD n, LPDWORD got, LPOVERLAPPED ov)
+{
+    BOOL r = g_read_file_orig(h, buf, n, got, ov);
+    if (t_own_pad || !buf) return r;
+    const PadHandle* p = pad_handle(h);
+    if (!p || n < p->len) return r;
+    DWORD err = GetLastError();
+    if (r && peek_pad_owned()) {
+        DWORD k = got ? *got : n;
+        __try {
+            strip_pad_report(static_cast<unsigned char*>(buf), k ? k : n, p->dualsense);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+        }
+    } else if (!r && err == ERROR_IO_PENDING && ov) {
+        for (PendingRead& q : g_pending_reads) {
+            OVERLAPPED* none = nullptr;
+            if (q.ov.load() == ov || q.ov.compare_exchange_strong(none, ov)) {
+                q.buf = static_cast<unsigned char*>(buf), q.len = n, q.dualsense = p->dualsense;
+                q.ov = ov;
+                break;
+            }
+        }
+    }
+    SetLastError(err);
+    return r;
+}
+
+void finish_pending_read(LPOVERLAPPED ov, BOOL ok, LPDWORD got)
+{
+    if (!ov) return;
+    for (PendingRead& q : g_pending_reads) {
+        if (q.ov.load() != ov) continue;
+        if (ok && peek_pad_owned()) {
+            __try {
+                strip_pad_report(q.buf, got && *got ? *got : q.len, q.dualsense);
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+            }
+        }
+        if (ok) q.ov = nullptr; // (the slot is free; the game's next read takes it again)
+        return;
+    }
+}
+
+BOOL WINAPI ov_result_hook(HANDLE h, LPOVERLAPPED ov, LPDWORD got, BOOL wait)
+{
+    BOOL r = g_ov_result_orig(h, ov, got, wait);
+    if (!t_own_pad) {
+        DWORD err = GetLastError();
+        finish_pending_read(ov, r, got);
+        SetLastError(err);
+    }
+    return r;
+}
+
+BOOL WINAPI ov_result_ex_hook(HANDLE h, LPOVERLAPPED ov, LPDWORD got, DWORD ms, BOOL alertable)
+{
+    BOOL r = g_ov_result_ex_orig(h, ov, got, ms, alertable);
+    if (!t_own_pad) {
+        DWORD err = GetLastError();
+        finish_pending_read(ov, r, got);
+        SetLastError(err);
+    }
+    return r;
+}
+
+// Xbox pads: the game's xinput1_4 (by name or by ordinal 100, the one with the guide button) gets the d-pad's up / down
+// taken out of its button word.
+using XGetStateFn = DWORD(WINAPI*)(DWORD, void*);
+XGetStateFn g_xget_orig = nullptr, g_xget100_orig = nullptr;
+
+DWORD xget_filter(DWORD r, void* state)
+{
+    if (r == ERROR_SUCCESS && state && !t_own_pad && peek_pad_owned()) {
+        WORD& b = *reinterpret_cast<WORD*>(static_cast<unsigned char*>(state) + 4); // (XINPUT_STATE: packet, then buttons)
+        if (b & 0x0003) b &= static_cast<WORD>(~0x0003);
+    }
+    return r;
+}
+DWORD WINAPI xget_hook(DWORD i, void* s) { return xget_filter(g_xget_orig(i, s), s); }
+DWORD WINAPI xget100_hook(DWORD i, void* s) { return xget_filter(g_xget100_orig(i, s), s); }
+
+void install_pad_filters()
+{
+    struct { const wchar_t* dll; const char* name; void* fn; void** orig; } hooks[] = {
+        {L"kernelbase", "ReadFile", reinterpret_cast<void*>(&read_file_hook), reinterpret_cast<void**>(&g_read_file_orig)},
+        {L"kernelbase", "GetOverlappedResult", reinterpret_cast<void*>(&ov_result_hook), reinterpret_cast<void**>(&g_ov_result_orig)},
+        {L"kernelbase", "GetOverlappedResultEx", reinterpret_cast<void*>(&ov_result_ex_hook), reinterpret_cast<void**>(&g_ov_result_ex_orig)},
+    };
+    int ok = 0;
+    for (auto& h : hooks) {
+        void* target = nullptr;
+        if (MH_CreateHookApiEx(h.dll, h.name, h.fn, h.orig, &target) == MH_OK && MH_EnableHook(target) == MH_OK) ++ok;
+        else LOG("Outfit Arc: %s filter failed", h.name);
+    }
+    if (HMODULE x = LoadLibraryW(L"xinput1_4.dll")) {
+        if (void* t = reinterpret_cast<void*>(GetProcAddress(x, "XInputGetState")))
+            if (MH_CreateHook(t, reinterpret_cast<void*>(&xget_hook), reinterpret_cast<void**>(&g_xget_orig)) == MH_OK &&
+                MH_EnableHook(t) == MH_OK) ++ok;
+        if (void* t = reinterpret_cast<void*>(GetProcAddress(x, MAKEINTRESOURCEA(100))))
+            if (MH_CreateHook(t, reinterpret_cast<void*>(&xget100_hook), reinterpret_cast<void**>(&g_xget100_orig)) == MH_OK &&
+                MH_EnableHook(t) == MH_OK) ++ok;
+    }
+    LOG("Outfit Arc: pad filters on (%d of 5)", ok);
+}
 
 SaveId quick_id(const std::wstring& path)
 {
@@ -2660,6 +2992,13 @@ HANDLE WINAPI create_file_hook(LPCWSTR path, DWORD access, DWORD share, LPSECURI
                                DWORD flags, HANDLE tmpl)
 {
     HANDLE h = g_create_file_orig(path, access, share, sa, disposition, flags, tmpl);
+    if (!t_in_file_hook && path && (path[0] == L'\\' || path[0] == L'/') && (wcsstr(path, L"hid#") || wcsstr(path, L"HID#"))) {
+        DWORD err = GetLastError();
+        t_in_file_hook = true;
+        note_pad_handle(path, h);
+        t_in_file_hook = false;
+        SetLastError(err);
+    }
     if (!t_in_file_hook && path && wcsstr(path, L"slot")) {
         DWORD err = GetLastError();
         t_in_file_hook = true;
@@ -4849,6 +5188,9 @@ bool take_press(std::atomic<U64>& at)
 
 void refresh_wheel(U64 self)
 {
+    // (a load from the quick peek passes the status screen: no wheel to refresh, and its layout check would read the
+    // status screen as a broken wheel and turn the mod off)
+    if (self != g_outfits_root) return;
     if (g_applied_visible != visible_slots()) reset_modes(); // (the slots moved)
     apply_outfit_slots(self);
     sync_ring(self);
@@ -5231,8 +5573,45 @@ int g_typed_quiet = 0;      // frames since the last character
 std::string g_name_text;    // the box text on the last frame
 U32 g_name_caret = 0;       // its caret
 
+extern std::atomic<bool> g_peek_live;
+extern std::atomic<int> g_peek_wheel;
+extern std::atomic<U64> g_peek_hud_at;
+
+// Is (vk) with the modifiers held now one of the current outfits' hotkeys (in play)?
+bool hotkey_held_now(U32 vk)
+{
+    if (!vk || g_menu_open || g_name_modal || GetTickCount64() - g_peek_hud_at.load() >= 250) return false;
+    std::uint8_t mods = static_cast<std::uint8_t>(((GetKeyState(VK_CONTROL) & 0x8000) ? 1 : 0) |
+                                                  ((GetKeyState(VK_MENU) & 0x8000) ? 2 : 0) | ((GetKeyState(VK_SHIFT) & 0x8000) ? 4 : 0));
+    bool bare = false; // (no hotkey with exactly these modifiers: the key alone counts, e.g. while Shift sprints)
+    for (const auto& h : g_hotkeys) {
+        U32 v = h.load();
+        if (!v || (v & 0xFF) != vk) continue;
+        if (((v >> 8) & 0xFF) == mods) return true;
+        bare |= ((v >> 8) & 0xFF) == 0;
+    }
+    return bare;
+}
+
 LRESULT CALLBACK name_wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
 {
+    if ((m == WM_KEYDOWN || m == WM_KEYUP || m == WM_SYSKEYDOWN || m == WM_SYSKEYUP) && hotkey_held_now(U32(wp)))
+        return 0; // (an outfit's hotkey: its key does nothing else in play)
+    if (m == WM_MBUTTONDOWN || m == WM_MBUTTONUP || m == WM_XBUTTONDOWN || m == WM_XBUTTONUP) {
+        U32 vk = m == WM_MBUTTONDOWN || m == WM_MBUTTONUP ? VK_MBUTTON : GET_XBUTTON_WPARAM(wp) == XBUTTON1 ? VK_XBUTTON1 : VK_XBUTTON2;
+        if (hotkey_held_now(vk)) return m == WM_XBUTTONDOWN || m == WM_XBUTTONUP ? TRUE : 0;
+    }
+    // The Outfit Arc: while it is open the wheel is its (not the camera's); its key's messages are its own in play.
+    if (m == WM_MOUSEWHEEL) {
+        if (g_peek_live) {
+            g_peek_wheel += GET_WHEEL_DELTA_WPARAM(wp);
+            return 0;
+        }
+    }
+    if ((m == WM_KEYDOWN || m == WM_KEYUP || m == WM_SYSKEYDOWN || m == WM_SYSKEYUP) && g_peek_key.load() &&
+        wp == g_peek_key.load() && GetTickCount64() - g_peek_hud_at.load() < 250 && !g_menu_open && !g_name_modal) {
+        return 0;
+    }
     if (m == WM_CHAR && g_name_modal && wp >= 0x20 && wp != 0x7f && (wp < 0xD800 || wp > 0xDFFF)) {
         std::lock_guard<std::mutex> lock(g_typed_mu);
         if (g_typed.empty()) g_typed_base = g_name_text, g_typed_caret = g_name_caret;
@@ -5544,15 +5923,97 @@ bool g_overwrite_reset = false; // the settings view's Overwrite: false keeps th
 enum CfgKind : std::uint8_t {
     kCfgVisibility, kCfgClimate, kCfgWeapons, kCfgStash, kCfgPosition, kCfgRename, kCfgOverwrite, kCfgDelete, // a saved outfit's
     kCfgGStash, kCfgParty, kCfgMessages, kCfgClear, kCfgUninstall,                               // the "+" slot's
-    kCfgBack, kCfgLanguage
+    kCfgBack, kCfgLanguage, kCfgPeekKey, kCfgPeekPad, kCfgHotkey
 };
+
+// The Outfit Arc's key (the "+" page's Outfit Arc; Off by default: no key is free in every layout, so the player sets
+// one). A click on the setting waits for the next key or mouse button (left / right excepted: they click), read with
+// GetAsyncKeyState so it works however the game reads its input; Esc cancels, Backspace / Delete turn it off. Held: the
+// arc shows; the wheel moves along it; released: the highlighted outfit goes on. The key and, while the arc is open, the
+// wheel are kept from the game (raw_input_hook, name_wndproc).
+std::atomic<bool> g_peek_capture{false}; // the setting waits for a key
+int g_capture_outfit = -1;               // ... for that outfit's Hotkey (-1: for the Outfit Arc's key)
+U32 g_peek_capture_slot = 0;             // its slot (refreshed when the key comes)
+bool g_peek_capture_held[256] = {};      // keys already down when it started waiting (not taken as the answer)
+
+// Older builds of 5 November stored names; now the key code.
+void peek_key_load(const std::string& id)
+{
+    static const std::pair<const char*, int> old[] = {{"tab", VK_TAB}, {"caps", VK_CAPITAL}, {"backquote", VK_OEM_3},
+                                                       {"l", 'L'}, {"mouse3", VK_MBUTTON}, {"mouse4", VK_XBUTTON1},
+                                                       {"mouse5", VK_XBUTTON2}};
+    for (const auto& [n, vk] : old)
+        if (id == n) return void(g_peek_key = vk);
+    int vk = std::atoi(id.c_str());
+    g_peek_key = vk > 0 && vk < 256 ? vk : 0;
+}
+const char* peek_key_id()
+{
+    static char buf[8];
+    U32 vk = g_peek_key.load();
+    if (!vk) return nullptr;
+    snprintf(buf, sizeof buf, "%u", vk);
+    return buf;
+}
+
+// The key's name as the keyboard layout calls it (the mouse buttons: our lines).
+std::string peek_key_name(U32 vk)
+{
+    if (!vk) return lang::t("value.off");
+    if (vk == VK_MBUTTON) return lang::t("key.mouse3");
+    if (vk == VK_XBUTTON1) return lang::t("key.mouse4");
+    if (vk == VK_XBUTTON2) return lang::t("key.mouse5");
+    UINT sc = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
+    switch (vk) { // (keys Windows names by their numpad twin unless flagged extended)
+    case VK_INSERT: case VK_DELETE: case VK_HOME: case VK_END: case VK_PRIOR: case VK_NEXT:
+    case VK_LEFT: case VK_RIGHT: case VK_UP: case VK_DOWN: case VK_RCONTROL: case VK_RMENU: case VK_DIVIDE:
+        sc |= 0x100;
+    }
+    wchar_t w[64] = {};
+    int n = sc ? GetKeyNameTextW(static_cast<LONG>(sc << 16), w, 64) : 0;
+    if (n <= 0) return "Key " + std::to_string(vk);
+    char u[256] = {};
+    WideCharToMultiByte(CP_UTF8, 0, w, n, u, sizeof u - 1, nullptr, nullptr);
+    return u;
+}
+
+// A hotkey as shown: "Ctrl + Shift + 3" (the modifiers' names as the keyboard layout calls them).
+constexpr std::uint8_t kModCtrl = 1, kModAlt = 2, kModShift = 4;
+std::string hotkey_name(U32 vk, std::uint8_t mods)
+{
+    if (!vk) return lang::t("value.no_hotkey");
+    std::string s;
+    for (auto [bit, mvk] : {std::pair<std::uint8_t, U32>{kModCtrl, VK_CONTROL}, {kModAlt, VK_MENU}, {kModShift, VK_SHIFT}})
+        if (mods & bit) s += peek_key_name(mvk) + " + ";
+    return s + peek_key_name(vk);
+}
+
+// The modifiers held now (exactly these must be held for a hotkey).
+std::uint8_t mods_now()
+{
+    return static_cast<std::uint8_t>(((GetAsyncKeyState(VK_CONTROL) & 0x8000) ? kModCtrl : 0) |
+                                     ((GetAsyncKeyState(VK_MENU) & 0x8000) ? kModAlt : 0) |
+                                     ((GetAsyncKeyState(VK_SHIFT) & 0x8000) ? kModShift : 0));
+}
+
+// The mouse button's raw input flags (0: a keyboard key).
+USHORT peek_mouse_flags(U32 vk)
+{
+    if (vk == VK_MBUTTON) return RI_MOUSE_MIDDLE_BUTTON_DOWN | RI_MOUSE_MIDDLE_BUTTON_UP;
+    if (vk == VK_XBUTTON1) return RI_MOUSE_BUTTON_4_DOWN | RI_MOUSE_BUTTON_4_UP;
+    if (vk == VK_XBUTTON2) return RI_MOUSE_BUTTON_5_DOWN | RI_MOUSE_BUTTON_5_UP;
+    return 0;
+}
 
 std::vector<std::uint8_t> cfg_entries()
 {
     if (g_cfg < 0) return {};
     if (size_t(g_cfg) < g_outfits.size())
-        return {kCfgVisibility, kCfgClimate, kCfgWeapons, kCfgStash, kCfgPosition, kCfgRename, kCfgOverwrite, kCfgDelete, kCfgBack};
-    return {kCfgGStash, kCfgParty, kCfgMessages, kCfgLanguage, kCfgClear, kCfgUninstall, kCfgBack};
+        return {kCfgVisibility, kCfgClimate, kCfgWeapons, kCfgStash, kCfgHotkey, kCfgPosition, kCfgRename, kCfgOverwrite,
+                kCfgDelete, kCfgBack};
+    // (the Outfit Arc's binding for the input in use: the key, or the pad's; pump re-shows the page when it changes)
+    return {kCfgGStash, kCfgParty, kCfgMessages, kCfgLanguage, g_pad_in_use ? kCfgPeekPad : kCfgPeekKey, kCfgClear,
+            kCfgUninstall, kCfgBack};
 }
 
 const char* cfg_name(std::uint8_t k)
@@ -5560,8 +6021,20 @@ const char* cfg_name(std::uint8_t k)
     static const char* const n[] = {"setting.visibility", "setting.climate", "setting.weapons", "setting.stash",
                                     "setting.position",   "setting.rename",  "setting.overwrite", "setting.delete",
                                     "setting.stash",      "setting.party",   "setting.messages", "setting.clear",
-                                    "setting.uninstall",  "setting.back",    "setting.language"};
-    return k <= kCfgLanguage ? lang::t(n[k]) : "";
+                                    "setting.uninstall",  "setting.back",    "setting.language", "setting.peekkey",
+                                    "setting.peekpad",    "setting.hotkey"};
+    return k <= kCfgHotkey ? lang::t(n[k]) : "";
+}
+
+// A text that stays where it is (the settings' values are kept as pointers between refreshes: a reused std::string's
+// buffer moves once the text outgrows it, 2026-11-06: "Ctrl + Shift + 1" showed leftover memory). Each distinct text
+// is kept once, for the session (a few key names).
+const char* stable_text(const std::string& t)
+{
+    static std::set<std::string> kept;
+    static std::mutex mu;
+    std::lock_guard<std::mutex> lock(mu);
+    return kept.insert(t).first->c_str();
 }
 
 // A value setting's choices (their line keys; the Language setting: Auto and each language's own name) and the current
@@ -5584,6 +6057,10 @@ std::vector<const char*> cfg_values(std::uint8_t k, U32& cur)
             cur = o.stash % 3;
             return {"value.default", "value.on", "value.off"};
         }
+        if (k == kCfgHotkey) { // (one value: the hotkey, or the wait for one)
+            bool waiting = g_peek_capture && g_capture_outfit == g_cfg;
+            return {waiting ? "value.press_key" : stable_text(hotkey_name(o.hk_vk, o.hk_mods))};
+        }
         if (k == kCfgOverwrite) { // (an action with a choice: scrolled, then clicked)
             cur = g_overwrite_reset ? 1 : 0;
             return {"value.keep_settings", "value.reset_all"};
@@ -5592,6 +6069,9 @@ std::vector<const char*> cfg_values(std::uint8_t k, U32& cur)
     if (k == kCfgGStash) return cur = g_stash ? 1 : 0, std::vector<const char*>{"value.off", "value.on"};
     if (k == kCfgParty) return cur = g_take_from_companions ? 1 : 0, std::vector<const char*>{"value.leave", "value.take"};
     if (k == kCfgMessages) return cur = g_messages ? 1 : 0, std::vector<const char*>{"value.off", "value.on"};
+    if (k == kCfgPeekPad) return cur = g_peek_pad ? 1 : 0, std::vector<const char*>{"value.off", "value.peekpad"};
+    if (k == kCfgPeekKey) // (one value: the key, or the wait for one)
+        return {g_peek_capture && g_capture_outfit < 0 ? "value.press_key" : stable_text(peek_key_name(g_peek_key.load()))};
     if (k == kCfgLanguage) {
         std::vector<const char*> v{"value.auto_language"};
         for (size_t i = 0; i < lang::kLanguageCount; ++i) {
@@ -5606,6 +6086,9 @@ std::vector<const char*> cfg_values(std::uint8_t k, U32& cur)
 // A value as shown (the Language setting's: the language's own name; Auto: with the game's).
 std::string cfg_value_text(std::uint8_t k, const char* v)
 {
+    if (k == kCfgPeekKey || k == kCfgHotkey) // (a line key, or the key's own label)
+        return !std::strcmp(v, "value.press_key") || !std::strcmp(v, "value.no_hotkey") ? lang::t(v) : v;
+    if (k == kCfgPeekPad) return lang::f(v, {{"button", g_pad_is_ps ? "L1" : "LB"}}); // (the pad in use's own name)
     if (k != kCfgLanguage) return lang::t(v);
     std::string auto_code = std::string(v) == "value.auto_language" ? g_detected_language : v;
     const char* name = "English";
@@ -5636,6 +6119,12 @@ std::string cfg_description(std::uint8_t k)
             t.second = lang::t(g_overwrite_reset ? "desc.overwrite.reset" : "desc.overwrite.keep");
         else if (k == kCfgDelete) t = entry_text(kPageOutfit, 1);
         else if (k == kCfgVisibility) t.second = lang::t("desc.visibility");
+        else if (k == kCfgHotkey) {
+            const Outfit& o = g_outfits[size_t(g_cfg)];
+            t.second = g_peek_capture && g_capture_outfit == g_cfg ? lang::t("desc.hotkey.wait")
+                       : o.hk_vk ? lang::f("desc.hotkey.on", {{"hotkey", hotkey_name(o.hk_vk, o.hk_mods)}})
+                                 : lang::t("desc.hotkey.off");
+        }
     } else {
         if (k == kCfgGStash) t = entry_text(kPageSettings, 3);
         else if (k == kCfgParty) t = entry_text(kPageSettings, 0);
@@ -5643,6 +6132,10 @@ std::string cfg_description(std::uint8_t k)
         else if (k == kCfgClear) t = entry_text(kPageSettings2, 0);
         else if (k == kCfgUninstall) t = entry_text(kPageSettings2, 1);
         else if (k == kCfgLanguage) t.second = lang::t("desc.language");
+        else if (k == kCfgPeekPad)
+            t.second = lang::f(g_peek_pad ? "desc.peekpad.on" : "desc.peekpad.off", {{"button", g_pad_is_ps ? "L1" : "LB"}});
+        else if (k == kCfgPeekKey)
+            t.second = lang::t(g_peek_capture ? "desc.peekkey.wait" : g_peek_key.load() ? "desc.peekkey.on" : "desc.peekkey.off");
     }
     if (k == kCfgBack) t.second = lang::t("desc.back");
     return t.second;
@@ -5724,6 +6217,7 @@ void cfg_scroll(U64 self, U32 i, int step)
         if (e[k] == kCfgGStash) g_stash = to == 1;
         else if (e[k] == kCfgParty) g_take_from_companions = to == 1;
         else if (e[k] == kCfgMessages) g_messages = to == 1;
+        else if (e[k] == kCfgPeekPad) g_peek_pad = to == 1;
         else if (e[k] == kCfgLanguage) {
             g_language = to == 0 ? std::string() : std::string(v[to]);
             apply_language();
@@ -5753,6 +6247,15 @@ void cfg_press(U64 self, U32 i)
     case kCfgClear: cfg_leave(self), open_clean_confirm(self, kConfirmCleanSave); break;
     case kCfgUninstall: cfg_leave(self), open_clean_confirm(self, kConfirmUninstall); break;
     case kCfgBack: cfg_leave(self); break;
+    case kCfgPeekKey: // (waits for the key: peek_capture_frame)
+    case kCfgHotkey:
+        for (int vk = 0; vk < 256; ++vk) g_peek_capture_held[vk] = (GetAsyncKeyState(vk) & 0x8000) != 0;
+        g_capture_outfit = e[k] == kCfgHotkey ? int(o) : -1;
+        g_peek_capture_slot = i;
+        g_peek_capture = true;
+        apply_outfit_slots(self, i);
+        center_for_focus(self, focused_script(self), true);
+        break;
     default: break; // (a value setting: scrolled)
     }
 }
@@ -5766,7 +6269,7 @@ U32 cfg_dots(U32 i, U32* lit)
     U32 cur = 0;
     std::vector<const char*> v = cfg_values(e[k], cur);
     if (lit) *lit = cur;
-    return e[k] == kCfgLanguage ? 0 : static_cast<U32>(v.size()); // (16 languages: too many dots; the value says it)
+    return e[k] == kCfgLanguage || e[k] == kCfgPeekKey || e[k] == kCfgHotkey ? 0 : static_cast<U32>(v.size()); // (the value says it)
 }
 
 // Slot i of the settings view: the setting's name (and value) on the slot's text, its dots, the click prompt for an
@@ -5844,7 +6347,8 @@ void finish_ask(int answer, const char* why)
         else uninstall(g_ask_self);
         return;
     }
-    if (!here || answer == kAskAbort || !g_menu_open) return;
+    bool from_wheel = g_ask_self == g_outfits_root; // (or the quick peek: asked in the game, no wheel to close)
+    if (!here || answer == kAskAbort || (from_wheel && !g_menu_open)) return;
     if (p.confirm) {
         bool other_here = p.confirm != kConfirmSwap ||
                           (p.other < g_outfits.size() && g_outfits[p.other].name == p.other_name);
@@ -6017,7 +6521,8 @@ void start_loading(U64 self, U32 index)
 // pump: the next question of a load, and the asynchronous parts of the last one.
 void open_clean_confirm(U64 self, int what);
 
-void pump_async(U64 self)
+// The next question of a load (opened a moment after the last one closed).
+void pump_ask(U64 self)
 {
     if (g_ask_next && !g_ask_modal && !g_name_modal && GetTickCount64() - g_modal_ended > 150) {
         g_ask_next = false;
@@ -6025,6 +6530,11 @@ void pump_async(U64 self)
         g_pending = {};
         if (p.index < g_outfits.size() && g_outfits[p.index].name == p.name) ask_next(self, std::move(p));
     }
+}
+
+void pump_async(U64 self)
+{
+    pump_ask(self);
     if (!g_async.active) return;
     // (the new pieces reach the inventory a few frames after the requests, their model parts a little later: a look
     // set in between is queued on the still-loading part and lands with it, so nothing is drawn before it is hidden)
@@ -6535,6 +7045,7 @@ void confirmed(U64 self, U32 index, int what, U32 other)
     if (keep) { // (its settings and looks stay; reset: as newly saved)
         if (was.has_weapons) o.load_weapons = was.load_weapons;
         o.climate = was.climate, o.stash = was.stash;
+        o.hk_vk = was.hk_vk, o.hk_mods = was.hk_mods;
         carry_looks(was, o);
     }
     g_outfits[index] = o;
@@ -6696,9 +7207,71 @@ void pad_prompts(U64 self)
 
 
 // Runs on the UI thread from the menu's frequent callbacks.
+// The Outfit Arc setting waiting for a key: the next key or mouse button newly down (left / right excepted).
+void peek_capture_frame(U64 self)
+{
+    if (!g_peek_capture) return;
+    int got = -1;
+    for (int vk = 1; vk < 256 && got < 0; ++vk) {
+        if (vk == VK_LBUTTON || vk == VK_RBUTTON || vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU ||
+            (vk >= VK_LSHIFT && vk <= VK_RMENU) || vk == VK_LWIN || vk == VK_RWIN)
+            continue; // (the modifiers: held with a hotkey's key, never the key)
+        bool down = (GetAsyncKeyState(vk) & 0x8000) != 0;
+        if (down && !g_peek_capture_held[vk]) got = vk;
+        g_peek_capture_held[vk] = down;
+    }
+    if (got < 0 || !game_focused()) return;
+    g_peek_capture = false;
+    if (g_capture_outfit >= 0) { // an outfit's Hotkey
+        size_t o = size_t(g_capture_outfit);
+        g_capture_outfit = -1;
+        if (o >= g_outfits.size()) return;
+        if (got == VK_ESCAPE) {
+            LOG("settings \"%s\": hotkey: cancelled", g_outfits[o].name.c_str());
+        } else if (got == VK_BACK || got == VK_DELETE) {
+            g_outfits[o].hk_vk = 0, g_outfits[o].hk_mods = 0;
+            LOG("settings \"%s\": hotkey cleared", g_outfits[o].name.c_str());
+            save_outfits();
+        } else if (U32(got) == g_peek_key.load()) { // (it opens the Outfit Arc: not also a hotkey)
+            notify(self, lang::f("toast.hotkey_arc", {{"hotkey", peek_key_name(U32(got))}}));
+        } else {
+            std::uint8_t m = mods_now();
+            for (size_t j = 0; j < g_outfits.size(); ++j) // (one outfit per hotkey: it moves here)
+                if (j != o && g_outfits[j].hk_vk == got && g_outfits[j].hk_mods == m) {
+                    g_outfits[j].hk_vk = 0, g_outfits[j].hk_mods = 0;
+                    notify(self, lang::f("toast.hotkey_moved", {{"hotkey", hotkey_name(U32(got), m)}, {"outfit", g_outfits[j].name}}));
+                }
+            g_outfits[o].hk_vk = static_cast<U16>(got), g_outfits[o].hk_mods = m;
+            LOG("settings \"%s\": hotkey -> %s (%d, mods %u)", g_outfits[o].name.c_str(), hotkey_name(U32(got), m).c_str(), got, m);
+            save_outfits();
+        }
+        apply_outfit_slots(self, g_peek_capture_slot);
+        center_for_focus(self, focused_script(self), true);
+        return;
+    }
+    if (got == VK_ESCAPE) LOG("settings: Outfit Arc key: cancelled");
+    else {
+        g_peek_key = got == VK_BACK || got == VK_DELETE ? 0 : U32(got);
+        LOG("settings: Outfit Arc key -> %s (%d)", peek_key_name(g_peek_key.load()).c_str(), g_peek_key.load());
+        save_outfits();
+    }
+    apply_outfit_slots(self, g_peek_capture_slot);
+    center_for_focus(self, focused_script(self), true);
+}
+
 void pump(U64 self)
 {
     if (GetCurrentThreadId() != g_ui_thread || !g_menu_open || g_busy) return;
+    peek_capture_frame(self);
+    { // the "+" page shows the Outfit Arc binding of the input in use: re-shown when the input changes
+        static int shown = -1;
+        int now = g_pad_in_use ? (g_pad_is_ps ? 2 : 1) : 0;
+        if (g_cfg >= 0 && size_t(g_cfg) >= g_outfits.size() && shown >= 0 && now != shown) {
+            if (!now) g_peek_capture = false;
+            cfg_refresh(self); // (a full redraw: the slot's name, value and images)
+        }
+        shown = now;
+    }
     Busy busy;
     pull_active();
     pump_async(self); // (on any tab: a load's asynchronous parts finish even after switching tabs)
@@ -7076,10 +7649,19 @@ bool readable_name(const std::string& n)
 
 bool g_tab_checked = false;
 
+// The resistance ids / lists, checked once against items of known values before any climate is worked out (the gear
+// wheel's self-test and the Outfit Arc's opening both call it: 2026-11-06, the arc opened first and read every
+// outfit's resistance as 0, so its thermometers didn't show).
+void ensure_resist_ids()
+{
+    static bool done = false;
+    if (!done && g_item_info && item_rows()) done = true, calibrate_resist_ids();
+}
+
 void self_test(U64 self)
 {
-    static bool model_done = false, bags_done = false, names_done = false, ids_done = false;
-    if (!ids_done && g_item_info && item_rows()) ids_done = true, calibrate_resist_ids();
+    static bool model_done = false, bags_done = false, names_done = false;
+    ensure_resist_ids();
     if (U64 tb = rp(self + kOffRootTabBar); tb && !g_tab_checked) { // (the current tab: only ever one of the headers)
         U32 cur = r32(tb + kOffTabCurrent), headers = r32(tb + kOffTabHeaderCount);
         g_tab_checked = true;
@@ -7140,15 +7722,26 @@ void self_test(U64 self)
     }
 }
 
-U64 __fastcall open_hook(U64 self, U64 a, U64 b, U64 c)
+// Before the outfits are shown or loaded (the wheel opening, the quick peek opening): a save just loaded is taken over,
+// the character's own outfits are the ones in use, and their keys are checked against the permanent ids (a save
+// written before a game patch brings back the old keys: a load before this repair fetched the wrong items, 2026-11-05).
+void ensure_resist_ids(); // (below, with the self-test)
+void prepare_outfits()
 {
-    g_ui_thread = GetCurrentThreadId();
-    center_restore();
+    ensure_resist_ids();
     settle_load_now();
     pull_active();
-    // Each character has its own outfits: the wheel shows those of the character the menu opens for.
     if (U16 ch = current_character(); ch != kNoCharacter) switch_character(ch);
     repair_keys();
+}
+
+U64 __fastcall open_hook(U64 self, U64 a, U64 b, U64 c)
+{
+    if (g_ui_thread && g_ui_thread != GetCurrentThreadId())
+        LOG("ui thread: the wheel opens on %lu, the status screen gave %lu", GetCurrentThreadId(), g_ui_thread);
+    g_ui_thread = GetCurrentThreadId();
+    center_restore();
+    prepare_outfits(); // (each character has its own outfits: the wheel shows those of the one it opens for)
     U64 r = g_open_orig(self, a, b, c);
     g_menu_open = true;
     g_gear_resist.clear(); // (abyss gears can change between opens: read again)
@@ -7604,7 +8197,10 @@ bool game_focused()
 //  - PlayStation pads (DualSense, DualSense Edge, DualShock 4; the game reads them natively, XInput never sees them):
 //    their HID input reports, read by a thread that waits for the pad (no polling); the latest buttons are kept here.
 constexpr U8 kPadCross = 1;   // the bits pad_buttons() returns: Cross / A held,
-constexpr U8 kPadTouched = 2; // any button, trigger or stick in use (the pad is the input in use)
+constexpr U8 kPadTouched = 2; // any button, trigger or stick in use (the pad is the input in use),
+constexpr U8 kPadL1 = 4;      // L1 / LB held (the Outfit Arc's modifier),
+constexpr U8 kPadUp = 8;      // the d-pad's up (or a diagonal with it),
+constexpr U8 kPadDown = 16;   // and down
 
 struct XPad {
     WORD wButtons;
@@ -7617,6 +8213,7 @@ struct XState {
 };
 using XInputGetStateFn = DWORD(WINAPI*)(DWORD, XState*);
 constexpr WORD kXInputA = 0x1000; // XINPUT_GAMEPAD_A
+constexpr WORD kXInputUp = 0x0001, kXInputDown = 0x0002, kXInputLB = 0x0100; // XINPUT_GAMEPAD_DPAD_UP / _DOWN / LEFT_SHOULDER
 
 U8 xinput_buttons()
 {
@@ -7634,6 +8231,7 @@ U8 xinput_buttons()
     if (!get) return 0;
     U64 now = GetTickCount64();
     U8 b = 0;
+    struct Own { bool was = t_own_pad; Own() { t_own_pad = true; } ~Own() { t_own_pad = was; } } own; // (unfiltered)
     for (DWORD i = 0; i < 4; ++i) {
         if (now < skip_until[i]) continue;
         XState s{};
@@ -7642,6 +8240,9 @@ U8 xinput_buttons()
             continue;
         }
         if (s.Gamepad.wButtons & kXInputA) b |= kPadCross;
+        if (s.Gamepad.wButtons & kXInputLB) b |= kPadL1;
+        if (s.Gamepad.wButtons & kXInputUp) b |= kPadUp;
+        if (s.Gamepad.wButtons & kXInputDown) b |= kPadDown;
         if (s.Gamepad.wButtons || s.Gamepad.bLeftTrigger > 64 || s.Gamepad.bRightTrigger > 64 ||
             std::abs(s.Gamepad.sThumbLX) > 12000 || std::abs(s.Gamepad.sThumbLY) > 12000 ||
             std::abs(s.Gamepad.sThumbRX) > 12000 || std::abs(s.Gamepad.sThumbRY) > 12000)
@@ -7678,6 +8279,10 @@ U8 hid_parse(const unsigned char* r, DWORD n, bool dualsense)
     }
     if (face < 0 || DWORD(face + 2) >= n) return 0;
     U8 b = (r[face] & 0x20) ? kPadCross : 0;
+    U8 dpad = r[face] & 0x0F; // (0 up, clockwise to 7 up-left; 8 none)
+    if (dpad == 0 || dpad == 1 || dpad == 7) b |= kPadUp;
+    if (dpad >= 3 && dpad <= 5) b |= kPadDown;
+    if (r[face + 1] & 0x01) b |= kPadL1; // (L1: the first bit of the next byte, DualSense and DualShock 4 alike)
     bool touched = (r[face] & 0xF0) || (r[face] & 0x0F) != 8 || r[face + 1] || (r[face + 2] & 0x03);
     for (int s = 0; s < 4 && !touched; ++s) touched = std::abs(int(r[sticks + s]) - 0x80) > 48;
     return b | (touched ? kPadTouched : 0);
@@ -7728,6 +8333,7 @@ HANDLE hid_open(bool& dualsense, DWORD& report_len)
 // it waits for the menu to open and looks again.
 DWORD WINAPI hid_thread(LPVOID)
 {
+    t_own_pad = true; // (our reading: never filtered, never taken for the game's)
     for (;;) {
         bool dualsense = false;
         DWORD len = 0;
@@ -7748,6 +8354,8 @@ DWORD WINAPI hid_thread(LPVOID)
 
 // The pads' buttons, and which input is in use: a touched pad switches to it (its family too); the mouse moving or
 // clicking, or Space, switches back. A change asks pump to re-show the slots (g_prompt_changed).
+U8 pad_buttons_raw() { return xinput_buttons() | g_hid_buttons.load(); }
+
 U8 pad_buttons()
 {
     U8 x = xinput_buttons(), h = g_hid_buttons.load();
@@ -7863,8 +8471,8 @@ void ui_patch_stream(U64 stream, const std::string& path, unsigned what)
     *reinterpret_cast<U64*>(stream + 0x20) = reinterpret_cast<U64>(kept.data());
     *reinterpret_cast<U32*>(stream + 0x28) = U32(kept.size());
     if (r.headers) ++g_ui_tab_added;
-    LOG("gear wheel UI: %s: %d tab header(s), %d value text(s) added (%u -> %zu bytes)", path.c_str(), r.headers,
-        r.values, size, kept.size());
+    LOG("gear wheel UI: %s: %d tab header(s), %d value text(s), %d peek(s) added (%u -> %zu bytes)", path.c_str(),
+        r.headers, r.values, r.peeks, size, kept.size());
 }
 
 U64 __fastcall ui_parse_hook(U64 loader, U64 stream)
@@ -7924,6 +8532,462 @@ bool install_ui_patch()
     return true;
 }
 
+// --- Quick peek ----------------------------------------------------------------------------------
+// The outfits on an arc beside the character, to switch without the gear wheel. Its elements are added to the stamina
+// gauge's tracker (statusgaugeview2) as the game loads it (uibin_patch.cpp: OmPeekWrap > OmPeekArc, OmPeekFrame0-4,
+// OmPeekIcon0-4, OmPeekLabel, OmPeekName); tools/peek_gen.py makes the layout. A carousel: the highlighted entry sits
+// in the middle (position 2), the others around it, wrapping; it opens on the worn outfit, or on an extra "current
+// outfit" entry when what is worn isn't a saved outfit (choosing it changes nothing).
+// It follows the character (in the HP tracker, which the game never shows or hides: the plugin shows it while the peek
+// is, its own gauge hidden; the stamina tracker flickered, the game hiding it while stamina is full). Everything runs in the screen's own per-frame call (its root script
+// UIGamePlayControlRootStatusGauge, vtable slot kSlotFrame, the shared root frame function; self+8 = the root element),
+// on the UI thread, whether or not the wheel was ever opened.
+// Its distance is fixed (tools/peek_gen.py), as the user preferred after trying distances following the camera zoom,
+// the character's size measured from two trackers, and a fixed spot on the screen (2026-11-05).
+FrameFn g_gauge_frame_orig = nullptr;
+U64 g_peek_root = 0;
+struct Peek {
+    bool open = false;
+    std::vector<int> entries;        // outfit indices in the Outfits tab's order; -1 = the current, unsaved outfit
+    size_t sel = 0;                  // the highlighted entry (shown in the middle)
+    int worn = -1;
+    std::string current_icon;        // the worn chest piece's icon (the unsaved entry)
+    U64 closing_at = 0;              // closing: its animation plays, then it hides (GetTickCount64 of the close; 0 = not)
+    U16 character = 0xFFFF;          // whose outfits it shows (a switch closes it: they'd be the wrong ones)
+    U64 self = 0;                    // the status screen it was opened from (loads and their questions go through it)
+    U64 wrap = 0, arc = 0, frame[5] = {}, icon[5] = {}, label = 0, name = 0;
+    U64 badge[5] = {}, nb[2] = {};   // each slot's climate badge; the highlighted outfit's badges by its label
+    std::string badge_set[5], nb_set[2];
+    U64 trk = 0, hp_gauge = 0;       // the HP tracker (the peek's home) and its own gauge (hidden while shown)
+    std::string icon_set[5];         // last icon set per position
+} g_peek;
+bool g_peek_down = false;             // the arc key on the last frame
+void wheel_hook(bool on);             // (the arc's wheel hook: below)
+bool g_peek_by_pad = false;           // the open arc came from the pad (L1 / LB held: it closes when that lets go)
+std::atomic<bool> g_peek_pad_open{false}; // (the same, for the pad filters on other threads)
+bool peek_pad_owned() { return g_peek_live && g_peek_pad_open; }
+U8 g_peek_pad_last = 0;               // the pad's buttons on the last frame (for presses)
+U8 pad_buttons_raw();                 // (XInput and PlayStation pads, below)
+std::atomic<bool> g_peek_live{false};  // the arc is open (read by the input filters: the wheel is the arc's)
+std::atomic<U64> g_peek_hud_at{0};     // the status screen's last frame with the arc ready (tick): the key is the arc's
+std::atomic<int> g_peek_wheel{0};      // wheel movement kept from the game while the arc is open (WHEEL_DELTA units)
+
+bool peek_elements()
+{
+    Peek& p = g_peek;
+    if (p.wrap && is_element(p.wrap) && has_class(p.wrap, "om-peek-wrap")) return true;
+    p = Peek{p.open, p.entries, p.sel, p.worn, p.current_icon};
+    p.wrap = find_by_class(g_peek_root, "om-peek-wrap", 8);
+    if (!p.wrap) return false;
+    for (int k = 0; k < 5; ++k) {
+        p.frame[k] = find_by_class(p.wrap, ("om-peek-frame-" + std::to_string(k)).c_str(), 1);
+        p.icon[k] = find_by_class(p.wrap, ("om-peek-icon-" + std::to_string(k)).c_str(), 1);
+    }
+    p.label = find_by_class(p.wrap, "om-peek-label", 1), p.name = find_by_class(p.wrap, "om-peek-name", 1);
+    p.arc = find_by_class(p.wrap, "om-peek-arc", 1);
+    for (int k = 0; k < 5; ++k) p.badge[k] = find_by_class(p.wrap, ("om-peek-badge-" + std::to_string(k)).c_str(), 1);
+    for (int k = 0; k < 2; ++k) p.nb[k] = find_by_class(p.wrap, ("om-peek-nb-" + std::to_string(k)).c_str(), 1);
+    p.trk = find_by_class(g_peek_root, "cpp-hp-actor-tracker", 4);
+    p.hp_gauge = find_by_class(p.trk, "hp-sub-gauge-bar-wrap", 1);
+    bool all = p.label && p.name && p.arc && p.trk;
+    for (int k = 0; k < 5; ++k) all &= p.frame[k] && p.icon[k];
+    LOG("Outfit Arc: elements %s", all ? "found" : "INCOMPLETE");
+    return all;
+}
+
+// The carousel as it is now: position k shows entry sel + (k - 2), wrapping; with fewer than 5 entries the ends stay
+// empty rather than repeat one.
+void peek_draw(U64 self)
+{
+    Peek& p = g_peek;
+    size_t n = p.entries.size();
+    // the arc fits the shown slots (om-peek-arc-n1..n5: tools/peek_gen.py)
+    for (int v = 1; v <= 5; ++v)
+        set_class(p.arc, ("om-peek-arc-n" + std::to_string(v)).c_str(), size_t(v) == std::clamp<size_t>(n, 1, 5));
+    for (int k = 0; k < 5; ++k) {
+        int off = k - 2;
+        bool shown = n && (off >= -int((n - 1) / 2) && off <= int(n / 2));
+        set_class(p.frame[k], "!cpp-none", !shown);
+        std::string pic;
+        if (shown) {
+            int e = p.entries[(p.sel + n + size_t(off % int(n) + int(n))) % n];
+            pic = e < 0 ? p.current_icon : e < int(g_outfits.size()) ? g_outfits[size_t(e)].chest_icon : std::string();
+        }
+        if (pic != p.icon_set[k]) {
+            int r = pic.empty() ? 1 : set_image_raw(self, p.icon[k], pic.c_str());
+            if (r != 1) LOG("Outfit Arc: icon \"%s\" at position %d: %s", pic.c_str(), k, r ? "fault" : "no such texture");
+            p.icon_set[k] = pic;
+        }
+        set_class(p.icon[k], "!cpp-none", !shown || pic.empty());
+    }
+    // the badges: a thermometer on each other slot whose outfit has a climate (as the wheel shows it: manual, or from
+    // its resistance); the highlighted outfit's thermometer and eye (custom looks) beside its label, its hotkey under
+    // its name as key caps
+    auto image = [&](U64 el, std::string& set, const char* want) {
+        if (!el) return;
+        std::string w = want ? want : "";
+        if (w != set && !w.empty()) {
+            int r = set_image_raw(self, el, w.c_str());
+            if (r != 1) LOG("Outfit Arc: badge \"%s\": %s", w.c_str(), r ? "fault" : "no such texture");
+        }
+        set = w;
+        set_class(el, "!cpp-none", w.empty());
+    };
+    auto climate_tex = [](const Outfit& o) -> const char* {
+        const char* c = climate_badge(o);
+        if (!c) return nullptr;
+        if (!std::strcmp(c, "om-cold-c")) return "cd_icon_temperature_freeze_00";
+        if (!std::strcmp(c, "om-cold2-c")) return "cd_icon_temperature_freeze_phase_00";
+        if (!std::strcmp(c, "om-heat-c")) return "cd_icon_temperature_burn_00";
+        if (!std::strcmp(c, "om-heat2-c")) return "cd_icon_temperature_burn_phase_00";
+        return nullptr;
+    };
+    for (int k = 0; k < 5; ++k) {
+        int off = k - 2;
+        bool shown = n && (off >= -int((n - 1) / 2) && off <= int(n / 2)) && k != 2;
+        int ek = shown ? p.entries[(p.sel + n + size_t(off % int(n) + int(n))) % n] : -1;
+        image(p.badge[k], p.badge_set[k], ek >= 0 && ek < int(g_outfits.size()) ? climate_tex(g_outfits[size_t(ek)]) : nullptr);
+    }
+    int e = n ? p.entries[p.sel] : 0;
+    {
+        const Outfit* o = e >= 0 && e < int(g_outfits.size()) ? &g_outfits[size_t(e)] : nullptr;
+        const char* clim = o ? climate_tex(*o) : nullptr;
+        bool looks = false;
+        if (o)
+            for (U16 s = 0; s < 32; ++s) looks |= slot_look(*o, s) != kLookDefault;
+        // (nb-1 is next to the label, nb-0 before it: one badge takes nb-1)
+        image(p.nb[1], p.nb_set[1], looks ? "outfitmanager_badge_eye" : clim);
+        image(p.nb[0], p.nb_set[0], looks ? clim : nullptr);
+        int count = (clim ? 1 : 0) + (looks ? 1 : 0);
+        set_class(p.label, "om-peek-label-s1", count == 1);
+        set_class(p.label, "om-peek-label-s2", count == 2);
+        bool caps = o && o->hk_vk && show_caps(self, p.wrap, o->hk_vk, o->hk_mods, 0);
+        if (!caps)
+            if (U64 box = find_by_class(p.wrap, "om-hk-caps", 1)) set_class(box, "!cpp-none", true);
+    }
+    std::string label = e < 0 ? lang::t("peek.unsaved_label") : lang::f("peek.label", {{"n", std::to_string(e + 1)}});
+    std::string name = e < 0 ? lang::t("peek.unsaved") : e < int(g_outfits.size()) ? g_outfits[size_t(e)].name : "";
+    if (g_set_text) g_set_text(p.label, label.c_str(), 0), g_set_text(p.name, name.c_str(), 0);
+}
+
+// The animations (tools/peek_gen.py): the HUD key guide's unfold. Opening: every part has its own keyframes
+// (om-peek-in-arc / -frame-k / -icon-k / -label / -name: the arc unfolds, the slots ride along and pop, the texts fade
+// in, the middle frame pulses); closing: the whole peek fades with a slight shrink (om-peek-out-wrap). One set at a
+// time; none between, so each plays again from its start.
+enum class PeekAnim { None, In, Out };
+constexpr U64 kPeekOutMs = 270; // the closing fade (peek_gen.py OUT_TOTAL, 0.25 s) and a little more
+
+void peek_animate(PeekAnim a)
+{
+    Peek& p = g_peek;
+    bool in = a == PeekAnim::In;
+    set_class(p.arc, "om-peek-in-arc", in);
+    for (int k = 0; k < 5; ++k) {
+        set_class(p.frame[k], ("om-peek-in-frame-" + std::to_string(k)).c_str(), in);
+        set_class(p.icon[k], ("om-peek-in-icon-" + std::to_string(k)).c_str(), in);
+    }
+    set_class(p.label, "om-peek-in-label", in);
+    set_class(p.name, "om-peek-in-name", in);
+    for (int k = 0; k < 5; ++k) // (each slot's badge rides with its frame)
+        if (p.badge[k]) set_class(p.badge[k], ("om-peek-in-badge-" + std::to_string(k)).c_str(), in);
+    for (U64 b : {p.nb[0], p.nb[1]})
+        if (b) set_class(b, "om-peek-in-name", in); // (with the texts)
+    if (U64 box = find_by_class(p.wrap, "om-hk-caps", 1)) set_class(box, "om-peek-in-name", in);
+    set_class(p.wrap, "om-peek-out-wrap", a == PeekAnim::Out);
+}
+
+void peek_open(U64 self)
+{
+    Peek& p = g_peek;
+    p.self = self;
+    prepare_outfits(); // (as the wheel does when it opens)
+    p.entries.clear();
+    p.worn = find_worn_outfit(self);
+    p.current_icon.clear();
+    if (p.worn < 0) { // what is worn isn't a saved outfit: the "current outfit" entry, first
+        WornRaw w[kWornMax];
+        int n = read_worn(self, w, kWornMax);
+        for (int i = 0; i < n; ++i)
+            if (w[i].slot == kChestSlot && w[i].icon) p.current_icon = w[i].icon;
+        p.entries.push_back(-1);
+    }
+    for (size_t i = 0; i < g_outfits.size(); ++i) p.entries.push_back(int(i));
+    p.sel = p.worn < 0 ? 0 : size_t(p.worn);
+    p.open = true;
+    p.character = g_character;
+    set_class(p.trk, "!cpp-none", false); // (the HP tracker: shown while the peek is, its own gauge hidden)
+    set_class(p.hp_gauge, "!cpp-none", true);
+    peek_animate(PeekAnim::None); // (a close still playing: cut short, the opening starts over)
+    p.closing_at = 0;
+    peek_draw(self);
+    peek_animate(PeekAnim::In);
+    set_class(p.wrap, "!cpp-none", false);
+    LOG("Outfit Arc: open (character %d, %zu outfit(s), worn %d, %zu entries)", int(g_character), g_outfits.size(), p.worn,
+        p.entries.size());
+}
+
+void peek_close(bool choose)
+{
+    Peek& p = g_peek;
+    int e = p.entries.empty() ? -1 : p.entries[p.sel];
+    peek_animate(PeekAnim::None);
+    peek_animate(PeekAnim::Out); // (hidden by peek_frame once it has played)
+    p.closing_at = GetTickCount64();
+    p.open = false;
+    bool load = choose && e >= 0 && e != p.worn && static_cast<size_t>(e) < g_outfits.size();
+    LOG("Outfit Arc: closed on %s%s", e < 0 ? "the current outfit" : ("outfit " + std::to_string(e + 1)).c_str(),
+        !choose ? "" : load ? "; putting it on" : " (nothing to change)");
+    // as a click on it in the wheel: where each piece is, the questions (pieces on other characters, copies), the load
+    if (load) start_loading(p.self, static_cast<U32>(e));
+}
+
+// The outfits' hotkeys, in play (not in menus, prompts or with the arc open): a press of exactly the combination loads
+// that outfit as a click in the wheel would. The character's own outfits are the ones in use (taken over when it
+// changes). The filters (name_wndproc, raw_input_hook) keep the key from the game while its modifiers match.
+void peek_hotkeys(U64 self, bool free)
+{
+    static U16 shown_char = 0xFFFF;
+    U16 ch = current_character();
+    if (free && ch != kNoCharacter && ch != shown_char) { // (another character: its own outfits and hotkeys)
+        shown_char = ch;
+        if (ch != g_character) prepare_outfits();
+    }
+    static bool was[16] = {};
+    std::uint8_t mods = mods_now();
+    for (size_t i = 0; i < 16; ++i) {
+        const Outfit* o = i < g_outfits.size() ? &g_outfits[i] : nullptr;
+        U32 packed = o && o->hk_vk ? o->hk_vk | U32(o->hk_mods) << 8 : 0;
+        if (g_hotkeys[i].load() != packed) g_hotkeys[i] = packed;
+    }
+    for (size_t i = 0; i < 16; ++i) {
+        const Outfit* o = i < g_outfits.size() ? &g_outfits[i] : nullptr;
+        U32 packed = o && o->hk_vk ? o->hk_vk | U32(o->hk_mods) << 8 : 0;
+        // exactly its modifiers; a bare key also with others held when no outfit has that exact combination (so "X"
+        // still works while Shift sprints, unless "Shift + X" is another outfit's)
+        bool exact_taken = false;
+        if (packed && !o->hk_mods && mods)
+            for (size_t j = 0; j < g_outfits.size(); ++j)
+                exact_taken |= g_outfits[j].hk_vk == o->hk_vk && g_outfits[j].hk_mods == mods;
+        bool mods_ok = o && (mods == o->hk_mods || (!o->hk_mods && !exact_taken));
+        bool down = packed && (GetAsyncKeyState(o->hk_vk) & 0x8000) && mods_ok;
+        bool press = down && !was[i];
+        was[i] = down;
+        if (!press || !free) continue;
+        U16 vk = o->hk_vk;
+        std::uint8_t m = o->hk_mods;
+        prepare_outfits(); // (as the wheel and the arc do first; it may rebuild the list: found again by the combination)
+        int idx = -1;
+        for (size_t j = 0; j < g_outfits.size(); ++j)
+            if (g_outfits[j].hk_vk == vk && g_outfits[j].hk_mods == m) idx = int(j);
+        if (idx < 0) continue;
+        int worn = find_worn_outfit(self);
+        LOG("hotkey %s: \"%s\"%s", hotkey_name(vk, m).c_str(), g_outfits[size_t(idx)].name.c_str(),
+            idx == worn ? " (already worn)" : "; putting it on");
+        if (idx != worn) start_loading(self, U32(idx));
+        break; // (one load per frame)
+    }
+}
+
+// The arc opened or closed: the input filters follow (g_peek_live), the wheel hook goes on / off.
+void peek_hotkeys(U64 self, bool free);
+void peek_sync_live(bool open)
+{
+    if (open == g_peek_live.load()) return;
+    g_peek_live = open;
+    wheel_hook(open);
+}
+
+void peek_frame(U64 self)
+{
+    U64 root = rp(self + 8);
+    if (root != g_peek_root) { // (first frame, or the screen was made again: a load)
+        g_peek_root = root, g_peek = Peek{};
+        if (!root || !is_element(root) || !find_by_class(root, "om-peek-wrap", 4)) {
+            if (root) LOG("Outfit Arc: the status screen %llX has no peek (its UI file wasn't patched)", root);
+            g_peek_root = ~0ull; // (said once; looked at again only if the screen changes)
+            return;
+        }
+        LOG("Outfit Arc: found in the status screen %llX", root);
+    }
+    if (g_peek_root == ~0ull || !peek_elements()) return;
+    Peek& p = g_peek;
+    g_peek_hud_at = GetTickCount64();
+    // The key (the "+" page's Quick Peek): held = open, released = the highlighted outfit goes on. Not while the gear
+    // wheel, a question or the naming prompt is open.
+    if (g_peek_capture && !g_menu_open) g_peek_capture = false; // (the wheel closed while the setting waited)
+    watch_game_chars(); // (the window watch: the wheel's messages while the arc is open)
+    U32 vk = g_peek_key.load();
+    bool down = vk && !g_peek_capture && game_focused() && (GetAsyncKeyState(int(vk)) & 0x8000) != 0;
+    bool free = !g_menu_open && !g_ask_modal && !g_name_modal;
+    // The pad: hold L1 / LB and press the d-pad's down (2026-11-05: down does nothing while L1 is held outside combat;
+    // left raises the lantern, up calls the horse, right the items); up / down then move, letting go of L1 wears it.
+    U8 pad = g_peek_pad && game_focused() ? pad_buttons_raw() : 0, pressed = pad & ~g_peek_pad_last;
+    g_peek_pad_last = pad;
+    if (down && !g_peek_down && !p.open && free) {
+        g_peek_wheel = 0;
+        g_peek_by_pad = false;
+        peek_open(self);
+    } else if ((pad & kPadL1) && (pressed & kPadDown) && !p.open && free) {
+        g_peek_wheel = 0;
+        g_peek_by_pad = true;
+        peek_open(self);
+        pressed = 0; // (the opening press doesn't also move)
+    } else if (p.open && (g_peek_by_pad ? !(pad & kPadL1) : !down)) {
+        peek_close(true);
+    }
+    if (p.open && g_peek_by_pad && (pressed & (kPadUp | kPadDown)))
+        g_peek_wheel += (pressed & kPadUp) ? WHEEL_DELTA : -WHEEL_DELTA; // (as a wheel notch: up = up the arc)
+    g_peek_down = down;
+    g_peek_pad_open = p.open && g_peek_by_pad;
+    peek_hotkeys(self, free && !p.open && game_focused());
+    { // a PlayStation pad's reader waits for a pad from the first frame on (not only once the gear wheel opened)
+        static bool woke = false;
+        if (!woke && g_peek_pad && g_hid_wake) woke = true, SetEvent(g_hid_wake);
+    }
+    peek_sync_live(p.open);
+    if (g_ask_next && !g_menu_open && g_ask_self == self) pump_ask(self); // (a question asked from the peek)
+    // closed (nothing chosen) when the player switches character (its outfits would be the last one's) or opens the
+    // gear wheel (2026-11-05: switching with the peek open kept showing Kliff's outfits on Damiane and Oongka)
+    if (p.open) {
+        U16 ch = current_character();
+        if (g_menu_open || (ch != kNoCharacter && ch != p.character)) {
+            LOG("Outfit Arc: closed by %s", g_menu_open ? "the gear wheel opening" : "a character switch");
+            peek_close(false);
+        }
+    }
+    if (p.open && !p.entries.empty()) { // the wheel: a notch is one outfit (towards you = down the arc)
+        int w = g_peek_wheel.load(), steps = w / WHEEL_DELTA;
+        if (steps) {
+            g_peek_wheel -= steps * WHEEL_DELTA;
+            long long n = static_cast<long long>(p.entries.size());
+            long long m = (static_cast<long long>(p.sel) - steps) % n;
+            p.sel = static_cast<size_t>(m < 0 ? m + n : m);
+            peek_draw(self);
+        }
+    }
+    peek_sync_live(p.open);
+    if (p.closing_at && GetTickCount64() - p.closing_at >= kPeekOutMs) { // the closing animation has played
+        set_class(p.wrap, "!cpp-none", true);
+        peek_animate(PeekAnim::None);
+        p.closing_at = 0;
+        set_class(p.trk, "!cpp-none", true); // (the HP tracker hidden again, as the game keeps it)
+    }
+}
+
+float __fastcall gauge_frame_hook(U64 self)
+{
+    // The UI thread is known from here too, not only once the wheel has opened: a load's later parts (the done check,
+    // the stash, the looks held until the model swaps) run on the HUD frame only on that thread (2026-11-05: a load
+    // from the quick peek stayed half-shown until the wheel opened).
+    if (!g_ui_thread) {
+        g_ui_thread = GetCurrentThreadId();
+        LOG("ui thread %lu (from the status screen)", g_ui_thread);
+    }
+    peek_frame(self);
+    return g_gauge_frame_orig(self);
+}
+
+// The game reads the keyboard and mouse through raw input (GetRawInputData). The peek's key never reaches it while the
+// HUD shows the peek (so a key the game also uses, e.g. Tab's Skill 11, does only the peek), and while the peek is open
+// the wheel goes to the peek instead of the camera's distance. Nothing of the game's own code is needed for this.
+using GetRawInputDataFn = UINT(WINAPI*)(HRAWINPUT, UINT, LPVOID, PUINT, UINT);
+GetRawInputDataFn g_raw_input_orig = nullptr;
+
+UINT WINAPI raw_input_hook(HRAWINPUT h, UINT cmd, LPVOID data, PUINT size, UINT header)
+{
+    UINT r = g_raw_input_orig(h, cmd, data, size, header);
+    if (cmd != RID_INPUT || !data || r == UINT(-1) || r < sizeof(RAWINPUTHEADER)) return r;
+    __try {
+        RAWINPUT* in = static_cast<RAWINPUT*>(data);
+        U32 vk = g_peek_key.load();
+        USHORT mouse = peek_mouse_flags(vk);
+        bool hud = GetTickCount64() - g_peek_hud_at.load() < 250 && !g_menu_open && !g_name_modal && !g_ask_modal;
+        if (in->header.dwType == RIM_TYPEMOUSE) {
+            RAWMOUSE& m = in->data.mouse;
+            if (g_peek_live && (m.usButtonFlags & RI_MOUSE_WHEEL)) {
+                g_peek_wheel += static_cast<SHORT>(m.usButtonData);
+                m.usButtonFlags &= ~RI_MOUSE_WHEEL;
+                m.usButtonData = 0;
+            }
+            if (hud && mouse) m.usButtonFlags &= ~mouse;
+            for (U32 b : {U32(VK_MBUTTON), U32(VK_XBUTTON1), U32(VK_XBUTTON2)}) // (a hotkey's mouse button)
+                if ((m.usButtonFlags & peek_mouse_flags(b)) && hotkey_held_now(b)) m.usButtonFlags &= ~peek_mouse_flags(b);
+        } else if (in->header.dwType == RIM_TYPEKEYBOARD) {
+            RAWKEYBOARD& k = in->data.keyboard;
+            if (hud && vk && !mouse && k.VKey == vk) k.VKey = 0xFF, k.MakeCode = 0, k.Flags &= ~(RI_KEY_E0 | RI_KEY_E1);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    return r;
+}
+
+// While the arc is open, a low-level mouse hook takes the wheel before anything else sees it (2026-11-06: after using a
+// pad, the game in its pad mode passed no wheel to its window, so the window / raw input filters saw none and the arc
+// didn't move). Installed when the arc opens, removed when it closes (its own thread: such a hook needs a message loop).
+std::atomic<DWORD> g_wheel_thread_id{0};
+HANDLE g_wheel_open_event = nullptr;
+
+LRESULT CALLBACK wheel_ll_proc(int code, WPARAM wp, LPARAM lp)
+{
+    if (code == HC_ACTION && wp == WM_MOUSEWHEEL && g_peek_live && game_focused()) {
+        const MSLLHOOKSTRUCT* m = reinterpret_cast<const MSLLHOOKSTRUCT*>(lp);
+        g_peek_wheel += static_cast<SHORT>(HIWORD(m->mouseData));
+        return 1; // (kept from the game: no window message, no raw input)
+    }
+    return CallNextHookEx(nullptr, code, wp, lp);
+}
+
+DWORD WINAPI wheel_thread(LPVOID)
+{
+    MSG msg;
+    PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE); // (the thread's queue: the close message can be posted to it)
+    g_wheel_thread_id = GetCurrentThreadId();
+    for (;;) {
+        WaitForSingleObject(g_wheel_open_event, INFINITE);
+        HHOOK h = SetWindowsHookExW(WH_MOUSE_LL, &wheel_ll_proc, g_self, 0);
+        if (!h) LOG("Outfit Arc: wheel hook failed (%lu)", GetLastError());
+        while (g_peek_live && GetMessageW(&msg, nullptr, 0, 0) > 0)
+            if (msg.message == WM_APP) break; // (the arc closed)
+        if (h) UnhookWindowsHookEx(h);
+    }
+}
+
+// The arc opened / closed: the wheel hook goes on / off.
+void wheel_hook(bool on)
+{
+    if (on) {
+        if (g_wheel_open_event) SetEvent(g_wheel_open_event);
+    } else if (DWORD t = g_wheel_thread_id.load()) {
+        PostThreadMessageW(t, WM_APP, 0, 0);
+    }
+}
+
+void install_raw_input()
+{
+    g_wheel_open_event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (HANDLE t = CreateThread(nullptr, 0, &wheel_thread, nullptr, 0, nullptr)) CloseHandle(t);
+    void* target = nullptr;
+    if (MH_CreateHookApiEx(L"user32", "GetRawInputData", reinterpret_cast<void*>(&raw_input_hook),
+                           reinterpret_cast<void**>(&g_raw_input_orig), &target) != MH_OK ||
+        MH_EnableHook(target) != MH_OK) {
+        LOG("Outfit Arc: raw input hook FAILED (the key and the wheel also reach the game)");
+        return;
+    }
+    LOG("Outfit Arc: raw input hook on (key %s)", peek_key_name(g_peek_key.load()).c_str());
+}
+
+void install_peek()
+{
+    void** vt = game::find_vtable(".?AVUIGamePlayControlRootStatusGauge@uiCommonScript@pa@@");
+    if (!vt || vt[kSlotFrame] != reinterpret_cast<void*>(g_base + kRvaRootFrame)) { // (the shared root frame function)
+        LOG("Outfit Arc: the status screen's frame call not found; no quick peek");
+        return;
+    }
+    g_gauge_frame_orig = reinterpret_cast<FrameFn>(vt[kSlotFrame]); // (before the patch: the game may call it at once)
+    void* prev = game::patch_vtable(vt, kSlotFrame, reinterpret_cast<void*>(&gauge_frame_hook));
+    LOG("Outfit Arc: status screen frame hook %s (vtable +%llX)", prev ? "on" : "FAILED", reinterpret_cast<U64>(vt) - g_base);
+}
+
 DWORD WINAPI init_thread(LPVOID)
 {
     wchar_t buf[MAX_PATH];
@@ -7964,6 +9028,9 @@ DWORD WINAPI init_thread(LPVOID)
         LOG("setup failed; mod inactive");
         return 0;
     }
+    install_peek();
+    install_raw_input();
+    install_pad_filters();
     if (HANDLE t = CreateThread(nullptr, 0, key_thread, nullptr, 0, nullptr)) CloseHandle(t);
     g_hid_wake = CreateEventW(nullptr, FALSE, FALSE, nullptr); // (auto-reset: one look per menu open without a pad)
     if (g_hid_wake)

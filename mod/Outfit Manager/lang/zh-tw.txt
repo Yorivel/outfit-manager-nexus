@@ -174,3 +174,29 @@ feature.missing_pieces = 缺失部位詢問
 feature.companions = 同伴套裝
 feature.appearance = 外觀
 feature.settings = 套裝設定（滾動）
+
+# Outfit Arc
+peek.label = 套裝 {n}
+peek.unsaved_label = 未儲存
+peek.unsaved = 目前套裝
+setting.peekkey = 套裝弧
+setting.peekpad = 套裝弧
+value.press_key = 請按下按鍵...
+value.peekpad = {button} + 下
+key.mouse3 = 滑鼠中鍵
+key.mouse4 = 滑鼠 4
+key.mouse5 = 滑鼠 5
+desc.peekkey.off = 按住一個按鍵，套裝會以弧形顯示在角色旁邊；捲動選擇，放開即可換上。點擊以選擇按鍵。
+desc.peekkey.on = 按住此按鍵，套裝會以弧形顯示在角色旁邊。捲動選擇，放開換上。點擊以選擇其他按鍵。
+desc.peekpad.off = 按住{button}並按方向鍵下，套裝會以弧形顯示在角色旁邊。捲動以開啟。
+desc.peekpad.on = 按住{button}並按方向鍵下，套裝會以弧形顯示在角色旁邊。上下鍵移動，放開{button}即可換上反白的套裝。
+desc.peekkey.wait = 按下要使用的按鍵或滑鼠按鈕。Esc 取消，Backspace 關閉。
+
+# Hotkeys
+setting.hotkey = 快速鍵
+value.no_hotkey = 無
+desc.hotkey.off = 點擊後按下一個按鍵（可搭配 Ctrl、Alt 或 Shift），遊戲中按它即可換上此套裝。
+desc.hotkey.on = 遊戲中按 {hotkey} 即可換上此套裝。點擊以選擇其他按鍵；Backspace 可清除。
+desc.hotkey.wait = 按下要使用的按鍵或組合（Ctrl、Alt、Shift 加一個按鍵或滑鼠按鈕）。Esc 取消，Backspace 清除。
+toast.hotkey_moved = {hotkey} 已從「{outfit}」移到此處
+toast.hotkey_arc = {hotkey} 用於開啟套裝弧，請選擇其他按鍵

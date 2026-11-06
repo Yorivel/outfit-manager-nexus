@@ -12,11 +12,12 @@
 namespace uibin {
 
 struct Report {
-    int headers = 0, values = 0;
+    int headers = 0, values = 0, peeks = 0;
     std::string error; // why nothing was changed
 };
 
-// What a file gets, by its name (any case, any folder): 0 = not ours; bit 1 = header, bit 2 = value text.
+// What a file gets, by its name (any case, any folder): 0 = not ours; bit 1 = header, bit 2 = value text, bit 4 =
+// the quick peek's elements (statusgaugeview2_game).
 unsigned wants(const std::string& path);
 
 // out = in with the additions `what` asks for; false (out empty, r.error set) when the bytes aren't laid out as

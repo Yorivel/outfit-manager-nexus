@@ -174,3 +174,29 @@ feature.missing_pieces = 不足部位の確認
 feature.companions = 仲間の衣装
 feature.appearance = 外見
 feature.settings = 衣装の設定（スクロール）
+
+# Outfit Arc
+peek.label = 衣装 {n}
+peek.unsaved_label = 未保存
+peek.unsaved = 現在の衣装
+setting.peekkey = 衣装アーク
+setting.peekpad = 衣装アーク
+value.press_key = キーを押してください...
+value.peekpad = {button} + 下
+key.mouse3 = マウス中ボタン
+key.mouse4 = マウス4
+key.mouse5 = マウス5
+desc.peekkey.off = キーを押し続けると、キャラクターの横に衣装が弧状に表示されます。スクロールで選び、離すと着替えます。クリックしてキーを選択します。
+desc.peekkey.on = このキーを押し続けると、キャラクターの横に衣装が弧状に表示されます。スクロールで選び、離すと着替えます。クリックして別のキーを選択します。
+desc.peekpad.off = {button}を押しながら方向キーの下を押すと、キャラクターの横に衣装が弧状に表示されます。スクロールしてオンにします。
+desc.peekpad.on = {button}を押しながら方向キーの下を押すと、キャラクターの横に衣装が弧状に表示されます。上下で移動し、{button}を離すと選択中の衣装に着替えます。
+desc.peekkey.wait = 使用するキーまたはマウスボタンを押してください。Escでキャンセル、Backspaceでオフ。
+
+# Hotkeys
+setting.hotkey = ホットキー
+value.no_hotkey = なし
+desc.hotkey.off = クリックしてからキーを押すと（Ctrl、Alt、Shift との組み合わせも可）、プレイ中にそのキーでこの衣装に着替えます。
+desc.hotkey.on = プレイ中に {hotkey} を押すとこの衣装に着替えます。クリックして別のキーを選び、Backspace で解除します。
+desc.hotkey.wait = 使うキーまたは組み合わせを押してください（Ctrl、Alt、Shift とキーまたはマウスボタン）。Esc でキャンセル、Backspace で解除。
+toast.hotkey_moved = {hotkey} を「{outfit}」からここへ移しました
+toast.hotkey_arc = {hotkey} は衣装アークを開きます。別のキーを選んでください

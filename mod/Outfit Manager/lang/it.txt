@@ -177,3 +177,29 @@ feature.missing_pieces = la domanda sui pezzi mancanti
 feature.companions = completi dei compagni
 feature.appearance = aspetto
 feature.settings = impostazioni dei completi (scorrimento)
+
+# Outfit Arc
+peek.label = COMPLETO {n}
+peek.unsaved_label = NON SALVATO
+peek.unsaved = Completo attuale
+setting.peekkey = Arco dei completi
+setting.peekpad = Arco dei completi
+value.press_key = Premi un tasto...
+value.peekpad = {button} + Giù
+key.mouse3 = Tasto centrale
+key.mouse4 = Mouse 4
+key.mouse5 = Mouse 5
+desc.peekkey.off = Tieni premuto un tasto per mostrare i tuoi completi su un arco accanto al personaggio; scorri per sceglierne uno e rilascia per indossarlo. Fai clic per scegliere il tasto.
+desc.peekkey.on = Tieni premuto questo tasto per mostrare i tuoi completi su un arco accanto al personaggio. Scorri per scegliere, rilascia per indossarlo. Fai clic per scegliere un altro tasto.
+desc.peekpad.off = Tieni premuto {button} e premi giù sulla croce direzionale per mostrare i tuoi completi su un arco accanto al personaggio. Scorri per attivarlo.
+desc.peekpad.on = Tieni premuto {button} e premi giù sulla croce direzionale per mostrare i tuoi completi su un arco accanto al personaggio. Su e giù si muovono lungo l'arco; rilascia {button} per indossare il completo evidenziato.
+desc.peekkey.wait = Premi il tasto o il pulsante del mouse da usare. Esc annulla, Backspace lo disattiva.
+
+# Hotkeys
+setting.hotkey = Scorciatoia
+value.no_hotkey = Nessuna
+desc.hotkey.off = Fai clic e premi un tasto (con Ctrl, Alt o Maiusc se vuoi) per indossare questo completo con esso mentre giochi.
+desc.hotkey.on = Premi {hotkey} mentre giochi per indossare questo completo. Fai clic per sceglierne un altro; Backspace la cancella.
+desc.hotkey.wait = Premi il tasto o la combinazione da usare (Ctrl, Alt, Maiusc e un tasto o pulsante del mouse). Esc annulla, Backspace la cancella.
+toast.hotkey_moved = {hotkey} spostata qui da "{outfit}"
+toast.hotkey_arc = {hotkey} apre l'Arco dei completi; scegli un altro tasto

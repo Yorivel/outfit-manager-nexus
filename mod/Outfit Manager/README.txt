@@ -1,4 +1,4 @@
-Outfit Manager 0.3.3 by Strahlimeier
+Outfit Manager 0.4.0 by Strahlimeier
 Adds an Outfits tab to Crimson Desert's gear wheel: save what you wear, switch outfits with one click.
 
 INSTALL (DMM)
@@ -18,6 +18,21 @@ USE
   Click + to save the armour you are wearing; click an outfit to put it on.
   Scroll over an outfit for its settings, or over + for the global ones.
   Controller: aim with the stick, press A / Cross to confirm, L2 / R2 to scroll a slot (shown on the slot).
+
+OUTFIT ARC
+  Switch without opening the wheel: hold the Outfit Arc's key, scroll to pick an outfit, let go to wear it.
+  Set the key on the + page (Outfit Arc, Off by default): click it, then press any key or mouse button (middle, 4, 5).
+  Esc cancels, Backspace turns it off.
+  Controller: turn it on in the + page (it shows the pad's entry while you use a pad), then hold L1 / LB and press
+  down on the d-pad; up and down move along it, let go of L1 / LB to wear the highlighted outfit.
+  While it is open, the mouse wheel and the d-pad's up and down only move the arc.
+
+HOTKEYS
+  On an outfit's settings page, click Hotkey and press a key, with Ctrl, Alt or Shift if you like (or none).
+  Pressing it while you play puts the outfit on. It shows on the outfit's slot with the game's key icons.
+  Each outfit keeps its own, so each character has their own hotkeys, saved with your game saves.
+  A combination belongs to one outfit; giving it to another moves it. Backspace (while choosing) clears it.
+  No controller hotkeys yet: the game uses every button. Ideas are welcome on the Nexus page.
 
 LANGUAGES
   The mod follows the game's language (its own setting, else Steam's). To pick another one, scroll Language in the
@@ -44,7 +59,7 @@ FILES
   OutfitManager.log there records what the plugin did; please attach it to bug reports.
 
 NOTES
-  Tested on Crimson Desert 1.0.0.3479 (with the Charting the Unknown expansion) and DMM 4.7.0.
+  Tested on Crimson Desert 1.0.0.3549 (with the Charting the Unknown expansion) and DMM 4.7.3.
   Controllers: tested on a DualSense, both directly and through Steam Input (Xbox layout).
   The mod ships none of the game's own files: the plugin adds the Outfits tab to the gear wheel while the game loads
   it, onto whatever copy it loads (the game's, or another mod's), and DMM merges the mod's CSS and texture list into

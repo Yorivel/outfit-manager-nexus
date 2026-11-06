@@ -185,3 +185,29 @@ feature.missing_pieces = سؤال القطع الناقصة
 feature.companions = أزياء الرفاق
 feature.appearance = المظهر
 feature.settings = إعدادات الأزياء (التمرير)
+
+# Outfit Arc
+peek.label = الزي {n}
+peek.unsaved_label = غير محفوظ
+peek.unsaved = الزي الحالي
+setting.peekkey = قوس الأزياء
+setting.peekpad = قوس الأزياء
+value.press_key = اضغط على مفتاح...
+value.peekpad = {button} + لأسفل
+key.mouse3 = زر الفأرة الأوسط
+key.mouse4 = الفأرة 4
+key.mouse5 = الفأرة 5
+desc.peekkey.off = اضغط مع الاستمرار على مفتاح لعرض أزيائك على قوس بجانب شخصيتك، ثم مرّر لاختيار زي وأفلت المفتاح لارتدائه. انقر لاختيار المفتاح.
+desc.peekkey.on = اضغط مع الاستمرار على هذا المفتاح لعرض أزيائك على قوس بجانب شخصيتك. مرّر للاختيار وأفلت للارتداء. انقر لاختيار مفتاح آخر.
+desc.peekpad.off = اضغط مع الاستمرار على {button} ثم اضغط لأسفل على أزرار الاتجاه لعرض أزيائك على قوس بجانب شخصيتك. مرّر للتشغيل.
+desc.peekpad.on = اضغط مع الاستمرار على {button} ثم اضغط لأسفل على أزرار الاتجاه لعرض أزيائك على قوس بجانب شخصيتك. أعلى وأسفل للتنقل؛ أفلت {button} لارتداء الزي المحدد.
+desc.peekkey.wait = اضغط على المفتاح أو زر الفأرة الذي تريد استخدامه. Esc للإلغاء، Backspace للإيقاف.
+
+# Hotkeys
+setting.hotkey = اختصار
+value.no_hotkey = لا يوجد
+desc.hotkey.off = انقر ثم اضغط على مفتاح (مع Ctrl أو Alt أو Shift إن شئت) لارتداء هذا الزي به أثناء اللعب.
+desc.hotkey.on = اضغط {hotkey} أثناء اللعب لارتداء هذا الزي. انقر لاختيار مفتاح آخر؛ ثم Backspace يمسحه.
+desc.hotkey.wait = اضغط على المفتاح أو المجموعة المراد استخدامها (Ctrl وAlt وShift مع مفتاح أو زر فأرة). Esc للإلغاء، Backspace للمسح.
+toast.hotkey_moved = نُقل {hotkey} إلى هنا من "{outfit}"
+toast.hotkey_arc = {hotkey} يفتح قوس الأزياء؛ اختر مفتاحًا آخر

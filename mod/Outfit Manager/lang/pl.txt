@@ -191,3 +191,29 @@ feature.missing_pieces = pytanie o brakujące części
 feature.companions = stroje towarzyszy
 feature.appearance = wygląd
 feature.settings = ustawienia strojów (przewijanie)
+
+# Outfit Arc
+peek.label = STRÓJ {n}
+peek.unsaved_label = NIEZAPISANY
+peek.unsaved = Obecny strój
+setting.peekkey = Łuk strojów
+setting.peekpad = Łuk strojów
+value.press_key = Naciśnij klawisz...
+value.peekpad = {button} + W dół
+key.mouse3 = Środkowy przycisk myszy
+key.mouse4 = Mysz 4
+key.mouse5 = Mysz 5
+desc.peekkey.off = Przytrzymaj klawisz, aby pokazać swoje stroje na łuku obok postaci; przewiń, aby wybrać, i puść, aby założyć. Kliknij, aby wybrać klawisz.
+desc.peekkey.on = Przytrzymaj ten klawisz, aby pokazać swoje stroje na łuku obok postaci. Przewiń, aby wybrać, puść, aby założyć. Kliknij, aby wybrać inny klawisz.
+desc.peekpad.off = Przytrzymaj {button} i naciśnij w dół na krzyżaku, aby pokazać swoje stroje na łuku obok postaci. Przewiń, aby włączyć.
+desc.peekpad.on = Przytrzymaj {button} i naciśnij w dół na krzyżaku, aby pokazać swoje stroje na łuku obok postaci. Góra i dół przesuwają po nim; puść {button}, aby założyć zaznaczony strój.
+desc.peekkey.wait = Naciśnij klawisz lub przycisk myszy, którego chcesz używać. Esc anuluje, Backspace wyłącza.
+
+# Hotkeys
+setting.hotkey = Skrót
+value.no_hotkey = Brak
+desc.hotkey.off = Kliknij, a potem naciśnij klawisz (jeśli chcesz, z Ctrl, Alt lub Shift), aby zakładać ten strój podczas gry.
+desc.hotkey.on = Naciśnij {hotkey} podczas gry, aby założyć ten strój. Kliknij, aby wybrać inny; Backspace go usuwa.
+desc.hotkey.wait = Naciśnij klawisz lub kombinację (Ctrl, Alt, Shift i klawisz lub przycisk myszy). Esc anuluje, Backspace usuwa.
+toast.hotkey_moved = {hotkey} przeniesiono tutaj z „{outfit}”
+toast.hotkey_arc = {hotkey} otwiera Łuk strojów; wybierz inny klawisz

@@ -177,3 +177,29 @@ feature.missing_pieces = die Frage nach fehlenden Teilen
 feature.companions = Outfits für Gefährten
 feature.appearance = Aussehen
 feature.settings = Outfit-Einstellungen (Scrollen)
+
+# Outfit Arc
+peek.label = OUTFIT {n}
+peek.unsaved_label = NICHT GESPEICHERT
+peek.unsaved = Aktuelles Outfit
+setting.peekkey = Outfit-Bogen
+setting.peekpad = Outfit-Bogen
+value.press_key = Taste drücken...
+value.peekpad = {button} + Unten
+key.mouse3 = Mittlere Maustaste
+key.mouse4 = Maustaste 4
+key.mouse5 = Maustaste 5
+desc.peekkey.off = Halte eine Taste gedrückt, um deine Outfits auf einem Bogen neben deiner Figur zu zeigen; scrolle, um eins zu wählen, und lass los, um es anzuziehen. Klicke, um die Taste zu wählen.
+desc.peekkey.on = Halte diese Taste gedrückt, um deine Outfits auf einem Bogen neben deiner Figur zu zeigen. Scrolle zum Wählen, lass los zum Anziehen. Klicke, um eine andere Taste zu wählen.
+desc.peekpad.off = Halte {button} und drücke auf dem Steuerkreuz nach unten, um deine Outfits auf einem Bogen neben deiner Figur zu zeigen. Scrolle, um es einzuschalten.
+desc.peekpad.on = Halte {button} und drücke auf dem Steuerkreuz nach unten, um deine Outfits auf einem Bogen neben deiner Figur zu zeigen. Oben und unten bewegen sich darauf; lass {button} los, um das markierte Outfit anzuziehen.
+desc.peekkey.wait = Drücke die gewünschte Taste oder Maustaste. Esc bricht ab, Rücktaste schaltet sie aus.
+
+# Hotkeys
+setting.hotkey = Tastenkürzel
+value.no_hotkey = Keins
+desc.hotkey.off = Klicke und drücke dann eine Taste (wenn du willst mit Strg, Alt oder Umschalt), um dieses Outfit im Spiel damit anzuziehen.
+desc.hotkey.on = Drücke im Spiel {hotkey}, um dieses Outfit anzuziehen. Klicke, um ein anderes zu wählen; Rücktaste löscht es dann.
+desc.hotkey.wait = Drücke die gewünschte Taste oder Kombination (Strg, Alt, Umschalt und eine Taste oder Maustaste). Esc bricht ab, Rücktaste löscht es.
+toast.hotkey_moved = {hotkey} wurde von „{outfit}“ hierher verschoben
+toast.hotkey_arc = {hotkey} öffnet den Outfit-Bogen; wähle eine andere Taste
