@@ -304,10 +304,7 @@ struct DeferredEquip {
     std::string what; // "Helmet (Wooden Mask...)"
     std::string from; // whose it was
     bool held = false; // refused while another piece held its slot: put on once the game lets go of the slot
-    bool staggered = false; // DIAG (A/B load modes): put on once the last piece's model parts are built
 };
-const char* const kLoadModeNames[] = {"swap (the game replaces each piece)", "take off first, then put on",
-                                      "one piece at a time (swap)"};
 // A worn piece a load takes off or replaces: after the load it must still be worn or in a bag (lost_check).
 struct LeavingPiece {
     U64 uid;
@@ -436,6 +433,17 @@ constexpr U8 kPadDown = 16;   // and down
 // patched copy instead (kept for the whole run: what the parser makes may point into it). The path is the loader's
 // local: inline, or on the heap when long; where both are relative to the stream is read from the loader's code.
 using UiParseFn = U64(__fastcall*)(U64 loader, U64 stream);
+
+// On a mount the HP tracker (60% up the tracked box: rider and mount together) sits at the rider's head, and the arc
+// with it (2026-11-07). The mount's own stamina tracker sits at 75% of the mount's box - its back, where the rider's
+// hips are, for every mount. So on a mount the arc's wrap is moved down to that tracker's height (its x stays the
+// rider's). The tracker only moves while shown: the plugin shows it with the arc (its spiral stays as the game keeps it,
+// hidden until the mount's stamina changes).
+// Riding (build 26480954, found by diffing the player on foot / mounted in two sessions; fields straight in the actor
+// held the mount's id in one session and 0 in the next - list entries): in the actor's component, [comp+0x1B8]+0x30 is a
+// riding flag (0 / 1) and [comp+0x1A0]+0xC8 the ridden actor's id (-1 on foot). Riding only when both say so; anything
+// else (a patch moving them) is "not riding", which leaves the arc where it always was.
+constexpr U64 kOffCompRide = 0x1B8, kOffRideFlag = 0x30, kOffCompRidden = 0x1A0, kOffRiddenId = 0xC8;
 
 // (defined in core.cpp)
 extern U64 g_base;

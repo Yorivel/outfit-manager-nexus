@@ -26,7 +26,6 @@ struct LoadStep {
     U16 slot; // equip slot
     U16 key;
     U64 uid;
-    bool swap = false; // (a take-off ahead of the outfit's piece: refused, the put-on still swaps it)
 };
 
 // What the last guarded equip / unequip call faulted on (filled by the exception filter, logged by error_text).
@@ -206,68 +205,6 @@ std::string error_text(int err)
     return b + (e ? cstr(rp(rp(e))) : std::string("(no text)"));
 }
 
-// DIAG (lost pieces, 2026-11-06): everywhere a piece copy is, read raw: every equipment-list entry (taken-off ones too)
-// and every bag position, ignoring the count and key checks the normal scans make. For the log only.
-void diag_where(U64 mgr, const char* when, U64 uid, U16 key)
-{
-    std::string out;
-    char b[160];
-    if (U64 list = equipment_list()) {
-        U64 e = rp(list + 8);
-        U32 n = r32(list + 0x10);
-        for (U32 i = 0; e && i < n && i < 64; ++i) {
-            U64 it = e + i * 0xd0ull, id = 0;
-            if (!rd(it, id) || id != uid) continue;
-            U16 k = 0xFFFF, sl = 0xFFFF, x = 0;
-            long long cnt = 0;
-            rd(it + 8, k), rd(it + 0x10, cnt), rd(it + kOffEntrySlot, sl), rd(it + kOffEntrySlot + 2, x);
-            std::snprintf(b, sizeof b, " equipment list [%u]: key %u count %lld slot %u (+CA %u);", i, k, cnt, sl, x);
-            out += b;
-        }
-    }
-    U64 bags = mgr ? rp(mgr + kOffMgrBags) : 0;
-    U32 nb = mgr ? r32(mgr + 0x20) : 0;
-    for (U32 i = 0; bags && i < nb && i < 64; ++i) {
-        U64 bag = rp(bags + i * 8ull);
-        U64 items = bag ? rp(bag) : 0;
-        short cap = 0;
-        U16 bid = 0xFFFF;
-        if (bag) rd(bag + kOffBagCount, cap), rd(bag + 0x10, bid);
-        for (short q = 0; items && q < cap && q < 4096; ++q) {
-            U64 it = items + q * 200ull, id = 0;
-            if (!rd(it, id) || id != uid) continue;
-            U16 k = 0xFFFF;
-            long long cnt = 0;
-            rd(it + 8, k), rd(it + 0x10, cnt);
-            std::snprintf(b, sizeof b, " bag %u (id %u) pos %d: key %u count %lld;", i, bid, q, k, cnt);
-            out += b;
-        }
-    }
-    LOG("  DIAG %s: key %u \"%s\" uid %llX is at:%s", when, key, item_name(key).c_str(), uid,
-        out.empty() ? " nowhere" : out.c_str());
-}
-
-// DIAG (lost pieces): who is in a bag position now (bag index into the inventory's list, as find_in_bags reports it).
-std::string diag_pos(U64 mgr, U16 bag_id, short pos)
-{
-    U64 bags = mgr ? rp(mgr + kOffMgrBags) : 0;
-    U32 nb = mgr ? r32(mgr + 0x20) : 0;
-    for (U32 i = 0; bags && i < nb && i < 64; ++i) {
-        U64 bag = rp(bags + i * 8ull);
-        U16 bid = 0xFFFF;
-        short cap = 0;
-        if (!bag || !rd(bag + 0x10, bid) || bid != bag_id || !rd(bag + kOffBagCount, cap) || pos >= cap) continue;
-        U64 it = rp(bag) + pos * 200ull, id = 0;
-        U16 k = 0xFFFF;
-        long long cnt = 0;
-        rd(it, id), rd(it + 8, k), rd(it + 0x10, cnt);
-        char b[128];
-        std::snprintf(b, sizeof b, "key %u \"%s\" uid %llX count %lld", k, k != 0xFFFF ? item_name(k).c_str() : "", id, cnt);
-        return b;
-    }
-    return "unreadable";
-}
-
 // Runs one request; false if there is no character to run it for. Kliff (kind 1): the client-side functions (they
 // apply at once); companions: the game's UI requests. g_step_err: the last put-on's answer (0 = ok).
 
@@ -311,7 +248,6 @@ bool run_step(const LoadStep& s, size_t number)
         g_steps_ok += err == 0; // (a change went through: a model swap follows)
         LOG("  step %zu: take off equipment-%u (key %u uid %llX): %s", number, s.slot, s.key, s.uid,
             error_text(err).c_str());
-        diag_where(call_inventory(actor), "right after its take-off", s.uid, s.key); // DIAG (lost pieces)
         bool learned = false;
         if (err == kErrNoItemAfterRemoval) {
             std::lock_guard<std::mutex> keys(g_keys_mu);
@@ -338,7 +274,6 @@ bool run_step(const LoadStep& s, size_t number)
             g_step_err = err;
             LOG("  step %zu: put on equipment-%u: key %u \"%s\" uid %llX from bag %u pos %d: %s", number, s.slot,
                 s.key, item_name(s.key).c_str(), s.uid, at.bag, at.pos, error_text(err).c_str());
-            LOG("  DIAG bag %u pos %d after the put-on: %s", at.bag, at.pos, diag_pos(mgr, at.bag, at.pos).c_str()); // DIAG
         }
     }
     if (ctx[0]) release_player(ctx);
@@ -451,13 +386,7 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
         }
         bool needed = false; // the worn piece goes to another slot of the outfit
         for (const OutfitItem& it : o.items) needed |= worn && it.uid == w[i].uid && it.key == w[i].key;
-        // A worn piece is taken off before the outfit's goes on (not swapped by the equip): the game's swap sends the
-        // old piece back to a bag position it remembers, and a piece remembering a position that doesn't exist was
-        // lost on the way (2026-11-06, a player's log: every lost piece had been put on from one bag position and was
-        // swapped out; pieces taken off never got lost). Slots the game won't leave empty keep the swap.
-        bool swap_off = g_load_mode == 1 && worn && t && !keep_slots.count(w[i].slot); // DIAG (A/B): mode 1 only
-        if (worn && (needed || swap_off || (!t && !keep_slots.count(w[i].slot))))
-            off.push_back({false, w[i].slot, w[i].key, w[i].uid, swap_off && !needed});
+        if (worn && (needed || (!t && !keep_slots.count(w[i].slot)))) off.push_back({false, w[i].slot, w[i].key, w[i].uid});
         if (t) on.push_back({true, t->slot, t->key, t->uid});
         if (worn && (t || !keep_slots.count(w[i].slot))) leaving.push_back({w[i].uid, w[i].key, w[i].slot}); // (checked after)
     }
@@ -468,8 +397,6 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
         return;
     }
     LOG("load \"%s\": %zu to take off, %zu to put on", o.name.c_str(), off.size(), on.size());
-    LOG("DIAG load mode: %s", kLoadModeNames[g_load_mode]); // DIAG (A/B)
-    bool stagger_started = false; // DIAG (A/B): mode 2, the first put-on ran
     off.insert(off.end(), on.begin(), on.end());
     std::vector<DeferredEquip> held;
     g_steps_ok = 0;
@@ -479,17 +406,8 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
             LOG("  step %zu: put on equipment-%u skipped: its take-off was refused", i + 1, off[i].slot);
             continue;
         }
-        if (g_load_mode == 2 && off[i].equip && stagger_started) { // DIAG (A/B): the rest one at a time
-            held.push_back({off[i].uid, off[i].slot, off[i].key, slot_list(o, {off[i].slot}), "", false, true});
-            continue;
-        }
         if (!run_step(off[i], i + 1)) break;
-        if (g_load_mode == 2 && off[i].equip) // DIAG (A/B)
-            stagger_started = true, g_stagger_at = GetTickCount64(), g_stagger_swaps = g_model_swaps.load();
-        if (!off[i].equip && g_step_err && off[i].swap)
-            LOG("  (equipment-%u: the outfit's piece swaps it instead)", off[i].slot);
-        else if (!off[i].equip && g_step_err)
-            refused.insert(off[i].slot);
+        if (!off[i].equip && g_step_err) refused.insert(off[i].slot);
         if (!off[i].equip || !g_step_err || g_step_err == kFault) continue;
         U64 e = slot_claim(off[i].slot);
         if (!e) continue; // (refused for another reason: verify reports it)
@@ -672,32 +590,8 @@ void pump_async(U64 self)
     }
     bool late = now - g_async.started > kAsyncMs;
     bool acted = false; // a late put-on ran this frame: checked once the game applied it (a later frame)
-    bool stagger_busy = false; // DIAG (A/B): one staggered put-on per frame, in order
     for (size_t i = 0; i < g_async.equips.size();) {
         DeferredEquip& d = g_async.equips[i];
-        if (d.staggered) { // DIAG (A/B): the next piece once the last one's model parts are built (or 400 ms)
-            bool ready = !stagger_busy;
-            if (ready) {
-                U64 sctx[4] = {};
-                U64 actor = acquire_player(sctx);
-                U64 model = actor ? look_model(actor) : 0;
-                bool loading = model && model_loading(model);
-                if (sctx[0]) release_player(sctx);
-                ready = (g_model_swaps.load() != g_stagger_swaps && !loading) || now - g_stagger_at > 400;
-            }
-            stagger_busy = true;
-            if (!ready) {
-                ++i;
-                continue;
-            }
-            LOG("DIAG load \"%s\": next piece after %llu ms", g_async.outfit.c_str(), now - g_stagger_at);
-            run_step({true, d.slot, d.key, d.uid}, 0);
-            g_stagger_at = now, g_stagger_swaps = g_model_swaps.load();
-            acted = true;
-            g_async.started = now;
-            g_async.equips.erase(g_async.equips.begin() + i);
-            continue;
-        }
         if (d.held) { // (the slot's holder is the game's state, read every frame: on as soon as it is free)
             if (slot_claim(d.slot) && !late) {
                 ++i;
@@ -757,11 +651,6 @@ void lost_check(U64 self, const std::string& outfit, const std::vector<LeavingPi
         return;
     }
     int lost = 0;
-    U64 dctx[4] = {}; // DIAG (lost pieces): where each piece that left ended up
-    U64 dactor = acquire_player(dctx);
-    U64 dmgr = dactor ? call_inventory(dactor) : 0;
-    if (dctx[0]) release_player(dctx);
-    for (const LeavingPiece& p : leaving) diag_where(dmgr, "after the load", p.uid, p.key);
     for (const LeavingPiece& p : leaving) {
         bool found = false;
         for (const Owned& x : owned) found |= x.uid == p.uid && x.key == p.key;

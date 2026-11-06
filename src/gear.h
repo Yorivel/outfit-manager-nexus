@@ -5,7 +5,6 @@
 namespace om {
 
 U64 equipped_item(U64 list, U16 slot);
-U64 equipment_list();
 extern std::vector<U16> g_placeholder_keys;
 int read_worn(U64 self, WornRaw* out, int max);
 U64 back_shield_item();
@@ -27,9 +26,6 @@ U64 find_copy(U64 uid, U16 key);
 void log_bags(U64 mgr);
 U64 slot_claim(U16 slot);
 const OutfitItem* outfit_piece(const Outfit& o, U16 slot);
-extern int g_load_mode;
-extern U64 g_stagger_at;
-extern U32 g_stagger_swaps;
 int read_bags_raw(U64 mgr, Owned* out, int max);
 bool read_owned(U64 self, std::vector<Owned>& out);
 const Owned* find_owned(const std::vector<Owned>& owned, U64 uid, U16 key);

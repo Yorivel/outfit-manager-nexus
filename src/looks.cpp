@@ -557,12 +557,10 @@ float __fastcall equip_vis_check_hook(U64 vc, const U32* part, std::uint8_t* rec
 ModelSwapFn g_model_swap_orig = nullptr;
 std::atomic<bool> g_worn_dirty{true}; // a model swapped (gear changed somewhere): the wheel rechecks what is worn
 std::atomic<bool> g_anchor_dirty{false}; // ... and, with the menu closed, the anchor (anchor_recheck)
-std::atomic<U32> g_model_swaps{0}; // DIAG (A/B load modes): model rebuilds seen, any character's
 
 void __fastcall model_swap_hook(U64 job, U64 a, U64 b, char c, std::uint8_t* state)
 {
     g_model_swap_orig(job, a, b, c, state);
-    ++g_model_swaps; // DIAG (A/B)
     g_worn_dirty = true;
     g_anchor_dirty = true;
     U64 model = rp(rp(rp(job + 8) + 8) + kOffModelRoot);

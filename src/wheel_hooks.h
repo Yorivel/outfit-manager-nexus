@@ -30,6 +30,7 @@ extern DWORD g_ui_thread;
 void refresh_wheel(U64 self);
 extern std::atomic<U64> g_click_at;
 extern std::atomic<U64> g_click_pos;
+extern float g_prompt_scale;
 U64 __fastcall cursor_select_hook(U64 self, U64 cursor, U64 flag, U64 idx, U64 a5, U64 a6);
 float __fastcall frame_hook(U64 self);
 U64 __fastcall focus_hook(U64 self, U64 script, U64 a, U64 b, U64 c, U64 d);

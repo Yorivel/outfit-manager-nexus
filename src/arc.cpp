@@ -118,6 +118,9 @@ struct Peek {
     U64 badge[5] = {}, nb[2] = {};   // each slot's climate badge; the highlighted outfit's badges by its label
     std::string badge_set[5], nb_set[2];
     U64 trk = 0, hp_gauge = 0;       // the HP tracker (the peek's home) and its own gauge (hidden while shown)
+    U64 mount_trk = 0;               // the mount's stamina tracker (on a mount: the height the arc takes)
+    bool mount_shown = false;        // ... shown by the plugin (hidden again when the arc closes / Kliff dismounts)
+    float ride_top = 0;              // the arc's wrap moved down by this (layout px) on a mount
     std::string icon_set[5];         // last icon set per position
     bool slide_b = false;            // the scroll's slide: which class set (a / b) the last step used
     std::string slide_set[20];       // its class on each element (frames, icons, badges, then the texts)
@@ -414,6 +417,71 @@ void peek_sync_live(bool open)
     wheel_hook(open);
 }
 
+U32 riding_mount()
+{
+    U64 ctx[4] = {};
+    U64 actor = acquire_player(ctx);
+    U8 flag = 0xFF;
+    U64 id = 0;
+    if (U64 comp = actor ? rp(actor + kOffActorComp) : 0) {
+        if (U64 r = rp(comp + kOffCompRide)) rd(r + kOffRideFlag, flag);
+        if (U64 m = rp(comp + kOffCompRidden)) rd(m + kOffRiddenId, id);
+    }
+    if (ctx[0]) release_player(ctx);
+    if (flag != 1 || id == ~0ull || id > 0xFFFFFFFFull || id < 0x10000000ull) return 0;
+    return static_cast<U32>(id);
+}
+
+void peek_ride_place()
+{
+    Peek& p = g_peek;
+    if (!p.mount_trk || !is_element(p.mount_trk)) p.mount_trk = find_by_class(g_peek_root, "cpp-horse-sp-actor-tracker", 4);
+    bool shown = (p.open || p.closing_at) && p.trk;
+    bool active = shown && p.mount_trk;
+    U32 mount = active ? riding_mount() : 0;
+    U64 now = GetTickCount64();
+    // A dismount: the riding flag drops as it starts, while the HP tracker stays up at the rider's head until the rider is
+    // off (2026-11-07: the arc snapped up there). So for up to 2.5 s after riding the arc keeps the mount's height while
+    // the HP tracker is still above it.
+    static U64 rode_at = 0;
+    if (mount) rode_at = now;
+    bool follow = active && (mount || (rode_at && now - rode_at < 2500));
+    if (follow && !p.mount_shown && has_class(p.mount_trk, "!cpp-none")) set_class(p.mount_trk, "!cpp-none", false), p.mount_shown = true;
+    if (!follow && p.mount_shown && p.mount_trk) {
+        set_class(p.mount_trk, "!cpp-none", true); // (hidden again, as the game keeps it)
+        p.mount_shown = false;
+    }
+    float ty = 0, my = 0, top = 0;
+    RECT cr{};
+    HWND w = GetForegroundWindow();
+    float k = g_prompt_scale > 0 ? g_prompt_scale
+                                 : (w && GetClientRect(w, &cr) && cr.bottom > 0 ? 1080.0f / float(cr.bottom) : 0.0f);
+    bool have_hp = shown && rd(p.trk + 0x74, ty) && ty > 0;
+    // (the mount's tracker below the HP tracker by a sane amount: its first frame shown can be stale)
+    bool use_mount = follow && have_hp && rd(p.mount_trk + 0x74, my) && my > ty + 20.0f && my - ty < 1000.0f;
+    // Aimed in screen space and eased (about 0.1 s): mounting / dismounting glide, and a jump of the HP tracker itself
+    // doesn't jerk the arc. Opening: straight at the height; closed: reset at once.
+    static float eased = 0;
+    static U64 last_at = 0;
+    static bool was_shown = false;
+    if (have_hp && k > 0) {
+        float target = use_mount ? my : ty;
+        if (was_shown && last_at) {
+            float dt = std::min(0.1f, float(now - last_at) / 1000.0f);
+            eased += (target - eased) * (1.0f - std::exp(-dt / 0.035f));
+        } else {
+            eased = target;
+        }
+        top = (eased - ty) * k;
+        if (std::fabs(top) < 0.25f) top = 0;
+    }
+    was_shown = shown && have_hp, last_at = now;
+    U64 gh = p.wrap ? rp(p.wrap + 0x20) : 0, style = gh ? rp(gh + 0x20) : 0;
+    float cur = 0;
+    if (style && rd(style + 8, cur) && std::fabs(cur - top) > 0.5f) wr<float>(style + 8, top); // (laid out on its next pass)
+    p.ride_top = top;
+}
+
 void peek_frame(U64 self)
 {
     U64 root = rp(self + 8);
@@ -428,22 +496,7 @@ void peek_frame(U64 self)
     }
     if (g_peek_root == ~0ull || !peek_elements()) return;
     Peek& p = g_peek;
-    { // DIAG (pad arc, 2026-11-06): the status screen's frames stopping and resuming (a faded HUD?)
-        U64 now = GetTickCount64(), last = g_peek_hud_at.load();
-        if (last && now - last > 1000) LOG("DIAG Outfit Arc: status screen frames resumed after %llu ms", now - last);
-    }
     g_peek_hud_at = GetTickCount64();
-    { // DIAG (A/B load modes): Ctrl+Alt+F9 cycles how loads put pieces on
-        static bool was = false;
-        bool down_now = game_focused() && (GetAsyncKeyState(VK_F9) & 0x8000) && (GetAsyncKeyState(VK_CONTROL) & 0x8000) &&
-                        (GetAsyncKeyState(VK_MENU) & 0x8000);
-        if (down_now && !was) {
-            g_load_mode = (g_load_mode + 1) % 3;
-            LOG("DIAG load mode now: %s", kLoadModeNames[g_load_mode]);
-            notify(self, std::string("Load mode (test): ") + kLoadModeNames[g_load_mode]);
-        }
-        was = down_now;
-    }
     // The key (the "+" page's Quick Peek): held = open, released = the highlighted outfit goes on. Not while the gear
     // wheel, a question or the naming prompt is open.
     if (g_peek_capture && !g_menu_open) g_peek_capture = false; // (the wheel closed while the setting waited)
@@ -455,10 +508,6 @@ void peek_frame(U64 self)
     // left raises the lantern, up calls the horse, right the items); up / down then move, letting go of L1 wears it.
     U8 pad = g_peek_pad && game_focused() ? pad_buttons_raw() : 0, pressed = pad & ~g_peek_pad_last;
     g_peek_pad_last = pad;
-    if ((pressed & kPadL1) || ((pad & kPadL1) && (pressed & kPadDown))) // DIAG (pad arc): every LB / LB + down press
-        LOG("DIAG Outfit Arc: pad %02X pressed %02X (arc %s; menu %d, question %d, naming %d; focused %d)", pad, pressed,
-            p.open ? "open" : "closed", int(g_menu_open.load()), g_ask_modal ? 1 : 0, g_name_modal ? 1 : 0,
-            int(game_focused()));
     if (down && !g_peek_down && !p.open && free) {
         g_peek_wheel = 0;
         g_peek_by_pad = false;
@@ -509,6 +558,7 @@ void peek_frame(U64 self)
         p.closing_at = 0;
         set_class(p.trk, "!cpp-none", true); // (the HP tracker hidden again, as the game keeps it)
     }
+    peek_ride_place(); // (on a mount: the arc at the mount's back; else back where it was)
 }
 
 float __fastcall gauge_frame_hook(U64 self)
