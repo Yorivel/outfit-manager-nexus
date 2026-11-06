@@ -176,6 +176,14 @@ struct SlotImage {
     bool shown = false; // should be visible
     bool missing = false; // greyed out (om-missing): the outfit lacks a piece
 };
+// --- Slot modes: scrolling cycles what an Outfits slot does --------------------------------------
+// Like vanilla's item cycling (the dots under a slot): a slot cycles its action (a saved outfit: click loads; the "+"
+// slot: click saves) / settings (click opens the settings view). The game's scroll handlers (slot vtable 181 / 182) are hooked; on our
+// slots the mode changes instead. Modes stay per slot while the wheel is open and all reset when it closes.
+enum SlotMode : std::uint8_t { kModeMain, kModeSettings, kModeConditions, kModeAppearance }; // (eye: saved outfits)
+using ScrollFn = U64(__fastcall*)(U64);
+using SelectorSelectFn = void(__fastcall*)(U64, U32, U64);
+constexpr int kErrNoItemAfterRemoval = 0x69BEDE43;
 
 // The settings' descriptions (the settings view's centre caption), by group and entry: {title, description}.
 enum Page { kPageNone, kPageSettings, kPageOutfit, kPageConditions, kPageSettings2 };
@@ -197,6 +205,15 @@ const char* const kBadges[] = {"om-plus-big", "om-cog-big", "om-plus-c", "om-cog
                                "om-cold2-c", "om-heat2-c", "om-eye-c", "om-look-shown-c", "om-look-hidden-c",
                                "om-look-combat-c", "om-look-peace-c", "om-return-c", "om-prompt-c", "om-cross-c",
                                "om-abtn-c"};
+// The game's slot refresh (after every equipment change) re-selects every slot's dots with its own count (0 for ours:
+// no items) and -1: the select is hooked, and for our slots' selectors it gets our count and mode instead, so the dots
+// never go blank. Our own calls pass through it as well. Our slots are looked up live (the Outfits menu's slot list).
+using SelectorSelectHookFn = void(__fastcall*)(U64, U32, U64);
+
+// The gear slots' refresh (EquipSlotVt slot 164, 0xef5900: after every equipment change) rebuilds a slot's item list
+// from the inventory and shows its current item (0xef9b80); ours hold none, so it blanked them and the plugin drew them
+// again (they flickered). Everything our slots show is ours: their refresh is skipped; every other slot's runs.
+using SlotRefreshFn = void(__fastcall*)(U64);
 
 // Save binding. The game's save writes / loads are seen on its own threads (file hook, folder watch), so they work
 // on g_published, a copy of the active set the UI thread publishes after each change (all under g_store_mu).

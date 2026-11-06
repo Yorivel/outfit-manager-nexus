@@ -6,6 +6,8 @@
 #include "store.h"
 #include "actions.h"
 #include "settings.h"
+#include "wheel_draw.h"
+#include "wheel_hooks.h"
 #include "om_rest.h"
 
 namespace om {

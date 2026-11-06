@@ -4,7 +4,7 @@
 #include "addrs.h"
 #include "items.h"
 #include "settings.h"
-#include "om_rest.h"
+#include "wheel_hooks.h"
 
 namespace om {
 

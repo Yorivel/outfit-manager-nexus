@@ -8,6 +8,8 @@
 #include "looks_view.h"
 #include "prompts.h"
 #include "actions.h"
+#include "wheel_draw.h"
+#include "wheel_hooks.h"
 #include "om_rest.h"
 
 namespace om {
