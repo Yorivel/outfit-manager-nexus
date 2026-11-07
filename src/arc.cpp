@@ -121,6 +121,8 @@ struct Peek {
     U64 mount_trk = 0;               // the mount's stamina tracker (on a mount: the height the arc takes)
     bool mount_shown = false;        // ... shown by the plugin (hidden again when the arc closes / Kliff dismounts)
     float ride_top = 0;              // the arc's wrap moved down by this (layout px) on a mount
+    U64 reveal_at = 0;               // opened on a mount: hidden until the mount's height is known (0 = shown)
+    int reveal_frames = 0;           // ... frames with a sane mount height so far
     std::string icon_set[5];         // last icon set per position
     bool slide_b = false;            // the scroll's slide: which class set (a / b) the last step used
     std::string slide_set[20];       // its class on each element (frames, icons, badges, then the texts)
@@ -314,6 +316,8 @@ void peek_slide(int dir)
     }
 }
 
+U32 riding_mount(); // (below: the mount being ridden, 0 on foot)
+
 void peek_open(U64 self)
 {
     Peek& p = g_peek;
@@ -339,7 +343,12 @@ void peek_open(U64 self)
     p.closing_at = 0;
     peek_draw(self);
     peek_animate(PeekAnim::In);
-    set_class(p.wrap, "!cpp-none", false);
+    // On a mount the arc's height comes from the mount's tracker, which only moves while shown: right after opening it
+    // still holds an old height, and the arc showed for a frame up at the rider's head (2026-11-07). So on a mount the
+    // arc appears once that height is known (peek_ride_place: a frame or two, at most 150 ms).
+    p.reveal_at = riding_mount() ? GetTickCount64() : 0;
+    p.reveal_frames = 0;
+    if (!p.reveal_at) set_class(p.wrap, "!cpp-none", false);
     LOG("Outfit Arc: open (character %d, %zu outfit(s), worn %d, %zu entries)", int(g_character), g_outfits.size(), p.worn,
         p.entries.size());
 }
@@ -466,7 +475,7 @@ void peek_ride_place()
     static bool was_shown = false;
     if (have_hp && k > 0) {
         float target = use_mount ? my : ty;
-        if (was_shown && last_at) {
+        if (was_shown && last_at && !p.reveal_at) {
             float dt = std::min(0.1f, float(now - last_at) / 1000.0f);
             eased += (target - eased) * (1.0f - std::exp(-dt / 0.035f));
         } else {
@@ -480,6 +489,13 @@ void peek_ride_place()
     float cur = 0;
     if (style && rd(style + 8, cur) && std::fabs(cur - top) > 0.5f) wr<float>(style + 8, top); // (laid out on its next pass)
     p.ride_top = top;
+    if (p.reveal_at) { // (opened on a mount: shown once the height has been sane for two frames - laid out by then)
+        p.reveal_frames = use_mount ? p.reveal_frames + 1 : 0;
+        if (!p.open || p.reveal_frames >= 2 || !mount || now - p.reveal_at > 150) {
+            if (p.open) set_class(p.wrap, "!cpp-none", false);
+            p.reveal_at = 0;
+        }
+    }
 }
 
 void peek_frame(U64 self)
