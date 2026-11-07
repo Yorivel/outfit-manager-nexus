@@ -441,6 +441,38 @@ bool find_in_bags(U64 mgr, U64 uid, ItemAt& at, U64 allowed, U16 key)
     return false;
 }
 
+// Bag entries that carry this uid (any item, count > 0), described in `where` ("bag 1 pos 419: key 5887 x3; ...").
+// A worn piece is never in a bag: a bag entry with its uid means two things share one id (seen with a stacking mod's
+// stacks of gear, #1). Taking such a piece off loses it: the game merges it into the entry with the same id.
+int shared_id_in_bags(U64 mgr, U64 uid, std::string* where)
+{
+    int found = 0;
+    __try {
+        U64 bags = *reinterpret_cast<U64*>(mgr + kOffMgrBags);
+        U32 n = *reinterpret_cast<U32*>(mgr + 0x20);
+        for (U32 i = 0; bags && i < n && i < 64; ++i) {
+            U64 bag = *reinterpret_cast<U64*>(bags + i * 8ull);
+            U64 items = bag ? *reinterpret_cast<U64*>(bag) : 0;
+            short cap = items ? *reinterpret_cast<short*>(bag + kOffBagCount) : 0;
+            for (short p = 0; p < cap && p < 4096; ++p) {
+                U64 it = items + p * 200ull;
+                U16 k = *reinterpret_cast<U16*>(it + 8);
+                long long cnt = *reinterpret_cast<long long*>(it + 0x10);
+                if (*reinterpret_cast<U64*>(it) != uid || k == 0xFFFF || cnt <= 0) continue;
+                ++found;
+                if (where && where->size() < 400) {
+                    char b[96];
+                    std::snprintf(b, sizeof b, "%sbag %u pos %d: key %u x%lld", where->empty() ? "" : "; ",
+                                  *reinterpret_cast<U16*>(bag + 0x10), p, k, cnt);
+                    *where += b;
+                }
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    return found;
+}
+
 // An item copy by uid + key (abyss gears are per copy): worn, else in any bag.
 U64 find_copy(U64 uid, U16 key)
 {

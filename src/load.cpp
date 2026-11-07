@@ -365,6 +365,14 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
         std::lock_guard<std::mutex> keys(g_keys_mu);
         keep_slots = g_keep_slots;
     }
+    U64 shared_mgr = 0; // (the inventory, for the shared-id check below)
+    {
+        U64 ctx[4] = {};
+        U64 actor = acquire_player(ctx);
+        shared_mgr = actor ? call_inventory(actor) : 0;
+        if (ctx[0]) release_player(ctx);
+    }
+    std::string shared_names;
     for (int i = 0; i < n; ++i) {
         if (!loads_piece(o, w[i].slot)) continue; // (Weapons: Leave / saved before weapons)
         const OutfitItem* t = outfit_piece(o, w[i].slot);
@@ -380,6 +388,17 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
             LOG("  equipment-%u: the outfit's weapon is in the other hand; left as it is", w[i].slot);
             continue;
         }
+        // A worn piece whose id is also in a bag (two things share one id, #1): taking it off loses it, the game merges
+        // it into the other entry. Its slot is left as it is.
+        if (worn && shared_mgr) {
+            std::string where;
+            if (shared_id_in_bags(shared_mgr, w[i].uid, &where)) {
+                LOG("  equipment-%u: worn \"%s\" uid %llX shares its id with: %s; left on (taking it off would lose it)",
+                    w[i].slot, item_name(w[i].key).c_str(), w[i].uid, where.c_str());
+                shared_names += (shared_names.empty() ? "" : ", ") + item_name(w[i].key);
+                continue;
+            }
+        }
         if (left) {
             if (worn && !keep_slots.count(w[i].slot)) off.push_back({false, w[i].slot, w[i].key, w[i].uid}); // not the outfit's: off
             continue;
@@ -390,6 +409,8 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
         if (t) on.push_back({true, t->slot, t->key, t->uid});
         if (worn && (t || !keep_slots.count(w[i].slot))) leaving.push_back({w[i].uid, w[i].key, w[i].slot}); // (checked after)
     }
+    if (!shared_names.empty())
+        notify(self, "Left on (it shares its ID with another item, taking it off would lose it): " + shared_names);
     if (off.empty() && on.empty() && !g_async.active) {
         LOG("load \"%s\": already worn", o.name.c_str());
         look_hold(false);

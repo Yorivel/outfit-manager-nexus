@@ -22,6 +22,7 @@ U16 character_of(U64 actor);
 U16 current_character();
 U64 equip_bags(bool companion);
 bool find_in_bags(U64 mgr, U64 uid, ItemAt& at, U64 allowed = 0, U16 key = 0xFFFF);
+int shared_id_in_bags(U64 mgr, U64 uid, std::string* where);
 U64 find_copy(U64 uid, U16 key);
 void log_bags(U64 mgr);
 U64 slot_claim(U16 slot);
