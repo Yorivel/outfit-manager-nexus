@@ -220,6 +220,11 @@ bool run_step(const LoadStep& s, size_t number)
     U64 inv = c ? rp(c + kOffCompInventory) : 0;
     U64 kind = actor ? rp(actor + kOffActorKind) : 0;
     bool player = inv && kind && (r32(kind + 1) & 0xFF) == 1;
+    // Kliff through the game's equip requests too, as its own menu does, not the client-side functions: with a stacking
+    // mod installed ("Desert Link Unlimited Stacks"), the direct take-off lost the piece - it never reached the bag;
+    // through the requests nothing was lost (reproduced 2026-11-07, #1). `kliff` keeps his bag rules.
+    bool kliff = player;
+    if (player && g_equip_request && g_unequip_request) player = false;
     bool companion = actor && kind && !player && g_equip_request && g_unequip_request;
     bool ok = player || companion;
     if (!ok) {
@@ -233,11 +238,14 @@ bool run_step(const LoadStep& s, size_t number)
     } else if (companion) {
         U64 mgr = call_inventory(actor);
         ItemAt at{};
-        if (!mgr || !find_in_bags(mgr, s.uid, at, equip_bags(true), s.key)) {
+        if (!mgr || !find_in_bags(mgr, s.uid, at, equip_bags(!kliff), s.key)) {
             LOG("  step %zu: (companion) put on equipment-%u: key %u uid %llX is not in the bags; skipped", number,
                 s.slot, s.key, s.uid);
         } else {
-            int err = call_equip_request(actor, at.item, at.pos, s.slot, at.bag);
+            // (Kliff from storage / the wardrobe: the request answers "Item not found" - the direct call, as before)
+            bool direct = kliff && inv && (at.bag == kBagStorage || at.bag == kBagWardrobe);
+            int err = direct ? call_equip(inv, at.bag, at.pos, s.slot) : call_equip_request(actor, at.item, at.pos, s.slot, at.bag);
+            if (direct) LOG("  (from bag %u: the direct put-on)", at.bag);
             g_steps_ok += err == 0; // (a change went through: a model swap follows)
             g_step_err = err;
             LOG("  step %zu: (companion) put on equipment-%u: key %u \"%s\" uid %llX from bag %u pos %d: %s", number,
@@ -365,6 +373,14 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
         std::lock_guard<std::mutex> keys(g_keys_mu);
         keep_slots = g_keep_slots;
     }
+    U64 shared_mgr = 0; // (the inventory, for the shared-id check below)
+    {
+        U64 ctx[4] = {};
+        U64 actor = acquire_player(ctx);
+        shared_mgr = actor ? call_inventory(actor) : 0;
+        if (ctx[0]) release_player(ctx);
+    }
+    std::string shared_names;
     for (int i = 0; i < n; ++i) {
         if (!loads_piece(o, w[i].slot)) continue; // (Weapons: Leave / saved before weapons)
         const OutfitItem* t = outfit_piece(o, w[i].slot);
@@ -380,16 +396,33 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
             LOG("  equipment-%u: the outfit's weapon is in the other hand; left as it is", w[i].slot);
             continue;
         }
+        // A worn piece whose id is also in a bag (two things share one id, #1): taking it off loses it, the game merges
+        // it into the other entry. Its slot is left as it is.
+        if (worn && shared_mgr) {
+            std::string where;
+            if (shared_id_in_bags(shared_mgr, w[i].uid, &where)) {
+                LOG("  equipment-%u: worn \"%s\" uid %llX shares its id with: %s; left on (taking it off would lose it)",
+                    w[i].slot, item_name(w[i].key).c_str(), w[i].uid, where.c_str());
+                shared_names += (shared_names.empty() ? "" : ", ") + item_name(w[i].key);
+                continue;
+            }
+        }
         if (left) {
             if (worn && !keep_slots.count(w[i].slot)) off.push_back({false, w[i].slot, w[i].key, w[i].uid}); // not the outfit's: off
             continue;
         }
         bool needed = false; // the worn piece goes to another slot of the outfit
         for (const OutfitItem& it : o.items) needed |= worn && it.uid == w[i].uid && it.key == w[i].key;
-        if (worn && (needed || (!t && !keep_slots.count(w[i].slot)))) off.push_back({false, w[i].slot, w[i].key, w[i].uid});
+        // Every worn piece comes off before the outfit's goes on - no direct swaps (#1: with a stacking mod, pieces were
+        // lost on direct swaps, never on a take-off first; a stacked outfit piece's swap put the worn one into the stack).
+        const bool off_first = worn && t && !keep_slots.count(w[i].slot);
+        if (worn && (needed || off_first || (!t && !keep_slots.count(w[i].slot))))
+            off.push_back({false, w[i].slot, w[i].key, w[i].uid});
         if (t) on.push_back({true, t->slot, t->key, t->uid});
         if (worn && (t || !keep_slots.count(w[i].slot))) leaving.push_back({w[i].uid, w[i].key, w[i].slot}); // (checked after)
     }
+    if (!shared_names.empty())
+        notify(self, lang::f("toast.shared_left_on", {{"pieces", shared_names}}));
     if (off.empty() && on.empty() && !g_async.active) {
         LOG("load \"%s\": already worn", o.name.c_str());
         look_hold(false);

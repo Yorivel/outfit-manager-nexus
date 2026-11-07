@@ -78,6 +78,7 @@
 {"desc.effects.performance", "Outfits change with a glow, and hidden weapons glow as they appear and go. Without the weapons' sparkles: lighter on busy scenes."},
 {"desc.effects.quality", "Outfits change with a glow, and hidden weapons glow as they appear and go, with sparkles."},
 {"toast.still_changing", "An outfit is still being put on"},
+{"toast.shared_left_on", "Left on (it shares its ID with another item, taking it off would lose it): {pieces}"},
 {"center.release", "Unequip Outfit"},
 {"peek.release_label", "No outfit"},
 {"toast.released", "\"{outfit}\" unequipped: your gear stays on, its visibility settings are off until you load or save an outfit"},
