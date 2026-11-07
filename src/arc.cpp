@@ -124,6 +124,7 @@ struct Peek {
     U64 reveal_at = 0;               // opened on a mount: hidden until the mount's height is known (0 = shown)
     int reveal_frames = 0;           // ... frames with a sane, settled mount height so far
     float reveal_last = 0;           // ... the last of those heights
+    int dy_cls = 0;                  // the om-peek-dy-N class on the wrap (0: none)
     std::string icon_set[5];         // last icon set per position
     bool slide_b = false;            // the scroll's slide: which class set (a / b) the last step used
     std::string slide_set[20];       // its class on each element (frames, icons, badges, then the texts)
@@ -347,10 +348,12 @@ void peek_open(U64 self)
     // On a mount the arc's height comes from the mount's tracker, which only moves while shown: right after opening it
     // still holds an old height, and the arc showed for a frame up at the rider's head (2026-11-07). So on a mount the
     // arc appears once that height is known (peek_ride_place: a frame or two, at most 150 ms).
-    // (a reopening while the close still plays: the wrap is still shown - hidden here too, 2026-11-07)
+    // Waiting, the arc is laid out but invisible (om-peek-veil: opacity 0), not hidden: an element unhidden is laid
+    // out once from the css, without the height the plugin writes - the frame at the rider's head (2026-11-07).
     p.reveal_at = riding_mount() ? GetTickCount64() : 0;
     p.reveal_frames = 0;
-    set_class(p.wrap, "!cpp-none", p.reveal_at != 0);
+    set_class(p.wrap, "om-peek-veil", p.reveal_at != 0);
+    set_class(p.wrap, "!cpp-none", false);
     LOG("Outfit Arc: open (character %d, %zu outfit(s), worn %d, %zu entries)", int(g_character), g_outfits.size(), p.worn,
         p.entries.size());
 }
@@ -488,16 +491,40 @@ void peek_ride_place()
     }
     if (p.reveal_at && !use_mount && p.open) top = p.ride_top; // (waiting: the last mount height kept)
     was_shown = shown && have_hp, last_at = now;
-    U64 gh = p.wrap ? rp(p.wrap + 0x20) : 0, style = gh ? rp(gh + 0x20) : 0;
-    float cur = 0;
-    if (style && rd(style + 8, cur) && std::fabs(cur - top) > 0.5f) wr<float>(style + 8, top); // (laid out on its next pass)
+    // The height as a css class (om-peek-dy-N: top N px, tools/peek_gen.py), not written into the element's style: class
+    // changes (the opening's animation) rebuild the style from the css for a few frames, which dropped a written value -
+    // the arc showed at the rider's head for 3 - 4 frames on every opening (2026-11-07).
+    int n = std::clamp(static_cast<int>(std::lround(top)), 0, 600);
+    if (n != p.dy_cls && p.wrap) {
+        char c[24];
+        if (p.dy_cls) std::snprintf(c, sizeof c, "om-peek-dy-%d", p.dy_cls), set_class(p.wrap, c, false);
+        if (n) std::snprintf(c, sizeof c, "om-peek-dy-%d", n), set_class(p.wrap, c, true);
+        p.dy_cls = n;
+    }
     p.ride_top = top;
+    U64 gh = p.wrap ? rp(p.wrap + 0x20) : 0, style = gh ? rp(gh + 0x20) : 0; // DIAG (mount reveal): read below
+    { // DIAG (mount reveal, 2026-11-07): every frame from an opening on a mount until 15 frames after it shows
+        static int after = 0;
+        static U64 opened = 0;
+        if (p.reveal_at && p.reveal_at != opened) opened = p.reveal_at, after = 15;
+        if (p.open && (p.reveal_at || after > 0)) {
+            if (!p.reveal_at) --after;
+            float al = 0, at_ = 0, ar = 0, ab = 0, st = -1;
+            if (p.arc) rd(p.arc + kOffElemRect, al), rd(p.arc + kOffElemRect + 4, at_), rd(p.arc + kOffElemRect + 8, ar),
+                rd(p.arc + kOffElemRect + 0xc, ab);
+            if (style) rd(style + 8, st);
+            LOG("DIAG reveal +%llu ms: waiting %d frames %d, wrap %s, mount %08X, HP y %.0f, mount y %.0f (use %d), top %.1f, "
+                "style top %.1f, arc box %.0f,%.0f-%.0f,%.0f", (unsigned long long)(now - opened), p.reveal_at ? 1 : 0,
+                p.reveal_frames, has_class(p.wrap, "om-peek-veil") ? "veiled" : "VISIBLE", mount, ty, my, use_mount ? 1 : 0, top,
+                st, al, at_, ar, ab);
+        }
+    }
     if (p.reveal_at) { // (opened on a mount: shown once the height has been sane and settled for 3 frames - laid out)
         bool settled = use_mount && std::fabs(top - p.reveal_last) < 2.0f;
         p.reveal_frames = settled ? p.reveal_frames + 1 : 0;
         p.reveal_last = top;
         if (!p.open || p.reveal_frames >= 3 || !mount || now - p.reveal_at > 150) {
-            if (p.open) set_class(p.wrap, "!cpp-none", false);
+            set_class(p.wrap, "om-peek-veil", false);
             p.reveal_at = 0;
         }
     }
