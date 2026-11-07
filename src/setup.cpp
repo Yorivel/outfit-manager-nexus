@@ -22,9 +22,39 @@ namespace om {
 std::wstring g_log_path;
 bool g_features_toast_done = false;
 
+// A stacking mod that makes equipment stackable (#1, reproduced 2026-11-07: "Desert Link Unlimited Stacks", its mode
+// "All Stackable (including equipment)", sets every item's _maxStackCount - armour too): pieces merge into stacks the
+// game won't equip, and a piece taken off by the client-side call never reached the bag. Loads are safe against it
+// now (requests, take-off first, the shared-id rule, the loss check), but the stacks it makes are still the player's
+// problem - so they are told the cause once per session. Found by its module and the mode in its own log.
+bool equipment_stacking_mod()
+{
+    HMODULE m = GetModuleHandleW(L"DesertLinkUnlimitedStacks.asi");
+    if (!m) return false;
+    wchar_t path[MAX_PATH] = {};
+    if (!GetModuleFileNameW(m, path, MAX_PATH)) return false;
+    std::wstring log = path;
+    log = log.substr(0, log.size() - 4) + L".log"; // (DesertLinkUnlimitedStacks.log beside it)
+    FILE* f = _wfopen(log.c_str(), L"rb");
+    if (!f) return true; // (no log to tell: the only mode its build knows is the one with equipment)
+    std::string text;
+    char buf[4096];
+    for (size_t n; (n = fread(buf, 1, sizeof buf, f)) > 0;) text.append(buf, n);
+    fclose(f);
+    size_t last = text.rfind("Unlimited Stacks v"); // (its latest start)
+    bool with = last != std::string::npos && text.find("including equipment", last) != std::string::npos;
+    LOG("stacking mod: Desert Link Unlimited Stacks loaded, %s", with ? "equipment stacks (pieces can get lost)" : "equipment not stacked");
+    return with;
+}
+
 // At the first menu open: one toast naming whatever had to be turned off.
 void features_toast(U64 self)
 {
+    static bool stacks_told = false;
+    if (!stacks_told) {
+        stacks_told = true;
+        if (equipment_stacking_mod()) notify(self, lang::t("toast.stacking_mod"));
+    }
     static bool store_told = false;
     if (g_store_unreadable && !store_told) {
         store_told = true;

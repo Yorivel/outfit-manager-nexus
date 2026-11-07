@@ -78,6 +78,7 @@
 {"desc.effects.performance", "Outfits change with a glow, and hidden weapons glow as they appear and go. Without the weapons' sparkles: lighter on busy scenes."},
 {"desc.effects.quality", "Outfits change with a glow, and hidden weapons glow as they appear and go, with sparkles."},
 {"toast.still_changing", "An outfit is still being put on"},
+{"toast.stacking_mod", "Desert Link Unlimited Stacks makes armour and weapons stackable: pieces can merge into stacks the game won't equip. Use a version that leaves equipment out."},
 {"toast.shared_left_on", "Left on (it shares its ID with another item, taking it off would lose it): {pieces}"},
 {"center.release", "Unequip Outfit"},
 {"peek.release_label", "No outfit"},
