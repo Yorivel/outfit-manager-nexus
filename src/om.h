@@ -181,6 +181,14 @@ struct SlotImage {
 // slot: click saves) / settings (click opens the settings view). The game's scroll handlers (slot vtable 181 / 182) are hooked; on our
 // slots the mode changes instead. Modes stay per slot while the wheel is open and all reset when it closes.
 enum SlotMode : std::uint8_t { kModeMain, kModeSettings, kModeConditions, kModeAppearance }; // (eye: saved outfits)
+// The managed outfit's third dot (#21): its looks stop applying - nothing is taken off - until an outfit is loaded or
+// saved. (The old Conditions page's value: that page is gone.)
+constexpr std::uint8_t kModeRelease = 2;
+// (per character: the outfit let go - no outfit is taken up by itself then, not even another one matched by hand (its
+// looks would hide pieces unasked); a load or a save clears it)
+extern std::map<U16, int> g_unmanaged;
+bool let_go(int outfit); // (that outfit of the current character was let go)
+void release_outfit(U64 self);
 using ScrollFn = U64(__fastcall*)(U64);
 using SelectorSelectFn = void(__fastcall*)(U64, U32, U64);
 constexpr int kErrNoItemAfterRemoval = 0x69BEDE43;

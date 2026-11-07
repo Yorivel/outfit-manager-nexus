@@ -1,6 +1,7 @@
 // Looks: how each piece shows (the visibility engine).
 #include "om.h"
 #include "looks.h"
+#include "ui.h"
 #include "addrs.h"
 #include "gear.h"
 #include "store.h"
@@ -812,6 +813,7 @@ void look_refresh()
 // Marks outfit `index` (or none: -1) as the current character's last loaded one; saves when that changes.
 void mark_worn(int index)
 {
+    if (index >= 0) g_unmanaged.erase(g_character); // (a load or a save: the outfit is managed again)
     bool changed = false;
     for (size_t i = 0; i < g_outfits.size(); ++i)
         if (g_outfits[i].worn != (static_cast<int>(i) == index)) g_outfits[i].worn = static_cast<int>(i) == index, changed = true;
@@ -834,7 +836,7 @@ void anchor_recheck()
     if (!armour) return;
     int exact = find_worn_outfit(0);
     if (exact != g_worn_outfit) g_worn_outfit = exact, g_worn_changed = true;
-    if (exact >= 0) mark_worn(exact);
+    if (exact >= 0 && !let_go(exact)) mark_worn(exact); // (the outfit let go: not taken up again by itself)
     else if (int a = anchor_outfit(); a >= 0 && left_anchor(g_outfits[size_t(a)], w, n)) {
         LOG("\"%s\": too much changed, what is worn is a new set", g_outfits[size_t(a)].name.c_str());
         mark_worn(-1);
@@ -934,4 +936,22 @@ float __fastcall hud_frame_hook(U64 self)
     return g_hud_frame_orig(self);
 }
 
+// #21: the managed outfit let go - nothing is taken off; its looks stop applying (no outfit is marked worn) until an
+// outfit is loaded or saved (mark_worn with an outfit clears it). Kept per character, in the outfits file.
+void release_outfit(U64 self)
+{
+    std::string name;
+    for (const Outfit& o : g_outfits)
+        if (o.worn) name = o.name;
+    int worn = -1;
+    for (size_t i = 0; i < g_outfits.size(); ++i)
+        if (g_outfits[i].worn) worn = int(i);
+    if (worn < 0) return;
+    g_unmanaged[g_character] = worn;
+    LOG("let go of the outfit (character %u): its looks no longer apply", g_character);
+    mark_worn(-1);
+    save_outfits(); // (the flag; mark_worn saves only when a mark changed)
+    look_refresh();
+    if (self) report(self, lang::f("toast.released", {{"outfit", name}})); // (a report: Messages Off hides it)
+}
 } // namespace om

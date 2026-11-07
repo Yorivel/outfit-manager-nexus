@@ -290,7 +290,8 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
     show_slot_image(self, root, i, pic);
     if (i < visible) show_mode_dots(script, mode_count(i), mode_lit(i));
     U64 badge = find_by_class(root, "quickslot-occupancy-icon-chain"), low = find_by_class(root, "cpp-icon-disable-item");
-    const char* want = it ? look_badge(it->look) : back ? prompt_class() : nullptr; // (Back: the click prompt, as actions)
+    // (Back and the page slot: the click prompt, as actions - the page slot's click opens the page its dots chose)
+    const char* want = it ? look_badge(it->look) : back || page ? prompt_class() : nullptr;
     g_badge_elem[i] = badge, g_badge_class[i] = want;
     bool ok = true;
     if (badge) {
@@ -298,17 +299,22 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
         for (const char* c : kBadges) ok &= set_class(badge, c, want && !std::strcmp(want, c));
         ok &= set_class(badge, "!cpp-none", !want);
     }
+    // Back and the page slot: a label (the page slot names the page its dots chose - its silhouette was easy to misread
+    // while scrolling through the three, #23)
+    static const char* const kPageName[kEyeSteps] = {"page.armour", "page.weapons", "page.accessories"};
+    const bool labelled = back || page;
     U64 mark = find_parent_of_class(root, "charged-count");
     if (mark) {
-        ok &= back ? set_class(mark, "self-center", true) && set_class(mark, "om-label-wrap", true) : clear_label(mark);
+        ok &= labelled ? set_class(mark, "self-center", true) && set_class(mark, "om-label-wrap", true) : clear_label(mark);
         ok &= set_class(mark, "om-eye-c", false) && set_class(mark, "om-eye2-c", false);
-        ok &= set_class(mark, "!cpp-none", !back);
-        if (U64 text = back ? find_by_class(mark, "charged-count") : 0) {
-            if (g_set_text) g_set_text(text, "Back", 0); // (as the settings' Back)
+        ok &= set_class(mark, "!cpp-none", !labelled);
+        if (U64 text = labelled ? find_by_class(mark, "charged-count") : 0) {
+            const char* label = back ? "Back" : lang::t(kPageName[g_eye_pick % kEyeSteps]); // (Back: as the settings')
+            if (g_set_text) g_set_text(text, label, 0);
             ok &= set_class(text, "om-label", true) && set_class(text, "om-label-value", false);
         }
     }
-    g_mark_elem[i] = mark, g_mark_shown[i] = mark && back;
+    g_mark_elem[i] = mark, g_mark_shown[i] = mark && labelled;
     ok &= show_value(root, "");
     bool dim = it && it->look != kLookDefault && it->look != kLookShown; // (a look that hides it at times)
     g_slot_image[i].missing = dim;
@@ -319,9 +325,9 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
     U64 icon = rp(script + kOffScriptCategoryIcon);
     if (icon && is_element(icon)) {
         ok &= set_class(icon, "quickslot-item-image-none", false);
-        bool sword = page && g_eye_pick == 1, necklace = page && g_eye_pick == 2;
+        const bool sword = false, necklace = false; // (the page slot: its label now, no silhouette)
         bool holder = piece && pic.empty() && it->slot != kBackShieldSlot; // (an empty slot: the game's placeholder)
-        bool armor = (page && g_eye_pick == 0) || (piece && pic.empty() && !holder);
+        bool armor = piece && pic.empty() && !holder;
         ok &= set_class(icon, "om-empty-armor", armor);
         ok &= set_class(icon, "om-empty-sword", sword);
         ok &= set_class(icon, "om-empty-necklace", necklace);
@@ -368,7 +374,8 @@ void apply_outfit_slots(U64 self, U32 only)
             LOG("worn outfit: %d -> %d", g_worn_outfit, w);
             g_worn_outfit = w;
             g_worn_changed = true;
-            if (w >= 0) mark_worn(w); // (put together by hand: its looks apply too; none worn keeps the last loaded)
+            // (put together by hand: its looks apply too; none worn keeps the last loaded; let go (#21): not)
+            if (w >= 0 && !let_go(w)) mark_worn(w);
         }
         if (same_char) update_plus_icon(self);
         refresh_missing(self);
@@ -403,7 +410,7 @@ void apply_outfit_slots(U64 self, U32 only)
         U64 badge = find_by_class(root, "quickslot-occupancy-icon-chain"), low = find_by_class(root, "cpp-icon-disable-item");
         const char* want = mode != kModeMain && empty  ? (kPlusSlotCentred ? "om-cog-big" : "om-cog-c") // (settings 1 / 2)
                            : mode == kModeSettings               ? "om-cog-c"
-                           : mode == kModeConditions             ? "om-flag-c"
+                           : mode == kModeRelease && saved        ? "om-eye-c" // (let go: its looks)
                            : mode == kModeAppearance             ? "om-eye-c"
                            : empty && g_outfit_count < kMaxOutfits ? (kPlusSlotCentred ? "om-plus-big" : "om-plus-c")
                            : saved ? climate_badge(g_outfits[slot_outfit(i)]) // (its Climate marker, or none)
@@ -502,7 +509,9 @@ U32 mode_count(U32 i)
         return k < n ? kLookCount : k == n ? kEyeSteps : 0;
     }
     if (g_cfg >= 0) return cfg_dots(i, nullptr);
-    return 2; // (the slot's action, its settings)
+    const U32 o = slot_outfit(i); // (the managed outfit: a third dot lets it go, #21)
+    const bool managed = o < g_outfits.size() && g_outfits[o].worn;
+    return managed ? 3 : 2; // (the slot's action, its settings)
 }
 // The dot lit on slot i: its mode; in the Appearance view a piece's look, the page slot's step.
 U32 mode_lit(U32 i)

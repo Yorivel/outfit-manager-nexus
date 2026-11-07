@@ -15,6 +15,7 @@
 #include "pads.h"
 
 namespace om {
+constexpr int kPeekRelease = -2; // (the arc's entry that lets the managed outfit go, #21; -1: the unsaved outfit)
 
 std::atomic<U32> g_peek_key{0};           // the Outfit Arc's key (a virtual-key code; 0 = Off)
 
@@ -178,7 +179,8 @@ void peek_draw(U64 self)
         std::string pic;
         if (shown) {
             int e = p.entries[(p.sel + n + size_t(off % int(n) + int(n))) % n];
-            pic = e < 0 ? p.current_icon : e < int(g_outfits.size()) ? g_outfits[size_t(e)].chest_icon : std::string();
+            pic = e == kPeekRelease ? std::string() : e < 0 ? p.current_icon
+                  : e < int(g_outfits.size()) ? g_outfits[size_t(e)].chest_icon : std::string();
         }
         if (pic != p.icon_set[k]) {
             int r = pic.empty() ? 1 : set_image_raw(self, p.icon[k], pic.c_str());
@@ -232,8 +234,13 @@ void peek_draw(U64 self)
         if (!caps)
             if (U64 box = find_by_class(p.wrap, "om-hk-caps", 1)) set_class(box, "!cpp-none", true);
     }
-    std::string label = e < 0 ? lang::t("peek.unsaved_label") : lang::f("peek.label", {{"n", std::to_string(e + 1)}});
-    std::string name = e < 0 ? lang::t("peek.unsaved") : e < int(g_outfits.size()) ? g_outfits[size_t(e)].name : "";
+    std::string label = e == kPeekRelease ? lang::t("peek.release_label")
+                        : e < 0           ? lang::t("peek.unsaved_label")
+                                          : lang::f("peek.label", {{"n", std::to_string(e + 1)}});
+    std::string name = e == kPeekRelease        ? lang::t("center.release")
+                       : e < 0                  ? lang::t("peek.unsaved")
+                       : e < int(g_outfits.size()) ? g_outfits[size_t(e)].name
+                                                : "";
     if (g_set_text) g_set_text(p.label, label.c_str(), 0), g_set_text(p.name, name.c_str(), 0);
 }
 
@@ -335,6 +342,9 @@ void peek_open(U64 self)
         p.entries.push_back(-1);
     }
     for (size_t i = 0; i < g_outfits.size(); ++i) p.entries.push_back(int(i));
+    bool managed = false; // (an outfit's looks apply: the last entry lets it go, #21)
+    for (const Outfit& o : g_outfits) managed |= o.worn;
+    if (managed) p.entries.push_back(kPeekRelease);
     p.sel = p.worn < 0 ? 0 : size_t(p.worn);
     p.open = true;
     p.character = g_character;
@@ -371,6 +381,7 @@ void peek_close(bool choose)
         g_wheel_notches.load());
     // as a click on it in the wheel: where each piece is, the questions (pieces on other characters, copies), the load
     if (load) start_loading(p.self, static_cast<U32>(e));
+    else if (choose && e == kPeekRelease) release_outfit(p.self); // (#21: its looks no longer apply)
 }
 
 // The outfits' hotkeys, in play (not in menus, prompts or with the arc open): a press of exactly the combination loads

@@ -42,6 +42,7 @@ void save_new_outfit(U64 self)
             return;
         }
     o.name = default_name();
+    g_unmanaged.erase(g_character); // (a save: what is worn is managed again, #21)
     if (int a = anchor_outfit(); a >= 0) carry_looks(g_outfits[size_t(a)], o); // (a changed outfit saved as new looks the same)
     g_outfits.push_back(o);
     g_outfit_count = static_cast<U32>(g_outfits.size());
@@ -231,6 +232,7 @@ void confirmed(U64 self, U32 index, int what, U32 other)
         carry_looks(was, o);
     }
     g_outfits[index] = o;
+    g_unmanaged.erase(g_character); // (a save: what is worn is managed again, #21)
     LOG("Overwrite (%s): \"%s\" now holds %zu items (chest %s)", keep ? "settings kept" : "settings reset",
         o.name.c_str(), o.items.size(), o.chest_icon.empty() ? "none" : o.chest_icon.c_str());
     save_outfits();

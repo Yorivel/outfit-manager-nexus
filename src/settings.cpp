@@ -59,6 +59,12 @@ std::pair<std::string, std::string> entry_text(int page, U32 index)
 bool g_stash = false;               // after a load, saved pieces left in the bag go to storage (off until turned on)
 bool stash_of(const Outfit& o) { return o.stash ? o.stash == 1 : g_stash; } // (its own, or the global)
 bool g_take_from_companions = true; // pieces another character wears: take them (asked first)
+std::map<U16, int> g_unmanaged;    // (#21: the outfit let go, per character - see om.h)
+bool let_go(int outfit)
+{
+    (void)outfit; // (any outfit: one matched by hand would hide pieces by its looks unasked - user, 2026-11-07)
+    return g_unmanaged.count(g_character) != 0;
+}
 std::uint8_t g_effects = 2;         // the outfit effects (transition.cpp): 0 off, 1 performance, 2 quality
 int transition_setting() { return g_effects; }
 bool g_messages = true;             // the after-the-fact reports (pieces left, not taken, overwritten); "+" settings page

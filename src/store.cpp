@@ -143,6 +143,11 @@ bool write_store_file()
     put(out, "setting\tstash\t%d\nsetting\tcompanions\t%d\nsetting\tmessages\t%d\n", g_stash ? 1 : 0,
         g_take_from_companions ? 1 : 0, g_messages ? 1 : 0);
     put(out, "setting\teffects\t%d\n", int(g_effects));
+    if (!g_unmanaged.empty()) {
+        std::string u;
+        for (const auto& [c, o] : g_unmanaged) u += (u.empty() ? "" : " ") + std::to_string(c) + ":" + std::to_string(o);
+        put(out, "setting\tunmanaged\t%s\n", u.c_str());
+    }
     if (!g_language.empty()) put(out, "setting\tlanguage\t%s\n", g_language.c_str());
     if (const char* id = peek_key_id()) put(out, "setting\tpeekkey\t%s\n", id);
     if (g_peek_pad) put(out, "setting\tpeekpad\t1\n");
@@ -324,7 +329,20 @@ void load_outfits()
                 // (other names: settings of another build, e.g. the dropped "hotkey" / "wardrobe_bonus": ignored)
                 else if (v[1] == "companions") g_take_from_companions = x != 0;
                 else if (v[1] == "messages") g_messages = x != 0;
-                else if (v[1] == "effects") g_effects = static_cast<std::uint8_t>(x < 0 ? 0 : x > 2 ? 2 : x);
+                else if (v[1] == "unmanaged") {
+                    g_unmanaged.clear();
+                    for (const char* q = v[2].c_str(); *q;) {
+                        char* end = nullptr;
+                        unsigned long c = std::strtoul(q, &end, 10);
+                        if (end == q || *end != ':') break;
+                        const char* o = end + 1;
+                        long x = std::strtol(o, &end, 10);
+                        if (end == o) break;
+                        g_unmanaged[static_cast<U16>(c)] = int(x);
+                        q = end;
+                        while (*q == ' ') ++q;
+                    }
+                } else if (v[1] == "effects") g_effects = static_cast<std::uint8_t>(x < 0 ? 0 : x > 2 ? 2 : x);
                 else if (v[1] == "language") g_language = v[2];
                 else if (v[1] == "peekkey") peek_key_load(v[2]);
                 else if (v[1] == "peekpad") g_peek_pad = x != 0;

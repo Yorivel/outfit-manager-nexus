@@ -212,6 +212,7 @@ void center_for_focus(U64 self, U64 script, bool hide_otherwise)
         std::uint8_t mode = g_slot_mode[i];
         bool saved = o < g_outfits.size();
         g_center_name = mode == kModeSettings ? std::string(lang::t(saved ? "center.outfit_settings" : "center.settings"))
+                        : mode == kModeRelease && saved ? std::string(lang::t("center.release"))
                         : saved && g_outfits[o].worn && g_worn_outfit != int(o) ? lang::f("center.modified", {{"outfit", g_outfits[o].name}})
                         : saved                              ? g_outfits[o].name
                         : g_outfits.size() >= kMaxOutfits    ? std::string(lang::t("center.limit"))
@@ -440,7 +441,12 @@ void pump(U64 self)
         std::uint8_t mode = i < visible_slots() ? g_slot_mode[i] : std::uint8_t(kModeMain);
         bool press = click || space;
         if (press && mode == kModeSettings && o <= g_outfits.size()) cfg_enter(self, o); // (the "+" slot: the plugin's)
-        else if (press && o == g_outfits.size() && o < kOutfitSlots) save_new_outfit(self);
+        else if (press && mode == kModeRelease && o < g_outfits.size() && g_outfits[o].worn) {
+            release_outfit(self);
+            g_slot_mode[i] = kModeMain;
+            refresh_wheel(self);
+            center_for_focus(self, focused_script(self), true);
+        } else if (press && o == g_outfits.size() && o < kOutfitSlots) save_new_outfit(self);
         else if (press && o < g_outfits.size()) start_loading(self, o), refresh_wheel(self);
     }
     // The worn armor can also change outside our loader (Armor tab, game events): rechecked when a model swaps (without
