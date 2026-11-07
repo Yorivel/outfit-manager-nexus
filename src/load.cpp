@@ -241,7 +241,10 @@ bool run_step(const LoadStep& s, size_t number)
             LOG("  step %zu: (companion) put on equipment-%u: key %u uid %llX is not in the bags; skipped", number,
                 s.slot, s.key, s.uid);
         } else {
-            int err = call_equip_request(actor, at.item, at.pos, s.slot, at.bag);
+            // (Kliff from storage / the wardrobe: the request answers "Item not found" - the direct call, as before)
+            bool direct = kliff && inv && (at.bag == kBagStorage || at.bag == kBagWardrobe);
+            int err = direct ? call_equip(inv, at.bag, at.pos, s.slot) : call_equip_request(actor, at.item, at.pos, s.slot, at.bag);
+            if (direct) LOG("  (from bag %u: the direct put-on)", at.bag);
             g_steps_ok += err == 0; // (a change went through: a model swap follows)
             g_step_err = err;
             LOG("  step %zu: (companion) put on equipment-%u: key %u \"%s\" uid %llX from bag %u pos %d: %s", number,
