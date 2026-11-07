@@ -220,6 +220,10 @@ bool run_step(const LoadStep& s, size_t number)
     U64 inv = c ? rp(c + kOffCompInventory) : 0;
     U64 kind = actor ? rp(actor + kOffActorKind) : 0;
     bool player = inv && kind && (r32(kind + 1) & 0xFF) == 1;
+    // Test 4 (#1): Kliff through the game's equip requests too (as its own menu does; by hand nothing was lost), not
+    // the client-side functions. `kliff` keeps his bag rules.
+    bool kliff = player;
+    if (player && g_equip_request && g_unequip_request) player = false;
     bool companion = actor && kind && !player && g_equip_request && g_unequip_request;
     bool ok = player || companion;
     if (!ok) {
@@ -233,7 +237,7 @@ bool run_step(const LoadStep& s, size_t number)
     } else if (companion) {
         U64 mgr = call_inventory(actor);
         ItemAt at{};
-        if (!mgr || !find_in_bags(mgr, s.uid, at, equip_bags(true), s.key)) {
+        if (!mgr || !find_in_bags(mgr, s.uid, at, equip_bags(!kliff), s.key)) {
             LOG("  step %zu: (companion) put on equipment-%u: key %u uid %llX is not in the bags; skipped", number,
                 s.slot, s.key, s.uid);
         } else {
