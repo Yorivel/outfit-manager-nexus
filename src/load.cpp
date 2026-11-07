@@ -405,7 +405,20 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
         }
         bool needed = false; // the worn piece goes to another slot of the outfit
         for (const OutfitItem& it : o.items) needed |= worn && it.uid == w[i].uid && it.key == w[i].key;
-        if (worn && (needed || (!t && !keep_slots.count(w[i].slot)))) off.push_back({false, w[i].slot, w[i].key, w[i].uid});
+        // The outfit's piece from a stack (several copies under one id, #1): a direct swap puts the worn piece where the
+        // new one was, which the stack still fills, and the worn piece is lost. The worn piece comes off first instead.
+        bool stacked_in = false;
+        if (worn && t && shared_mgr && !keep_slots.count(w[i].slot)) {
+            std::string where;
+            long long copies = 0;
+            int entries = shared_id_in_bags(shared_mgr, t->uid, &where, &copies);
+            stacked_in = entries > 1 || copies > 1;
+            if (stacked_in)
+                LOG("  equipment-%u: the outfit's \"%s\" uid %llX is stacked (%s); the worn piece comes off first", w[i].slot,
+                    item_name(t->key).c_str(), t->uid, where.c_str());
+        }
+        if (worn && (needed || stacked_in || (!t && !keep_slots.count(w[i].slot))))
+            off.push_back({false, w[i].slot, w[i].key, w[i].uid});
         if (t) on.push_back({true, t->slot, t->key, t->uid});
         if (worn && (t || !keep_slots.count(w[i].slot))) leaving.push_back({w[i].uid, w[i].key, w[i].slot}); // (checked after)
     }

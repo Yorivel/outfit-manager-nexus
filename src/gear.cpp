@@ -444,9 +444,10 @@ bool find_in_bags(U64 mgr, U64 uid, ItemAt& at, U64 allowed, U16 key)
 // Bag entries that carry this uid (any item, count > 0), described in `where` ("bag 1 pos 419: key 5887 x3; ...").
 // A worn piece is never in a bag: a bag entry with its uid means two things share one id (seen with a stacking mod's
 // stacks of gear, #1). Taking such a piece off loses it: the game merges it into the entry with the same id.
-int shared_id_in_bags(U64 mgr, U64 uid, std::string* where)
+int shared_id_in_bags(U64 mgr, U64 uid, std::string* where, long long* copies)
 {
     int found = 0;
+    if (copies) *copies = 0;
     __try {
         U64 bags = *reinterpret_cast<U64*>(mgr + kOffMgrBags);
         U32 n = *reinterpret_cast<U32*>(mgr + 0x20);
@@ -460,6 +461,7 @@ int shared_id_in_bags(U64 mgr, U64 uid, std::string* where)
                 long long cnt = *reinterpret_cast<long long*>(it + 0x10);
                 if (*reinterpret_cast<U64*>(it) != uid || k == 0xFFFF || cnt <= 0) continue;
                 ++found;
+                if (copies) *copies += cnt;
                 if (where && where->size() < 400) {
                     char b[96];
                     std::snprintf(b, sizeof b, "%sbag %u pos %d: key %u x%lld", where->empty() ? "" : "; ",
