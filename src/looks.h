@@ -1,5 +1,6 @@
 // Looks: how each piece shows (the visibility engine).
 #pragma once
+#include <vector>
 #include "om.h"
 
 namespace om {
@@ -25,8 +26,20 @@ void __fastcall model_swap_hook(U64 job, U64 a, U64 b, char c, std::uint8_t* sta
 void look_pending();
 void look_hold(bool on);
 bool look_changing();
+bool model_loading(U64 model);
 void look_settled();
 void look_refresh();
+extern U64 g_weapon_hide_after;
+extern U64 g_sheathe_refresh_at; // (GetTickCount64: a sheathed hidden weapon's glow peak is over - the looks again)
+// the sneak peek glow on one hidden weapon's parts (part name ids) as it is drawn (false) or sheathed (true) - fx_probe.cpp
+void fx_weapon_glow(const std::vector<U32>& names, bool sheathe);
+// the hologram on a scabbard's model part(s) (handles) as its hidden weapon is drawn / sheathed - fx_probe.cpp
+void fx_scabbard_holo(const std::vector<U32>& handles, bool sheathe);
+bool fx_scab_applied_after(U64 t);
+bool fx_transition_busy(); // (an outfit transition runs)
+bool transition_on();      // (the Effects setting isn't Off, and they work)
+ // (the scabbard hologram went out after tick t)
+extern U64 g_case_wait_since; // (GetTickCount64: until then, weapons about to be hidden stay - the transition's glow)
 void mark_worn(int index);
 void anchor_recheck();
 extern FrameFn g_hud_frame_orig;

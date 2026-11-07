@@ -6,79 +6,79 @@
 namespace om {
 
 // --- Game addresses (CrimsonDesert 1.0.0.2976) ---------------------------------------------------
-U64 kRvaRootQuickSlotVt = 0x5a74e70;
-U64 kRvaQuickSlotInfoGet = 0x120d640;  // record* (unused, u32 key)
-U64 kRvaStringInfoGet = 0x3dd7e0;      // stringinfo* (unused, u32 id); +0x10 -> char**
-U64 kRvaQuickSlotInfoMgr = 0x71d3790;  // ptr; +8 count, +0x58 record pointers
-U64 kRvaClassNames = 0x70d2d20;        // ptr; +0x58 -> {char* name, ...}[id] (stride 0x10)
-U64 kRvaBuildBodies = 0x120a290;       // RootQuickSlot: one tab body per QuickSlotInfo record
-U64 kRvaGearMode = 0x120ac10;          // RootQuickSlot: show Weapons/Armor headers, select tab 0
-U64 kRvaSetText = 0x41d39a0;           // (element, const char* utf8, flag)
-U64 kRvaQsiTableRoot0 = 0x71b6fe8; // ***root +8 -> +0x460: table the builder counts
-U64 kRvaQsiTableRoot1 = 0x71b6ff0;
-U64 kRvaIntern = 0x149de20;         // (u64* out id, const char* class, 1, 0x2ffff)
-U64 kRvaClassVecAdd = 0x3896a70;    // bool (vec*, const u32* id): appends if missing
-U64 kRvaClassVecRemove = 0x3896b10; // u32 index or -1 (vec*, const u32* id)
-U64 kRvaClassVecSort = 0x38974a0;   // (vec*)
-U64 kRvaRestyle = 0x38933c0;        // (class holder*)
+U64 kRvaRootQuickSlotVt = 0x5a7cfc8;
+U64 kRvaQuickSlotInfoGet = 0x120f110;  // record* (unused, u32 key)
+U64 kRvaStringInfoGet = 0x3de0c0;      // stringinfo* (unused, u32 id); +0x10 -> char**
+U64 kRvaQuickSlotInfoMgr = 0x71dcbf0;  // ptr; +8 count, +0x58 record pointers
+U64 kRvaClassNames = 0x70dbee0;        // ptr; +0x58 -> {char* name, ...}[id] (stride 0x10)
+U64 kRvaBuildBodies = 0x120bd60;       // RootQuickSlot: one tab body per QuickSlotInfo record
+U64 kRvaGearMode = 0x120c6e0;          // RootQuickSlot: show Weapons/Armor headers, select tab 0
+U64 kRvaSetText = 0x41da3e0;           // (element, const char* utf8, flag)
+U64 kRvaQsiTableRoot0 = 0x71c0498; // ***root +8 -> +0x460: table the builder counts
+U64 kRvaQsiTableRoot1 = 0x71c04a0;
+U64 kRvaIntern = 0x149f960;         // (u64* out id, const char* class, 1, 0x2ffff)
+U64 kRvaClassVecAdd = 0x389d160;    // bool (vec*, const u32* id): appends if missing
+U64 kRvaClassVecRemove = 0x389d200; // u32 index or -1 (vec*, const u32* id)
+U64 kRvaClassVecSort = 0x389db90;   // (vec*)
+U64 kRvaRestyle = 0x3899ab0;        // (class holder*)
 
 // Worn gear: actor context {vt, actor, u8 valid, ..} of the player (released like a ref-holder).
-U64 kRvaPlayerHolder = 0x71b6ca8;   // ptr -> ptr -> argument of the context getter
-U64 kRvaActorCtx = 0x99d660;        // (U64 holder, U64 ctx[4])
-U64 kRvaCtxRelease = 0x1616930;     // (U64 ctx[4]) after ctx[0] = kRvaCtxVt
-U64 kRvaCtxVt = 0x5abd778;
-U64 kRvaItemIconName = 0x25fd2c0;   // const char* (item*): persistent icon texture name
-U64 kRvaEmptyItem = 0x7147ed8;      // ptr -> empty-item sentinel
+U64 kRvaPlayerHolder = 0x71c0158;   // ptr -> ptr -> argument of the context getter
+U64 kRvaActorCtx = 0x99eab0;        // (U64 holder, U64 ctx[4])
+U64 kRvaCtxRelease = 0x1618660;     // (U64 ctx[4]) after ctx[0] = kRvaCtxVt
+U64 kRvaCtxVt = 0x5ac58e0;
+U64 kRvaItemIconName = 0x2601c10;   // const char* (item*): persistent icon texture name
+U64 kRvaEmptyItem = 0x7151298;      // ptr -> empty-item sentinel
 // Dynamic background image, as the item icons set theirs: string var {strobj*, u8 type 2}.
-U64 kRvaEmptyString = 0x6e9cd20;    // empty string object (var default)
-U64 kRvaStrAssign = 0x4455f0;       // (var*, const char*)
-U64 kRvaStrNormalize = 0x1601f80;   // (var*)
-U64 kRvaStrLower = 0x1602360;       // (var*)
-U64 kRvaStrDestroy = 0x3e56e0;      // (var*)
-U64 kRvaSetStyleProp = 0x7124c0;    // (class holder*, const u16* prop, var*, const u16* flag)
-U64 kRvaItemTable = 0x71b7bd0;       // global -> the item table (+0x8 u32 rows, +0x28 rows: {u32 permanent id, u32 body offset}, by key)
-U64 kRvaItemSelectorVt = 0x5a1bf08; // UIGamePlayControlCommon_ItemSelector (a slot's dots, Selection.CommonItemSelector)
-U64 kRvaSelectorSelect = 0x100d180;  // (selector, u32 index, u8): lights dot `index` (index >= count: none; shows count)
-U64 kRvaTextureExists = 0x422f7e0;  // bool (*(uiMgr + kOffUiTextures), var*)
-U64 kRvaIconWitness0 = 0xe008e0;     // only offset witnesses for kOffUiTextures: the game's own "texture exists?" callers
-U64 kRvaIconWitness1 = 0xe012e0;
-U64 kRvaTextCaretWitness0 = 0x4181e90; // only offset witnesses for the text box fields (kOffInput*): the game's own
-U64 kRvaTextCaretWitness1 = 0x4183320; // text box code (caret keys, selection, typing)
-U64 kRvaTextCaretWitness2 = 0x4187e30;
-U64 kRvaElemRectWitness0 = 0x49fb9f0;  // only offset witnesses for kOffElemRect: the game's element overlap test
-U64 kRvaElemRectWitness1 = 0x4ab9dd0;  // and a layout setter
-U64 kRvaIconScriptFlag = 0x71760b8; // u8: game uses the image-script path instead (logged only)
+U64 kRvaEmptyString = 0x6ea5d20;    // empty string object (var default)
+U64 kRvaStrAssign = 0x445f60;       // (var*, const char*)
+U64 kRvaStrNormalize = 0x1603cb0;   // (var*)
+U64 kRvaStrLower = 0x1604090;       // (var*)
+U64 kRvaStrDestroy = 0x3e5fc0;      // (var*)
+U64 kRvaSetStyleProp = 0x713460;    // (class holder*, const u16* prop, var*, const u16* flag)
+U64 kRvaItemTable = 0x71c1080;       // global -> the item table (+0x8 u32 rows, +0x28 rows: {u32 permanent id, u32 body offset}, by key)
+U64 kRvaItemSelectorVt = 0x5a24ab0; // UIGamePlayControlCommon_ItemSelector (a slot's dots, Selection.CommonItemSelector)
+U64 kRvaSelectorSelect = 0x100ea80;  // (selector, u32 index, u8): lights dot `index` (index >= count: none; shows count)
+U64 kRvaTextureExists = 0x4236220;  // bool (*(uiMgr + kOffUiTextures), var*)
+U64 kRvaIconWitness0 = 0xe01cf0;     // only offset witnesses for kOffUiTextures: the game's own "texture exists?" callers
+U64 kRvaIconWitness1 = 0xe026f0;
+U64 kRvaTextCaretWitness0 = 0x41888d0; // only offset witnesses for the text box fields (kOffInput*): the game's own
+U64 kRvaTextCaretWitness1 = 0x4189d60; // text box code (caret keys, selection, typing)
+U64 kRvaTextCaretWitness2 = 0x418e870;
+U64 kRvaElemRectWitness0 = 0x4a02430;  // only offset witnesses for kOffElemRect: the game's element overlap test
+U64 kRvaElemRectWitness1 = 0x4ac0810;  // and a layout setter
+U64 kRvaIconScriptFlag = 0x717f4c8; // u8: game uses the image-script path instead (logged only)
 // Centre tooltip (RootQuickSlot+0x188, UIGamePlayControlCommonInfoDescription) show/hide state machine.
-U64 kRvaSetState = 0xdeeb60;        // (script*, const u32* state, 0)
-U64 kRvaStateShow = 0x7113ca8;      // u32 state ids (current state at script+0xa8)
-U64 kRvaStateHide = 0x7113e94;
-U64 kRvaFocusedSlot = 0x120cbc0;    // slot script* (RootQuickSlot*, u8 *(self+0x28d))
+U64 kRvaSetState = 0xdeff70;        // (script*, const u32* state, 0)
+U64 kRvaStateShow = 0x711d0b4;      // u32 state ids (current state at script+0xa8)
+U64 kRvaStateHide = 0x711d0b8;
+U64 kRvaFocusedSlot = 0x120e690;    // slot script* (RootQuickSlot*, u8 *(self+0x28d))
 // Equipping: the player's client-side equip / unequip, as the inventory screen uses them on the UI thread
 // (0x507d20 / 0x508090 call these for the player; inv = rp(rp(actor+0x68)+0x38), actor at inv+8). The request
 // handler cores (0x2ad34c0 / 0x2ad7790) need a worker thread's TLS context and fault on the UI thread.
-U64 kRvaEquip = 0xa8ccb0;           // int* (inv, int* err, u16 bag id, short pos, short slot, u8 scratch)
-U64 kRvaUnequip = 0xa904d0;         // int* (inv, int* err, short slot)
-U64 kRvaInventory = 0x22ee4f0;      // mgr* (actor): +0x18 bag*[], u32 count +0x20
-U64 kRvaErrorMgr = 0x1609970;       // mgr* ()
-U64 kRvaErrorText = 0x1609ec0;      // entry* (mgr, const int* err); text = **entry
-U64 kRvaToast = 0x1171760;
+U64 kRvaEquip = 0xa8e070;           // int* (inv, int* err, u16 bag id, short pos, short slot, u8 scratch)
+U64 kRvaUnequip = 0xa91890;         // int* (inv, int* err, short slot)
+U64 kRvaInventory = 0x22f1dc0;      // mgr* (actor): +0x18 bag*[], u32 count +0x20
+U64 kRvaErrorMgr = 0x160b6a0;       // mgr* ()
+U64 kRvaErrorText = 0x160bbf0;      // entry* (mgr, const int* err); text = **entry
+U64 kRvaToast = 0x1173160;
 // Native text-input modal (TextEditModalMessage), opened as the game's own naming prompts open it.
-U64 kRvaFindView = 0x38a8c30;       // view* (ui, const char* name), e.g. "ModalMessageView"
-U64 kRvaModalParamsInit = 0xe909f0; // (params*): fixed char buffers {char[cap] .. char* heap, u32 cap, u32 len}
-U64 kRvaModalParamsFree = 0xe90d70; // (params*)
-U64 kRvaOpenTextModal = 0xfd3700;   // modal* (parent or 0, view, params*, int max length)
-U64 kRvaGetText = 0x41d3840;        // (element, char* out, int size): strncat of the element's utf8 text
-U64 kRvaNameInvalid = 0x14a2820;    // bool (const char* utf8): the game's name filter (true = rejected)
-U64 kRvaHideScript = 0xdec8a0;      // (script*): hide; sets +0xbe
-U64 kRvaQueueHide = 0x38abcc0;      // (ui manager, view element): queues the view's close (the menu button's release does)
-U64 kRvaBindingInput = 0xe49730;    // (dispatcher, input event, key binding): a HUD key binding's input state machine
-U64 kRvaTextModalVt = 0x5a0f1e0;
-U64 kRvaTextModalClick = 0xfd3e20;            // TextEdit modal slot 113
+U64 kRvaFindView = 0x38af320;       // view* (ui, const char* name), e.g. "ModalMessageView"
+U64 kRvaModalParamsInit = 0xe91e00; // (params*): fixed char buffers {char[cap] .. char* heap, u32 cap, u32 len}
+U64 kRvaModalParamsFree = 0xe92180; // (params*)
+U64 kRvaOpenTextModal = 0xfd4f60;   // modal* (parent or 0, view, params*, int max length)
+U64 kRvaGetText = 0x41da280;        // (element, char* out, int size): strncat of the element's utf8 text
+U64 kRvaNameInvalid = 0x14a4360;    // bool (const char* utf8): the game's name filter (true = rejected)
+U64 kRvaHideScript = 0xdedcb0;      // (script*): hide; sets +0xbe
+U64 kRvaQueueHide = 0x38b23b0;      // (ui manager, view element): queues the view's close (the menu button's release does)
+U64 kRvaBindingInput = 0xe4ab40;    // (dispatcher, input event, key binding): a HUD key binding's input state machine
+U64 kRvaTextModalVt = 0x5a16dc0;
+U64 kRvaTextModalClick = 0xfd5680;            // TextEdit modal slot 113
 // Native yes / no modal (CommonModalMessage), same view and params block: title, message, both button labels.
-U64 kRvaOpenCommonModal = 0xfcd590; // modal* (parent or 0, view, params*, const char* modal name)
-U64 kRvaCommonModalVt = 0x5a0eca0;
-U64 kRvaCommonModalClick = 0xfcd140; // slot 113 (thunk): confirm / cancel -> owner callback, then hide
-U64 kRvaCommonModalName = 0x59eb968; // "CommonModalMessage" (the game passes this string)
+U64 kRvaOpenCommonModal = 0xfcedf0; // modal* (parent or 0, view, params*, const char* modal name)
+U64 kRvaCommonModalVt = 0x5a16880;
+U64 kRvaCommonModalClick = 0xfce9a0; // slot 113 (thunk): confirm / cancel -> owner callback, then hide
+U64 kRvaCommonModalName = 0x59f38d0; // "CommonModalMessage" (the game passes this string)
 
 int kSlotOpen = 17;        // kRvaRootOpen
 int kSlotClose = 20;       // kRvaRootClose
@@ -87,12 +87,12 @@ int kSlotFocus = 123;      // kRvaRootFocus (slot focus -> tooltips, vfunc +0x3d
 int kSlotTabChanged = 114; // kRvaRootTabChanged (TabBar owner callback, vfunc +0x390)
 int kSlotCursorSelect = 139; // kRvaRootCursorSelect (RadialCursor owner callback, vfunc +0x458: slot index or -1)
 // What sits in those RootQuickSlot slots (checked by the resolver; a moved slot = feature off).
-U64 kRvaRootOpen = 0x1209170;          // thunk
-U64 kRvaRootClose = 0x12093d0;
-U64 kRvaRootFrame = 0x6ff970;
-U64 kRvaRootFocus = 0x1208520;
-U64 kRvaRootTabChanged = 0x1208000;
-U64 kRvaRootCursorSelect = 0x1208ae0;
+U64 kRvaRootOpen = 0x120ac40;          // thunk
+U64 kRvaRootClose = 0x120aea0;
+U64 kRvaRootFrame = 0x700900;
+U64 kRvaRootFocus = 0x1209ff0;
+U64 kRvaRootTabChanged = 0x1209ad0;
+U64 kRvaRootCursorSelect = 0x120a5b0;
 
 // --- Struct offsets (1.0.0.2976) ----------------------------------------------------------------
 // Where the game's own code uses a field, its offset is read from that instruction at start-up (tools/siggen.py
@@ -154,70 +154,70 @@ U64 kOffModelRoot = 0xb0;         // model holder -> character model (0x78 befor
 U64 kOffBagCount = 0x8;           // bag: short item capacity (0xc before; was literal)
 U64 kOffUiTextures = 0x312a8;     // UI manager -> texture manager (0x311e8 before the 2026-10-31 patch; was literal)
 // Classes those objects must have, and functions that only serve as offset witnesses.
-U64 kRvaTabBarVt = 0x5a24dc8;        // UIGamePlayControlCommon_TabBar
-U64 kRvaRadialCursorVt = 0x5a690e0;  // UIGamePlayControlCommon_RadialCursor
-U64 kRvaCenterTipVt = 0x59d4598;     // UIGamePlayControlCommonInfoDescription
-U64 kRvaHeaderVt = 0x5a22890;        // UIGamePlayControl_Common_CheckBox (tab headers)
-U64 kRvaBodyVt = 0x5916e98;          // UIGamePlayControlCommonDefault (tab bodies)
-U64 kRvaEquipSlotVt = 0x5a48208;     // UIGamePlayControlEquipmentItemQuickSlot (Armor / Outfits slots)
-U64 kRvaHudVt = 0x5a77ef0;           // UIGamePlayControlRootHudOver
-U64 kRvaEquipSlot2Vt = 0x5a487e8;    // UIGamePlayControlCommonEquipmentQuickSlot2 (anchor for its slots)
-U64 kRvaBaseScriptVt = 0x59d2678;    // UIBaseScriptObject (anchor for its slots)
-U64 kRvaShowPartVt = 0x590b850;      // ClientFrameEventTransformShowPart (anchor for its slots)
-U64 kRvaRootSlot0 = 0x1207430;       // RootQuickSlot vtable slots 0, 1, 49, 52
-U64 kRvaRootSlot1 = 0x12075a0;
-U64 kRvaRootSlot49 = 0xe3cf10;
-U64 kRvaRootSlot52 = 0x1209bf0;
-U64 kRvaTabBarSlot0 = 0xffe7f0;      // TabBar slots 0, 1, 46, 113
-U64 kRvaTabBarSlot1 = 0xffe8b0;
-U64 kRvaTabBarSlot46 = 0xfff110;
-U64 kRvaTabBarSlot113 = 0xfff290;
-U64 kRvaRadialPageListVt = 0x5a68b48; // the RadialCursor's page list (the cursor slots 199 / 215 recipes are its slots)
-U64 kRvaCursorSlot51 = 0x11cf5b0;    // RadialCursor slots 51, 199, 215
-U64 kRvaCursorSlot199 = 0x11d0240;
-U64 kRvaCursorSlot215 = 0x11cf550;
-U64 kRvaSlotScript164 = 0x10b5b50;    // EquipmentItemQuickSlot slots 164, 166, 178, 185, 35
-U64 kRvaSlotScript166 = 0x10b85f0;
-U64 kRvaSlotScript178 = 0x10b7c60;
-U64 kRvaSlotScript185 = 0x10b4740;
-U64 kRvaSlotScript35 = 0x10b53b0;
-U64 kRvaSlotScript181 = 0x10b9300;    // the slot's scroll handlers (mouse wheel / gamepad): previous / next item
-U64 kRvaSlotScript182 = 0x10b9820;
-U64 kRvaHudInput = 0x12459f0;        // RootHudOver slot 113: the menu buttons' element events
-U64 kRvaDepthVt = 0x5a476e8;         // UIGamePlayControlCommon_QuickSlotDepth_ItemSignal (the submenu)
-U64 kRvaDepthMode = 0x120b1b0;       // (RootQuickSlot*, u8 on): enter / leave the submenu
-U64 kRvaDepthClick = 0x10b4b90;      // (depth entry script): the game's mouse click on a submenu entry (Back / apply)
-U64 kRvaDepthKey = 0x10b5110;        // (depth entry script, u8 event): its key press (event 2: confirm, any device)
-U64 kRvaSlotEvent = 0x10b4a00;       // slot / submenu entry scripts' slot 113 (script, elem, elem, u8): an element event;
+U64 kRvaTabBarVt = 0x5a2ee80;        // UIGamePlayControlCommon_TabBar
+U64 kRvaRadialCursorVt = 0x5a70c70;  // UIGamePlayControlCommon_RadialCursor
+U64 kRvaCenterTipVt = 0x59dcc08;     // UIGamePlayControlCommonInfoDescription
+U64 kRvaHeaderVt = 0x5a2ceb0;        // UIGamePlayControl_Common_CheckBox (tab headers)
+U64 kRvaBodyVt = 0x591f4c8;          // UIGamePlayControlCommonDefault (tab bodies)
+U64 kRvaEquipSlotVt = 0x5a50948;     // UIGamePlayControlEquipmentItemQuickSlot (Armor / Outfits slots)
+U64 kRvaHudVt = 0x5a80df8;           // UIGamePlayControlRootHudOver
+U64 kRvaEquipSlot2Vt = 0x5a50368;    // UIGamePlayControlCommonEquipmentQuickSlot2 (anchor for its slots)
+U64 kRvaBaseScriptVt = 0x59da798;    // UIBaseScriptObject (anchor for its slots)
+U64 kRvaShowPartVt = 0x59139a0;      // ClientFrameEventTransformShowPart (anchor for its slots)
+U64 kRvaRootSlot0 = 0x1208f00;       // RootQuickSlot vtable slots 0, 1, 49, 52
+U64 kRvaRootSlot1 = 0x1209070;
+U64 kRvaRootSlot49 = 0xe3e320;
+U64 kRvaRootSlot52 = 0x120b6c0;
+U64 kRvaTabBarSlot0 = 0x10000f0;      // TabBar slots 0, 1, 46, 113
+U64 kRvaTabBarSlot1 = 0x10001b0;
+U64 kRvaTabBarSlot46 = 0x1000a10;
+U64 kRvaTabBarSlot113 = 0x1000b90;
+U64 kRvaRadialPageListVt = 0x5a71778; // the RadialCursor's page list (the cursor slots 199 / 215 recipes are its slots)
+U64 kRvaCursorSlot51 = 0x11d1080;    // RadialCursor slots 51, 199, 215
+U64 kRvaCursorSlot199 = 0x11d1d10;
+U64 kRvaCursorSlot215 = 0x11d1020;
+U64 kRvaSlotScript164 = 0x10b74b0;    // EquipmentItemQuickSlot slots 164, 166, 178, 185, 35
+U64 kRvaSlotScript166 = 0x10b9f50;
+U64 kRvaSlotScript178 = 0x10b95c0;
+U64 kRvaSlotScript185 = 0x10b60a0;
+U64 kRvaSlotScript35 = 0x10b6d10;
+U64 kRvaSlotScript181 = 0x10bac60;    // the slot's scroll handlers (mouse wheel / gamepad): previous / next item
+U64 kRvaSlotScript182 = 0x10bb180;
+U64 kRvaHudInput = 0x12474d0;        // RootHudOver slot 113: the menu buttons' element events
+U64 kRvaDepthVt = 0x5a4fe28;         // UIGamePlayControlCommon_QuickSlotDepth_ItemSignal (the submenu)
+U64 kRvaDepthMode = 0x120cc80;       // (RootQuickSlot*, u8 on): enter / leave the submenu
+U64 kRvaDepthClick = 0x10b64f0;      // (depth entry script): the game's mouse click on a submenu entry (Back / apply)
+U64 kRvaDepthKey = 0x10b6a70;        // (depth entry script, u8 event): its key press (event 2: confirm, any device)
+U64 kRvaSlotEvent = 0x10b6360;       // slot / submenu entry scripts' slot 113 (script, elem, elem, u8): an element event;
                                      // Space activates the highlighted entry here (apply + leave, as a click does)
-U64 kRvaDepthApply = 0x10bf850;       // (depth script, u32 entry): a pressed entry applies its value (not for Back)
-U64 kRvaCommonModalSlot110 = 0x416dac0; // CommonModal slots 110 / 159: pattern-checked neighbours that place the
-U64 kRvaCommonModalSlot159 = 0xdee950;  // click thunk (slot 113) after an update
-U64 kRvaEquipRequest = 0x5bd8f0;     // UI equip request (actor, err, item copy, slot): companions' path too
-U64 kRvaCompanionEquip = 0xae4f90;   // the request under it for companions (target, err, id, u16 bag, pos, slot)
-U64 kRvaUnequipRequest = 0x5bdc70;   // UI unequip request (actor, err, slot) (thunk)
-U64 kRvaWornLookup = 0x22850b0;      // looks worn pieces up in the equipment list
-U64 kRvaBagItem = 0x22f4670;         // (mgr, bag id, pos) -> item
-U64 kRvaItemMove = 0xaca980;         // the storage screen's move (inventory, err, from owner, to owner, key, ...)
-U64 kRvaBagInfo = 0x555160;
+U64 kRvaDepthApply = 0x10c11b0;       // (depth script, u32 entry): a pressed entry applies its value (not for Back)
+U64 kRvaCommonModalSlot110 = 0x4174500; // CommonModal slots 110 / 159: pattern-checked neighbours that place the
+U64 kRvaCommonModalSlot159 = 0xdefd60;  // click thunk (slot 113) after an update
+U64 kRvaEquipRequest = 0x5be870;     // UI equip request (actor, err, item copy, slot): companions' path too
+U64 kRvaCompanionEquip = 0xae6710;   // the request under it for companions (target, err, id, u16 bag, pos, slot)
+U64 kRvaUnequipRequest = 0x5bebf0;   // UI unequip request (actor, err, slot) (thunk)
+U64 kRvaWornLookup = 0x2288930;      // looks worn pieces up in the equipment list
+U64 kRvaBagItem = 0x22f7fe0;         // (mgr, bag id, pos) -> item
+U64 kRvaItemMove = 0xacc0b0;         // the storage screen's move (inventory, err, from owner, to owner, key, ...)
+U64 kRvaBagInfo = 0x5560e0;
           // (const u16* bag id) -> bag info: +0x38 transfer rules (0xa0 each), +0x40 count
 // Appearance: the model's per-part visibility layers (part+0x70: bit 16+layer = the layer decides, bit layer = shown;
 // the highest deciding layer wins). The game uses layers 0-5 and 7 (4 = the headgear option, 2 = the flight cloak's
 // own item); ours is 6.
-U64 kRvaVisSet = 0x2f1f540;         // (model, {int* handles, u32 n}*, u8 shown, u8 layer, 0, 0, u8 0)
-U64 kRvaVisRelease = 0x2f1f910;     // (model, {int* handles, u32 n}*, u8 layer, 1, 0): the layer stops deciding
-U64 kRvaBattleVis = 0xa86bd0;       // (inventory, u8 show, u8 show): the headgear option's switch (its argument is the
+U64 kRvaVisSet = 0x2f25b20;         // (model, {int* handles, u32 n}*, u8 shown, u8 layer, 0, 0, u8 0)
+U64 kRvaVisRelease = 0x2f25ef0;     // (model, {int* handles, u32 n}*, u8 layer, 1, 0): the layer stops deciding
+U64 kRvaBattleVis = 0xa87f90;       // (inventory, u8 show, u8 show): the headgear option's switch (its argument is the
                                     // option's verdict "headgear shown now", not the battle state)
-U64 kRvaBattleCheck = 0x1929070;    // (actor) -> u8: in battle (its aggro / target table): the headgear decision's input
-U64 kRvaSlotHandle = 0xa96b10;      // (inventory, int* out, u16 slot) -> the worn piece's model handle (0 = none)
-U64 kRvaModelSwap = 0x2f23140;      // the model rebuild job's swap (job, .., u8 phase, u8* state): new parts are in
-U64 kRvaDockedList = 0x227e060;      // (docking manager, u32 tag, list {u32* p, n, cap, inline}): the ids docked with a tag
-U64 kRvaEntityReg = 0x71b6fd8;       // -> -> the entity registry; vcall +0x28 (registry, handle out, id): as acquire_player's ctx
-U64 kRvaEntityReg2 = 0x71b6fe0;      // (the same, for threads with TLS byte +0x1EB set)
-U64 kRvaEquipVisCheck = 0xb63920;   // (vis ctrl, u32* part name, part record, u8 drawn): a weapon part drawn / sheathed
-U64 kRvaFrameShowPart = 0x79f490;   // the animations' frame event "FrameEvent-TransformShowPart": shows / hides parts on
+U64 kRvaBattleCheck = 0x192b460;    // (actor) -> u8: in battle (its aggro / target table): the headgear decision's input
+U64 kRvaSlotHandle = 0xa97ed0;      // (inventory, int* out, u16 slot) -> the worn piece's model handle (0 = none)
+U64 kRvaModelSwap = 0x2f29720;      // the model rebuild job's swap (job, .., u8 phase, u8* state): new parts are in
+U64 kRvaDockedList = 0x2281950;      // (docking manager, u32 tag, list {u32* p, n, cap, inline}): the ids docked with a tag
+U64 kRvaEntityReg = 0x71c0488;       // -> -> the entity registry; vcall +0x28 (registry, handle out, id): as acquire_player's ctx
+U64 kRvaEntityReg2 = 0x71c0490;      // (the same, for threads with TLS byte +0x1EB set)
+U64 kRvaEquipVisCheck = 0xb64dc0;   // (vis ctrl, u32* part name, part record, u8 drawn): a weapon part drawn / sheathed
+U64 kRvaFrameShowPart = 0x7a0860;   // the animations' frame event "FrameEvent-TransformShowPart": shows / hides parts on
                                     // layer 0 mid-move (a mechanic; the rest of layer 0 is the weapon display settings)
-U64 kRvaPartNameMap = 0x38c41d0;    // a map lookup whose first rip-relative load is the global holding the part-name
+U64 kRvaPartNameMap = 0x38ca8c0;    // a map lookup whose first rip-relative load is the global holding the part-name
 SetTextFn g_set_text = nullptr;
 CtxFn g_actor_ctx = nullptr;
 CtxReleaseFn g_ctx_release = nullptr;
@@ -262,8 +262,8 @@ U64 kOffItemPassives = 0x118; // -> {entries*, count} (null when none: the game'
 U64 kOffItemStats = 0x188;    // -> {rows*, count}; a row's base stats at +0x58 / +0x60
 
 // --- Item names: the game's item info table (as its own item-name text does) ---
-U64 kRvaItemInfo = 0x3dcfc0;        // (unused, u32 key) -> item info; unknown keys -> the default info
-U64 kRvaDefaultItemInfo = 0x7148c08; // pointer to that default info
+U64 kRvaItemInfo = 0x3dd8a0;        // (unused, u32 key) -> item info; unknown keys -> the default info
+U64 kRvaDefaultItemInfo = 0x7151fc8; // pointer to that default info
 
 // --- Setup --------------------------------------------------------------------------------------
 // Game addresses come from the resolver (resolver.h): cached for this exe, else the known build's, else searched.
@@ -372,5 +372,24 @@ void resolve_addresses()
         }
     }
 }
+
+
+// The outfit transition and the hidden weapons' effects (transition.cpp; build 26480954, 2976 addresses in brackets).
+U64 kRvaMatUpdate = 0x586760;        // (effect component): the player's material update - hooked, the values go out here [0x4d30f0]
+U64 kRvaMatSend = 0x5866a0;          // (effect component, u8 0, message*, 0): a material value to the character [0x4d3030]
+U64 kRvaMatChange = 0x5a1230;        // (actor, time*, f32, u32* id, f32* values, u32 count, u8 mode 2, u32, parts*) [0x4ecc80]
+U64 kRvaPermSet = 0x587910;          // (effect component, u32* permutation id, message*, u8 all): UseMaterialEffect counter [0x4d4270]
+U64 kRvaMsgInit = 0x3ca0f20;         // (message*, key*): a material value message [0x39c3ee0]
+U64 kRvaMsgFloatVtable = 0x60d3888;  // float message's vtable (value at +0x30) [0x145d0feb0]
+U64 kRvaMsgUintVtable = 0x60d5f88;   // uint message's vtable [0x145d119b0]
+U64 kRvaMsgBaseVtable = 0x60d1a88;   // the base message's vtable (left in it after the call, as the game does)
+U64 kRvaPermKey = 0x6ec6648;         // the UseMaterialEffect message's key [0x146a84e68]
+U64 kRvaPermValue = 0x6ec6660;       // -> its u32 at +0x34 [0x146a84e80]
+U64 kRvaPermId = 0x71521b8;          // u32: the permutation's id [0x146cfdb48]
+U64 kRvaNameId = 0x149f960;          // (int* out, const char* name, 1, 0x2FFFF): a name's id [0x12becb0]
+U64 kRvaMeshCollect = 0x2fbdfa0;     // (out list*, settings*, object*, u8 1): a mesh effect's pieces on an object
+U64 kRvaMeshCollectNamed = 0x2fbdd30; // (object*, out list*, settings*, ids*): ... on the parts with these names [0x2d0f550]
+U64 kRvaMeshColour = 0x55f8b0;       // (piece*, object*, arg, data*): a piece started with the effect's data [0x4b2100]
+U64 kRvaMeshColourArg = 0x712a278;   // its third argument (the game passes this global) [0x146cd7ca8]
 
 } // namespace om

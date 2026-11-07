@@ -59,6 +59,8 @@ std::pair<std::string, std::string> entry_text(int page, U32 index)
 bool g_stash = false;               // after a load, saved pieces left in the bag go to storage (off until turned on)
 bool stash_of(const Outfit& o) { return o.stash ? o.stash == 1 : g_stash; } // (its own, or the global)
 bool g_take_from_companions = true; // pieces another character wears: take them (asked first)
+std::uint8_t g_effects = 2;         // the outfit effects (transition.cpp): 0 off, 1 performance, 2 quality
+int transition_setting() { return g_effects; }
 bool g_messages = true;             // the after-the-fact reports (pieces left, not taken, overwritten); "+" settings page
 std::string g_language;             // the mod's language: a lang::kLanguages code, "" = the game's (detected at start)
 std::wstring g_lang_dir;            // the language files: <plugin folder>/Outfit Manager/lang/
@@ -106,8 +108,8 @@ std::vector<std::uint8_t> cfg_entries()
         return {kCfgVisibility, kCfgClimate, kCfgWeapons, kCfgStash, kCfgHotkey, kCfgPosition, kCfgRename, kCfgOverwrite,
                 kCfgDelete, kCfgBack};
     // (the Outfit Arc's binding for the input in use: the key, or the pad's; pump re-shows the page when it changes)
-    return {kCfgGStash, kCfgParty, kCfgMessages, kCfgLanguage, g_pad_in_use ? kCfgPeekPad : kCfgPeekKey, kCfgClear,
-            kCfgUninstall, kCfgBack};
+    return {kCfgGStash, kCfgParty, kCfgMessages, kCfgEffects, kCfgLanguage, g_pad_in_use ? kCfgPeekPad : kCfgPeekKey,
+            kCfgClear, kCfgUninstall, kCfgBack};
 }
 
 const char* cfg_name(std::uint8_t k)
@@ -116,8 +118,8 @@ const char* cfg_name(std::uint8_t k)
                                     "setting.position",   "setting.rename",  "setting.overwrite", "setting.delete",
                                     "setting.stash",      "setting.party",   "setting.messages", "setting.clear",
                                     "setting.uninstall",  "setting.back",    "setting.language", "setting.peekkey",
-                                    "setting.peekpad",    "setting.hotkey"};
-    return k <= kCfgHotkey ? lang::t(n[k]) : "";
+                                    "setting.peekpad",    "setting.hotkey",    "setting.effects"};
+    return k <= kCfgEffects ? lang::t(n[k]) : "";
 }
 
 // A text that stays where it is (the settings' values are kept as pointers between refreshes: a reused std::string's
@@ -163,6 +165,8 @@ std::vector<const char*> cfg_values(std::uint8_t k, U32& cur)
     if (k == kCfgGStash) return cur = g_stash ? 1 : 0, std::vector<const char*>{"value.off", "value.on"};
     if (k == kCfgParty) return cur = g_take_from_companions ? 1 : 0, std::vector<const char*>{"value.leave", "value.take"};
     if (k == kCfgMessages) return cur = g_messages ? 1 : 0, std::vector<const char*>{"value.off", "value.on"};
+    if (k == kCfgEffects)
+        return cur = g_effects, std::vector<const char*>{"value.off", "value.performance", "value.quality"};
     if (k == kCfgPeekPad) return cur = g_peek_pad ? 1 : 0, std::vector<const char*>{"value.off", "value.peekpad"};
     if (k == kCfgPeekKey) // (one value: the key, or the wait for one)
         return {g_peek_capture && g_capture_outfit < 0 ? "value.press_key" : stable_text(peek_key_name(g_peek_key.load()))};
@@ -223,6 +227,9 @@ std::string cfg_description(std::uint8_t k)
         if (k == kCfgGStash) t = entry_text(kPageSettings, 3);
         else if (k == kCfgParty) t = entry_text(kPageSettings, 0);
         else if (k == kCfgMessages) t = entry_text(kPageSettings, 1);
+        else if (k == kCfgEffects)
+            t.second = lang::t(g_effects == 0 ? "desc.effects.off" : g_effects == 1 ? "desc.effects.performance"
+                                                                                     : "desc.effects.quality");
         else if (k == kCfgClear) t = entry_text(kPageSettings2, 0);
         else if (k == kCfgUninstall) t = entry_text(kPageSettings2, 1);
         else if (k == kCfgLanguage) t.second = lang::t("desc.language");
@@ -311,6 +318,7 @@ void cfg_scroll(U64 self, U32 i, int step)
         if (e[k] == kCfgGStash) g_stash = to == 1;
         else if (e[k] == kCfgParty) g_take_from_companions = to == 1;
         else if (e[k] == kCfgMessages) g_messages = to == 1;
+        else if (e[k] == kCfgEffects) g_effects = static_cast<std::uint8_t>(to);
         else if (e[k] == kCfgPeekPad) g_peek_pad = to == 1;
         else if (e[k] == kCfgLanguage) {
             g_language = to == 0 ? std::string() : std::string(v[to]);

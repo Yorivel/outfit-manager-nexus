@@ -177,6 +177,12 @@ bool install()
             LOG("appearance: drawn-weapon hook failed");
     }
     if (!g_vis_set) feature_off("feature.appearance");
+    // the outfit transition and the hidden weapons' effects (optional: without them outfits change at once)
+    if (!(have({kRvaMatUpdate, kRvaMatSend, kRvaMatChange, kRvaPermSet, kRvaMsgInit, kRvaMsgFloatVtable, kRvaMsgUintVtable,
+                kRvaMsgBaseVtable, kRvaPermKey, kRvaPermValue, kRvaPermId, kRvaNameId, kRvaMeshCollect,
+                kRvaMeshCollectNamed, kRvaMeshColour, kRvaMeshColourArg}) &&
+          install_transition()))
+        feature_off("feature.effects");
     // Slot modes: scrolling an Outfits slot (without them a slot only loads / saves).
     bool scroll_ok = false;
     if (have({kRvaSlotScript181, kRvaSlotScript182})) {

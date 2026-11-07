@@ -500,6 +500,7 @@ void finish_load(U64 self, AskedLoad& p)
 void start_loading(U64 self, U32 index)
 {
     if (g_ask_modal || g_ask_next) return;
+    if (fx_defer_load(self, index)) return; // (the outfit effect: the glow up first; fx_tick loads it at the peak)
     const Outfit& o = g_outfits[index];
     std::vector<Owned> owned;
     if (!read_owned(self, owned)) {

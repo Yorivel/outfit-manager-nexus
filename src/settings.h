@@ -8,6 +8,7 @@ extern bool g_stash;
 bool stash_of(const Outfit& o);
 extern bool g_take_from_companions;
 extern bool g_messages;
+extern std::uint8_t g_effects; // the outfit effects: 0 off, 1 performance (no glow particles), 2 quality (the default)
 extern std::string g_language;
 extern std::wstring g_lang_dir;
 extern std::string g_detected_language;

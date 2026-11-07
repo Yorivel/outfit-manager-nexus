@@ -195,6 +195,23 @@ extern std::wstring g_cache_path;
 extern std::string g_features_off;
 bool have(std::initializer_list<U64> rvas);
 void feature_off(const char* name);
+// the outfit transition (transition.cpp)
+extern U64 kRvaMatUpdate;
+extern U64 kRvaMatSend;
+extern U64 kRvaMatChange;
+extern U64 kRvaPermSet;
+extern U64 kRvaMsgInit;
+extern U64 kRvaMsgFloatVtable;
+extern U64 kRvaMsgUintVtable;
+extern U64 kRvaMsgBaseVtable;
+extern U64 kRvaPermKey;
+extern U64 kRvaPermValue;
+extern U64 kRvaPermId;
+extern U64 kRvaNameId;
+extern U64 kRvaMeshCollect;
+extern U64 kRvaMeshCollectNamed;
+extern U64 kRvaMeshColour;
+extern U64 kRvaMeshColourArg;
 void resolve_addresses();
 
 } // namespace om

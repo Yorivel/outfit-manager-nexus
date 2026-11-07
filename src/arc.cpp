@@ -602,6 +602,7 @@ float __fastcall gauge_frame_hook(U64 self)
         LOG("ui thread %lu (from the status screen)", g_ui_thread);
     }
     peek_frame(self);
+    fx_tick(self); // (the outfit effect's timeline)
     return g_gauge_frame_orig(self);
 }
 

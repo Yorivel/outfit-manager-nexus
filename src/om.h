@@ -383,7 +383,7 @@ enum Confirm { kConfirmNone, kConfirmOverwrite, kConfirmDelete, kConfirmSwap, kC
 enum CfgKind : std::uint8_t {
     kCfgVisibility, kCfgClimate, kCfgWeapons, kCfgStash, kCfgPosition, kCfgRename, kCfgOverwrite, kCfgDelete, // a saved outfit's
     kCfgGStash, kCfgParty, kCfgMessages, kCfgClear, kCfgUninstall,                               // the "+" slot's
-    kCfgBack, kCfgLanguage, kCfgPeekKey, kCfgPeekPad, kCfgHotkey
+    kCfgBack, kCfgLanguage, kCfgPeekKey, kCfgPeekPad, kCfgHotkey, kCfgEffects
 };
 
 // Every move gives the piece a new uid. The stash knows what it moved, so it follows each piece exactly: the copy of its
@@ -449,6 +449,11 @@ constexpr U8 kRiderGettingOff = 0x0B;
 // A tracker's follow info (build 26480954, 2026-11-07: found by comparing the HP tracker with the mount's stamina one):
 // [elem+0xE0]+0xD0 is the followed actor's id, +0xEC its obb-height-ratio (HP 0.6, mount stamina 0.75). The game reads
 // both every frame: the tracker moves the next frame.
+// The outfit transition and the hidden weapons' effects (transition.cpp)
+bool install_transition();
+bool fx_defer_load(U64 self, U32 index); // true: the load waits for the glow up (it is started from fx_tick)
+void fx_tick(U64 screen);                // the UI frame
+int transition_setting();                // the Effects setting: 0 off, 1 performance, 2 quality
 constexpr U64 kOffTrkFollow = 0xE0, kOffFollowActor = 0xD0, kOffFollowRatio = 0xEC;
 constexpr float kTrkRatio = 0.6f, kMountRatio = 0.75f;
 

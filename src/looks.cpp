@@ -38,6 +38,26 @@ std::set<U64> g_look_swapped;                     // ... of those, the rebuilt o
 // across pieces, so a look set now lands on whichever mesh is there). Until then looks only hide: nothing is shown or
 // let go of, so neither the old pieces nor the new ones flash.
 std::set<U64> g_look_hold;
+U64 player_inventory(); // (below)
+U64 g_sheathe_refresh_at = 0;
+U64 g_case_wait_since = 0; // (a drawn hidden weapon's scabbard waits for its hologram: since then; 0 = none waiting)
+struct FxTargets {
+    std::vector<U32> names;      // (the weapon's part name ids - its glow)
+    int case_handle = 0;         // (its scabbard's model part handle - the hologram)
+    std::vector<U32> holo;       // (the scabbard and the weapon's own parts - a bow's quiver and arrows: the hologram)
+    std::vector<U32> case_names; // (its scabbard's part name ids: kept hidden in the draw check until its hologram is on)
+};
+std::map<std::pair<U64, U16>, U64> g_draw_wait;
+// Weapons shown / hidden by their look changing in play (combat starts or ends, a look switched): their glow, the
+// hologram on their scabbard - appearing: held hidden until its hologram has gone out once (at most 300 ms); going: kept
+// until the glow's hold ends (1.9 s). The player only, not mid outfit change. (g_appear_mu)
+std::map<std::pair<U64, U16>, bool> g_fx_was_shown;
+constexpr U16 kBowSlot = 2; // (equipment-2: the bow - its part renders like armour on the back: the hologram on it too)
+std::map<std::pair<U64, U16>, U64> g_look_appear_at, g_look_go_at; // (a drawn hidden weapon: since when its scabbard waits; g_appear_mu)
+std::map<std::pair<U64, U16>, FxTargets> g_fx_targets; // (the player's hidden weapons, from the last sync; g_appear_mu) // (a sheathed hidden weapon stays until its glow's peak: the looks again then)
+std::map<std::pair<U64, U16>, bool> g_fx_was_drawn; // (the player's hidden weapons: drawn at the last sync)
+std::map<std::pair<U64, U16>, U64> g_sheathe_hide_at; // (... and when a sheathed one may go)
+U64 g_weapon_hide_after = 0; // (the transition: weapons about to be hidden stay until their glow's peak ends - GetTickCount64)
 std::set<U64> g_look_swap_seen; // ... that have swapped since (the rebuild comes as many swaps, one part each)
 // Weapons: a drawn weapon is always shown (its look applies while sheathed). The game's in/out check says when one is
 // drawn: (vis ctrl, part name) -> (inventory, slot) of the weapons with a look, and their last drawn state.
@@ -274,6 +294,7 @@ bool model_loading(U64 model)
 // Everything kept about a character's inventory (g_appear_mu held): when it has no looks left, or is gone.
 void forget_inventory(U64 inv)
 {
+    for (auto it = g_fx_targets.begin(); it != g_fx_targets.end();) it = it->first.first == inv ? g_fx_targets.erase(it) : std::next(it);
     g_look_applied.erase(inv), g_in_battle.erase(inv), g_look_wanted.erase(inv), g_flying.erase(inv);
     g_look_state.erase(inv), g_look_hold.erase(inv), g_look_swap_seen.erase(inv);
     for (auto it = g_look_model_inv.begin(); it != g_look_model_inv.end();) {
@@ -335,6 +356,9 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
     std::map<U16, int> now;
     std::set<int> wanted, forced;
     std::string state; // per piece: what it is now and why (the log line)
+    std::set<U16> deferred; // (weapon slots whose hiding waits for the transition's glow)
+    const bool hide_wait = GetTickCount64() < g_weapon_hide_after;
+    const std::set<int>& was_forced = g_look_forced[inv];
     for (const LookPiece& p : pieces) {
         state += " equipment-" + std::to_string(p.slot);
         U64 e = list ? equipped_item(list, p.slot) : 0;
@@ -384,6 +408,119 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
             if (g_bag_in_use == std::make_pair(inv, p.slot)) drawn = true;
             if (auto it = g_flight_tool.find({inv, h}); it != g_flight_tool.end() && it->second) drawn = true;
             case_shown = shown || drawn;
+            // a hidden weapon drawn or sheathed (the player, not mid outfit change): the sneak peek glow on its parts -
+            // drawn: it appears glowing; sheathed: the glow flares up and it goes at the peak (kept shown till then)
+            if (shown) g_fx_targets.erase({inv, p.slot}); // (shown by its look: not a hidden weapon any more)
+            if (!shown && !hold && inv == player_inventory()) {
+                const std::pair<U64, U16> key{inv, p.slot};
+                const U64 now_ms = GetTickCount64();
+                auto was = g_fx_was_drawn.find(key);
+                { // (what the draw hook needs: the weapon's part names and its scabbard - cached for the hook)
+                    FxTargets& tg = g_fx_targets[key];
+                    tg.names.clear();
+                    for (const auto& [k2, own] : g_weapon_parts)
+                        if (own == key) tg.names.push_back(k2.second);
+                    tg.case_handle = ch_case;
+                    tg.case_names.clear();
+                    tg.holo.clear();
+                    std::vector<int> hh = extras; // (the scabbard and the extras: they appear with it)
+                    if (ch_case) hh.push_back(ch_case);
+                    if (p.slot == kBowSlot) hh.push_back(h); // (the bow itself: drawn like armour on the back)
+                    for (int x : hh) {
+                        tg.holo.push_back(static_cast<U32>(x));
+                        for (U64 q : look_parts(model, x)) {
+                            U32 nm = r32(q + 0x48);
+                            tg.case_names.push_back(nm);
+                            if (std::find(tg.names.begin(), tg.names.end(), nm) == tg.names.end()) tg.names.push_back(nm);
+                        }
+                    }
+                }
+                if (was != g_fx_was_drawn.end() && was->second != drawn && !drawn && transition_on()) { // (sheathed; drawn: in the hook)
+                    std::vector<U32> names;
+                    for (const auto& [k2, own] : g_weapon_parts)
+                        if (own == key) names.push_back(k2.second);
+                    // (its case - the scabbard the sword goes into - and its own parts, the quiver and arrows: they
+                    // appear and go with it, so they glow too)
+                    std::vector<int> more = extras;
+                    if (ch_case) more.push_back(ch_case);
+                    LOG("appearance: equipment-%u glow: case handle %d, %zu extra(s), %zu part(s) of its own", p.slot, ch_case,
+                        extras.size(), names.size());
+                    for (int hh : more)
+                        for (U64 q : look_parts(model, hh))
+                            if (U32 nm = r32(q + 0x48); std::find(names.begin(), names.end(), nm) == names.end())
+                                names.push_back(nm);
+                    fx_weapon_glow(names, !drawn);
+                    { // (the scabbard and the extras - a bow's quiver and arrows: drawn like armour - the hologram)
+                        std::vector<U32> hl;
+                        for (int x : extras) hl.push_back(static_cast<U32>(x));
+                        if (ch_case) hl.push_back(static_cast<U32>(ch_case));
+                        if (p.slot == kBowSlot) hl.push_back(static_cast<U32>(h)); // (the bow: drawn like armour on the back)
+                        if (!hl.empty()) fx_scabbard_holo(hl, !drawn);
+                    }
+                    if (!drawn) {
+                        g_sheathe_hide_at[key] = now_ms + 1900; // (the glow's hold ends: in 0.4 + hold 1.5 s)
+                        g_sheathe_refresh_at = std::max(g_sheathe_refresh_at, now_ms + 1910);
+                    } else {
+                        g_sheathe_hide_at.erase(key);
+                    }
+                }
+                g_fx_was_drawn[key] = drawn;
+                if (auto h2 = g_sheathe_hide_at.find(key); !drawn && h2 != g_sheathe_hide_at.end()) {
+                    if (now_ms < h2->second) drawn = true, case_shown = true, state += " (sheathed: hidden at its glow's peak)";
+                    else g_sheathe_hide_at.erase(h2);
+                }
+            }
+        }
+        if (!flying && inv == player_inventory()) { // (its look changed in play: the hologram on it)
+            const std::pair<U64, U16> key{inv, p.slot};
+            const U64 now_ms = GetTickCount64();
+            // (the look's own state only: draws and sheathes have their effect of their own - counting them here gave
+            // a sheathed bow a second hold after the first, so it stayed solid past its hologram)
+            const bool vis = shown;
+            // (an outfit change and its transition change looks too: only noted then, no effect of its own)
+            const bool quiet = hold || hide_wait || fx_transition_busy() || !transition_on();
+            auto was = g_fx_was_shown.find(key);
+            const bool weapon = is_weapon_slot(p.slot) || p.slot == kBackShieldSlot; // (weapons only - user, 2026-11-07)
+            if (weapon && !quiet && was != g_fx_was_shown.end() && was->second != vis) {
+                std::vector<U32> holo;
+                std::vector<U32> names;
+                for (const auto& [k2, own] : g_weapon_parts)
+                    if (own == key) names.push_back(k2.second);
+                std::vector<int> hh = extras; // (the scabbard and the extras - a bow's quiver and arrows)
+                if (ch_case) hh.push_back(ch_case);
+                if (p.slot == kBowSlot) hh.push_back(h); // (the bow itself: drawn like armour on the back)
+                for (int x : hh) {
+                    holo.push_back(static_cast<U32>(x));
+                    for (U64 q : look_parts(model, x))
+                        if (U32 nm = r32(q + 0x48); std::find(names.begin(), names.end(), nm) == names.end()) names.push_back(nm);
+                }
+                fx_weapon_glow(names, !vis);
+                if (!holo.empty()) fx_scabbard_holo(holo, !vis);
+                if (vis) g_look_appear_at[key] = now_ms, g_look_go_at.erase(key), g_case_wait_since = now_ms;
+                else g_look_go_at[key] = now_ms + 1900, g_look_appear_at.erase(key),
+                     g_sheathe_refresh_at = std::max(g_sheathe_refresh_at, now_ms + 1910);
+                LOG("appearance: equipment-%u %s by its look: the hologram on it", p.slot, vis ? "appears" : "goes");
+            }
+            g_fx_was_shown[key] = vis;
+            if (auto ap = g_look_appear_at.find(key); ap != g_look_appear_at.end()) { // (appearing: hidden till its hologram)
+                if (!vis || fx_scab_applied_after(ap->second) || now_ms - ap->second > 300) g_look_appear_at.erase(ap);
+                else shown = false, drawn = false, case_shown = false, state += " (appears once its hologram is on)";
+            }
+            if (auto go = g_look_go_at.find(key); go != g_look_go_at.end()) { // (going: kept till the glow's hold ends)
+                if (vis || now_ms >= go->second) g_look_go_at.erase(go);
+                else shown = true, case_shown = true, state += " (goes at its glow's peak)";
+            }
+        }
+        // (a weapon going from shown to hidden during the transition: left as it is until the glow's peak ends -
+        // hidden at once, it cut the glow short)
+        if (hide_wait && !(shown || drawn) && (is_weapon_slot(p.slot) || p.slot == kBackShieldSlot)) {
+            auto ai = applied.find(p.slot);
+            bool hidden_now = ai != applied.end() && ai->second == h && !was_forced.count(h);
+            if (!hidden_now) {
+                deferred.insert(p.slot);
+                state += " hidden after the glow";
+                continue;
+            }
         }
         int by = flying ? -1 : game_hides(model, h, look_part(model, h));
         if ((shown || drawn) && (flying || by >= 0)) { // (the game's mechanics win; released below)
@@ -409,7 +546,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
     }
     for (const auto& [slot, h] : applied) // (handles let go of since: the flight's too; mid change: kept till the swap)
         if (auto it = now.find(slot); it == now.end() || it->second != h) {
-            if (hold) now.emplace(slot, h);
+            if (hold || deferred.count(static_cast<U16>(slot & 0xFF))) now.emplace(slot, h);
             else look_call(model, h, 2);
         }
     applied = std::move(now);
@@ -533,6 +670,20 @@ float __fastcall equip_vis_check_hook(U64 vc, const U32* part, std::uint8_t* rec
     if (!part || !rd(reinterpret_cast<U64>(part), name)) return r;
     std::lock_guard<std::mutex> lock(g_appear_mu);
     if (g_weapon_parts.empty()) return r;
+    // a drawn hidden weapon's scabbard: hidden here until its hologram has gone out once (at most 300 ms) - the game
+    // shows it on the draw's frame, before the hologram: it flashed in plain
+    for (auto it = g_draw_wait.begin(); it != g_draw_wait.end();) {
+        auto tg = g_fx_targets.find(it->first);
+        const bool over = tg == g_fx_targets.end() || fx_scab_applied_after(it->second) || GetTickCount64() - it->second > 300;
+        if (over) { it = g_draw_wait.erase(it); continue; }
+        if (std::find(tg->second.case_names.begin(), tg->second.case_names.end(), name) != tg->second.case_names.end()) {
+            static int logged = 0;
+            if (logged < 6) ++logged, LOG("appearance: scabbard part %s held hidden in the draw check (was %.2f)",
+                                          part_name(name).c_str(), r);
+            return 0.0f;
+        }
+        ++it;
+    }
     auto it = g_weapon_parts.find({vc, name});
     std::pair<U64, U16> owner;
     if (it != g_weapon_parts.end()) owner = it->second, g_part_drawn[{vc, name}] = drawn == 1;
@@ -550,6 +701,15 @@ float __fastcall equip_vis_check_hook(U64 vc, const U32* part, std::uint8_t* rec
     bool& d = g_drawn[owner];
     if (d == now) return r;
     d = now;
+    if (now && transition_on()) // (a hidden weapon drawn: its effects start on this frame - from the looks a frame
+                                // later, its scabbard showed plain first)
+        if (auto tg = g_fx_targets.find(owner); tg != g_fx_targets.end()) {
+            fx_weapon_glow(tg->second.names, false);
+            if (!tg->second.holo.empty()) {
+                fx_scabbard_holo(tg->second.holo, false);
+                g_draw_wait[owner] = GetTickCount64();
+            }
+        }
     U64 inv = owner.first;
     if (std::find(g_look_pending.begin(), g_look_pending.end(), inv) == g_look_pending.end()) g_look_pending.push_back(inv);
     return r;
