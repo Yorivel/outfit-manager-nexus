@@ -417,6 +417,10 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
                 LOG("  equipment-%u: the outfit's \"%s\" uid %llX is stacked (%s); the worn piece comes off first", w[i].slot,
                     item_name(t->key).c_str(), t->uid, where.c_str());
         }
+        // Test 3 (#1): every worn piece comes off before the outfit's goes on (no direct swaps). In the player's logs the
+        // Grey Wolf armour survived every take-off (0.4.3 test 2) and was lost on both direct swaps (0.5.0 tests 1, 2),
+        // with nothing shared that the bags show.
+        if (worn && t && !keep_slots.count(w[i].slot)) stacked_in = true;
         if (worn && (needed || stacked_in || (!t && !keep_slots.count(w[i].slot))))
             off.push_back({false, w[i].slot, w[i].key, w[i].uid});
         if (t) on.push_back({true, t->slot, t->key, t->uid});
