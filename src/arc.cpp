@@ -118,13 +118,12 @@ struct Peek {
     U64 badge[5] = {}, nb[2] = {};   // each slot's climate badge; the highlighted outfit's badges by its label
     std::string badge_set[5], nb_set[2];
     U64 trk = 0, hp_gauge = 0;       // the HP tracker (the peek's home) and its own gauge (hidden while shown)
-    U64 mount_trk = 0;               // the mount's stamina tracker (on a mount: the height the arc takes)
-    bool mount_shown = false;        // ... shown by the plugin (hidden again when the arc closes / Kliff dismounts)
-    float ride_top = 0;              // the arc's wrap moved down by this (layout px) on a mount
-    U64 reveal_at = 0;               // opened on a mount: hidden until the mount's height is known (0 = shown)
-    int reveal_frames = 0;           // ... frames with a sane, settled mount height so far
+    U32 trk_mount = 0;               // on a mount: the mount the HP tracker follows (0: it follows its own actor)
+    U32 trk_own = 0;                 // ... the actor it followed before (put back after)
+    float trk_own_ratio = 0;         // ... and its height ratio
+    U64 reveal_at = 0;               // opened on a mount: invisible until the tracker is at the mount (0 = shown)
+    int reveal_frames = 0;           // ... frames with a settled tracker height so far
     float reveal_last = 0;           // ... the last of those heights
-    int dy_cls = 0;                  // the om-peek-dy-N class on the wrap (0: none)
     std::string icon_set[5];         // last icon set per position
     bool slide_b = false;            // the scroll's slide: which class set (a / b) the last step used
     std::string slide_set[20];       // its class on each element (frames, icons, badges, then the texts)
@@ -431,6 +430,18 @@ void peek_sync_live(bool open)
     wheel_hook(open);
 }
 
+// The rider's state byte at [comp+0x1A0]+0x91: 0x0B while getting off a mount (0x10 riding and once off; 0 unknown)
+U8 rider_state()
+{
+    U64 ctx[4] = {};
+    U64 actor = acquire_player(ctx);
+    U8 st = 0;
+    if (U64 comp = actor ? rp(actor + kOffActorComp) : 0)
+        if (U64 m = rp(comp + kOffCompRidden)) rd(m + kOffRiderState, st);
+    if (ctx[0]) release_player(ctx);
+    return st;
+}
+
 U32 riding_mount()
 {
     U64 ctx[4] = {};
@@ -446,87 +457,59 @@ U32 riding_mount()
     return static_cast<U32>(id);
 }
 
+// On a mount the HP tracker (the arc's home) sits 60% up the rider and mount together: at the rider's head, the arc
+// above Kliff (2026-11-07). So while riding it follows the mount at the mount stamina spiral's ratio (0.75) - the
+// spiral's spot on every mount, placed by the game itself; put back to its own actor and ratio once the arc hides.
+// A dismount: the riding flag drops as it starts, so the mount is followed until the rider is off (the rider's state
+// leaves 0x0B: about 0.9 - 1.3 s; at most 2.5 s, and 0.3 s if that state never shows).
 void peek_ride_place()
 {
     Peek& p = g_peek;
-    if (!p.mount_trk || !is_element(p.mount_trk)) p.mount_trk = find_by_class(g_peek_root, "cpp-horse-sp-actor-tracker", 4);
     bool shown = (p.open || p.closing_at) && p.trk;
-    bool active = shown && p.mount_trk;
-    U32 mount = active ? riding_mount() : 0;
+    U64 f = p.trk ? rp(p.trk + kOffTrkFollow) : 0;
+    U32 mount = shown ? riding_mount() : 0;
     U64 now = GetTickCount64();
-    // A dismount: the riding flag drops as it starts, while the HP tracker stays up at the rider's head until the rider is
-    // off (2026-11-07: the arc snapped up there). So for up to 2.5 s after riding the arc keeps the mount's height while
-    // the HP tracker is still above it.
     static U64 rode_at = 0;
     if (mount) rode_at = now;
-    bool follow = active && (mount || (rode_at && now - rode_at < 2500));
-    if (follow && !p.mount_shown && has_class(p.mount_trk, "!cpp-none")) set_class(p.mount_trk, "!cpp-none", false), p.mount_shown = true;
-    if (!follow && p.mount_shown && p.mount_trk) {
-        set_class(p.mount_trk, "!cpp-none", true); // (hidden again, as the game keeps it)
-        p.mount_shown = false;
+    static bool getting_off = false;
+    if (mount) getting_off = false;
+    bool hold = false;
+    if (shown && !mount && p.trk_mount) {
+        U8 st = rider_state();
+        if (st == kRiderGettingOff) getting_off = true;
+        hold = getting_off ? st == kRiderGettingOff && now - rode_at < 2500 : now - rode_at < 300;
     }
-    float ty = 0, my = 0, top = 0;
-    RECT cr{};
-    HWND w = GetForegroundWindow();
-    float k = g_prompt_scale > 0 ? g_prompt_scale
-                                 : (w && GetClientRect(w, &cr) && cr.bottom > 0 ? 1080.0f / float(cr.bottom) : 0.0f);
-    bool have_hp = shown && rd(p.trk + 0x74, ty) && ty > 0;
-    // (the mount's tracker below the HP tracker by a sane amount: its first frame shown can be stale)
-    bool use_mount = follow && have_hp && rd(p.mount_trk + 0x74, my) && my > ty + 20.0f && my - ty < 1000.0f;
-    // Aimed in screen space and eased (about 0.1 s): mounting / dismounting glide, and a jump of the HP tracker itself
-    // doesn't jerk the arc. Opening: straight at the height; closed: reset at once.
-    static float eased = 0;
-    static U64 last_at = 0;
-    static bool was_shown = false;
-    if (have_hp && k > 0 && !(p.reveal_at && !use_mount)) { // (waiting on a mount: never the HP tracker's height)
-        float target = use_mount ? my : ty;
-        if (was_shown && last_at && !p.reveal_at) {
-            float dt = std::min(0.1f, float(now - last_at) / 1000.0f);
-            eased += (target - eased) * (1.0f - std::exp(-dt / 0.035f));
-        } else {
-            eased = target;
+    U32 follow = !shown ? 0 : mount ? mount : hold ? p.trk_mount : 0;
+    if (f && follow) {
+        if (!p.trk_mount) {
+            p.trk_own = 0, p.trk_own_ratio = 0;
+            rd(f + kOffFollowActor, p.trk_own), rd(f + kOffFollowRatio, p.trk_own_ratio);
+            if (p.trk_own == follow) p.trk_own = 0; // (already the mount's: never put back as "its own")
+            if (!(p.trk_own_ratio > 0.0f && p.trk_own_ratio <= 1.5f)) p.trk_own_ratio = kTrkRatio;
         }
-        top = (eased - ty) * k;
-        if (std::fabs(top) < 0.25f) top = 0;
-    }
-    if (p.reveal_at && !use_mount && p.open) top = p.ride_top; // (waiting: the last mount height kept)
-    was_shown = shown && have_hp, last_at = now;
-    // The height as a css class (om-peek-dy-N: top N px, tools/peek_gen.py), not written into the element's style: class
-    // changes (the opening's animation) rebuild the style from the css for a few frames, which dropped a written value -
-    // the arc showed at the rider's head for 3 - 4 frames on every opening (2026-11-07).
-    int n = std::clamp(static_cast<int>(std::lround(top)), 0, 600);
-    if (n != p.dy_cls && p.wrap) {
-        char c[24];
-        if (p.dy_cls) std::snprintf(c, sizeof c, "om-peek-dy-%d", p.dy_cls), set_class(p.wrap, c, false);
-        if (n) std::snprintf(c, sizeof c, "om-peek-dy-%d", n), set_class(p.wrap, c, true);
-        p.dy_cls = n;
-    }
-    p.ride_top = top;
-    U64 gh = p.wrap ? rp(p.wrap + 0x20) : 0, style = gh ? rp(gh + 0x20) : 0; // DIAG (mount reveal): read below
-    { // DIAG (mount reveal, 2026-11-07): every frame from an opening on a mount until 15 frames after it shows
-        static int after = 0;
-        static U64 opened = 0;
-        if (p.reveal_at && p.reveal_at != opened) opened = p.reveal_at, after = 15;
-        if (p.open && (p.reveal_at || after > 0)) {
-            if (!p.reveal_at) --after;
-            float al = 0, at_ = 0, ar = 0, ab = 0, st = -1;
-            if (p.arc) rd(p.arc + kOffElemRect, al), rd(p.arc + kOffElemRect + 4, at_), rd(p.arc + kOffElemRect + 8, ar),
-                rd(p.arc + kOffElemRect + 0xc, ab);
-            if (style) rd(style + 8, st);
-            LOG("DIAG reveal +%llu ms: waiting %d frames %d, wrap %s, mount %08X, HP y %.0f, mount y %.0f (use %d), top %.1f, "
-                "style top %.1f, arc box %.0f,%.0f-%.0f,%.0f", (unsigned long long)(now - opened), p.reveal_at ? 1 : 0,
-                p.reveal_frames, has_class(p.wrap, "om-peek-veil") ? "veiled" : "VISIBLE", mount, ty, my, use_mount ? 1 : 0, top,
-                st, al, at_, ar, ab);
+        wr<U32>(f + kOffFollowActor, follow);
+        wr<float>(f + kOffFollowRatio, kMountRatio);
+        p.trk_mount = follow;
+    } else if (p.trk_mount) {
+        U32 cur = 0;
+        if (f && rd(f + kOffFollowActor, cur) && cur == p.trk_mount) { // (the game hasn't re-aimed it itself)
+            if (p.trk_own) wr<U32>(f + kOffFollowActor, p.trk_own);
+            wr<float>(f + kOffFollowRatio, p.trk_own_ratio);
         }
+        if (shown) LOG("Outfit Arc: back on the rider %llu ms after the dismount began", (unsigned long long)(now - rode_at));
+        p.trk_mount = 0;
     }
-    if (p.reveal_at) { // (opened on a mount: shown once the height has been sane and settled for 3 frames - laid out)
-        bool settled = use_mount && std::fabs(top - p.reveal_last) < 2.0f;
-        p.reveal_frames = settled ? p.reveal_frames + 1 : 0;
-        p.reveal_last = top;
-        if (!p.open || p.reveal_frames >= 3 || !mount || now - p.reveal_at > 150) {
-            set_class(p.wrap, "om-peek-veil", false);
-            p.reveal_at = 0;
-        }
+    if (!p.reveal_at) return;
+    // Opened on a mount: the tracker only moves while shown, so it can hold an old place for a frame or two; the arc
+    // stays invisible (om-peek-veil) until its height has settled with the mount followed (at most 150 ms).
+    float ty = 0;
+    bool have = p.trk_mount && rd(p.trk + 0x74, ty) && ty > 0;
+    bool settled = have && std::fabs(ty - p.reveal_last) < 1.0f;
+    p.reveal_frames = settled ? p.reveal_frames + 1 : 0;
+    p.reveal_last = ty;
+    if (!p.open || p.reveal_frames >= 2 || !p.trk_mount || now - p.reveal_at > 150) {
+        set_class(p.wrap, "om-peek-veil", false);
+        p.reveal_at = 0;
     }
 }
 

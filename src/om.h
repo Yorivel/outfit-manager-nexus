@@ -436,14 +436,21 @@ using UiParseFn = U64(__fastcall*)(U64 loader, U64 stream);
 
 // On a mount the HP tracker (60% up the tracked box: rider and mount together) sits at the rider's head, and the arc
 // with it (2026-11-07). The mount's own stamina tracker sits at 75% of the mount's box - its back, where the rider's
-// hips are, for every mount. So on a mount the arc's wrap is moved down to that tracker's height (its x stays the
-// rider's). The tracker only moves while shown: the plugin shows it with the arc (its spiral stays as the game keeps it,
-// hidden until the mount's stamina changes).
+// hips are, for every mount. So on a mount the HP tracker follows the mount at that ratio (arc.cpp peek_ride_place).
 // Riding (build 26480954, found by diffing the player on foot / mounted in two sessions; fields straight in the actor
 // held the mount's id in one session and 0 in the next - list entries): in the actor's component, [comp+0x1B8]+0x30 is a
 // riding flag (0 / 1) and [comp+0x1A0]+0xC8 the ridden actor's id (-1 on foot). Riding only when both say so; anything
 // else (a patch moving them) is "not riding", which leaves the arc where it always was.
 constexpr U64 kOffCompRide = 0x1B8, kOffRideFlag = 0x30, kOffCompRidden = 0x1A0, kOffRiddenId = 0xC8;
+// In that same object +0x91 is a state byte: 0x10 riding, 0x0B from a dismount's start until the rider is off (2026-11-07,
+// six dismounts on two mounts: back to 0x10 after 0.94 s / 1.24 s; other values on foot later).
+constexpr U64 kOffRiderState = 0x91;
+constexpr U8 kRiderGettingOff = 0x0B;
+// A tracker's follow info (build 26480954, 2026-11-07: found by comparing the HP tracker with the mount's stamina one):
+// [elem+0xE0]+0xD0 is the followed actor's id, +0xEC its obb-height-ratio (HP 0.6, mount stamina 0.75). The game reads
+// both every frame: the tracker moves the next frame.
+constexpr U64 kOffTrkFollow = 0xE0, kOffFollowActor = 0xD0, kOffFollowRatio = 0xEC;
+constexpr float kTrkRatio = 0.6f, kMountRatio = 0.75f;
 
 // (defined in core.cpp)
 extern U64 g_base;
