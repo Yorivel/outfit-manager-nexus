@@ -226,6 +226,13 @@ void update_plus_icon(U64 self)
 {
     g_plus_icon.clear();
     g_amber = false;
+    { // (the worn chest for the "+" slot's picture, whatever is worn; none: the placeholder)
+        g_worn_chest.clear();
+        WornRaw wc[kWornMax];
+        int nc = read_worn(self, wc, kWornMax);
+        for (int k = 0; k < nc; ++k)
+            if (wc[k].slot == kChestSlot && wc[k].key != 0xFFFF && wc[k].icon) g_worn_chest = cstr(reinterpret_cast<U64>(wc[k].icon));
+    }
     if (g_worn_outfit >= 0) return;
     if (U16 ch = current_character(); ch != kNoCharacter && g_character != kNoCharacter && ch != g_character) return; // (switching)
     WornRaw w[kWornMax];

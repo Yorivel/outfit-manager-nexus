@@ -12,6 +12,8 @@ extern U64 g_low_elem[kOutfitSlots];
 extern bool g_low_shown[kOutfitSlots];
 extern const char* g_badge_class[kOutfitSlots];
 extern std::string g_plus_icon;
+extern std::string g_worn_chest; // (the worn chest's icon, whatever is worn: the "+" slot's picture)
+std::uint8_t slot_mode_of(U32 i); // (what slot i's lit dot does: the "+" slot's three are Unequip / Save / Settings)
 extern bool g_amber;
 extern std::set<U16> g_keep_slots;
 extern std::mutex g_keys_mu;

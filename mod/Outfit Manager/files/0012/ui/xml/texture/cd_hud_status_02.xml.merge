@@ -1,6 +1,7 @@
 <__dmm_root__>
 <Texture Name="outfitmanager_peek_slot" Filename="UI/texture/image/customizeimage/outfitmanager_peek_slot.dds" Type="Image" GetRect="1,1,126,126"/>
 <Texture Name="outfitmanager_peek_slot_sel" Filename="UI/texture/image/customizeimage/outfitmanager_peek_slot_sel.dds" Type="Image" GetRect="1,1,126,126"/>
+<Texture Name="outfitmanager_peek_none" Filename="UI/texture/image/customizeimage/outfitmanager_peek_none.dds" Type="Image" GetRect="1,1,254,254"/>
 <Texture Name="outfitmanager_peek_arc_n1" Filename="UI/texture/image/customizeimage/outfitmanager_peek_arc_n1.dds" Type="Image" GetRect="1,1,96,431"/>
 <Texture Name="outfitmanager_peek_arc_n2" Filename="UI/texture/image/customizeimage/outfitmanager_peek_arc_n2.dds" Type="Image" GetRect="1,1,114,467"/>
 <Texture Name="outfitmanager_peek_arc_n3" Filename="UI/texture/image/customizeimage/outfitmanager_peek_arc_n3.dds" Type="Image" GetRect="1,1,114,503"/>

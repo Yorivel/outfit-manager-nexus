@@ -212,7 +212,7 @@ using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
 const char* const kBadges[] = {"om-plus-big", "om-cog-big", "om-plus-c", "om-cog-c", "om-flag-c", "om-cold-c", "om-heat-c",
                                "om-cold2-c", "om-heat2-c", "om-eye-c", "om-look-shown-c", "om-look-hidden-c",
                                "om-look-combat-c", "om-look-peace-c", "om-return-c", "om-prompt-c", "om-cross-c",
-                               "om-abtn-c"};
+                               "om-abtn-c", "om-unequip-c"};
 // The game's slot refresh (after every equipment change) re-selects every slot's dots with its own count (0 for ours:
 // no items) and -1: the select is hooked, and for our slots' selectors it gets our count and mode instead, so the dots
 // never go blank. Our own calls pass through it as well. Our slots are looked up live (the Outfits menu's slot list).
@@ -460,6 +460,8 @@ constexpr U8 kRiderGettingOff = 0x0B;
 // The outfit transition and the hidden weapons' effects (transition.cpp)
 bool install_transition();
 bool fx_defer_load(U64 self, U32 index); // true: the load waits for the glow up (it is started from fx_tick)
+int fx_busy_target();                     // while the effect plays: the outfit going on, -2 Unequip Outfit; else -1
+bool fx_defer_release(U64 self);          // the same for Unequip Outfit: release_outfit runs at the glow's peak
 void fx_tick(U64 screen);                // the UI frame
 int transition_setting();                // the Effects setting: 0 off, 1 performance, 2 quality
 constexpr U64 kOffTrkFollow = 0xE0, kOffFollowActor = 0xD0, kOffFollowRatio = 0xEC;

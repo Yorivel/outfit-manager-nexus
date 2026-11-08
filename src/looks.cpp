@@ -947,6 +947,7 @@ void release_outfit(U64 self)
     for (size_t i = 0; i < g_outfits.size(); ++i)
         if (g_outfits[i].worn) worn = int(i);
     if (worn < 0) return;
+    if (fx_defer_release(self)) return; // (the outfit effect: the glow up first; fx_tick lets it go at the peak)
     g_unmanaged[g_character] = worn;
     LOG("let go of the outfit (character %u): its looks no longer apply", g_character);
     mark_worn(-1);

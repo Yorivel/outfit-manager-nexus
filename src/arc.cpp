@@ -15,7 +15,6 @@
 #include "pads.h"
 
 namespace om {
-constexpr int kPeekRelease = -2; // (the arc's entry that lets the managed outfit go, #21; -1: the unsaved outfit)
 
 std::atomic<U32> g_peek_key{0};           // the Outfit Arc's key (a virtual-key code; 0 = Off)
 
@@ -96,8 +95,8 @@ USHORT peek_mouse_flags(U32 vk)
 // The outfits on an arc beside the character, to switch without the gear wheel. Its elements are added to the stamina
 // gauge's tracker (statusgaugeview2) as the game loads it (uibin_patch.cpp: OmPeekWrap > OmPeekArc, OmPeekFrame0-4,
 // OmPeekIcon0-4, OmPeekLabel, OmPeekName); tools/peek_gen.py makes the layout. A carousel: the highlighted entry sits
-// in the middle (position 2), the others around it, wrapping; it opens on the worn outfit, or on an extra "current
-// outfit" entry when what is worn isn't a saved outfit (choosing it changes nothing).
+// in the middle (position 2), the others around it, wrapping. A state picker (#21): "No outfit" first, then the outfits;
+// it opens on the state there is now (the outfit applied, or No outfit) and only acts when let go on another entry.
 // It follows the character (in the HP tracker, which the game never shows or hides: the plugin shows it while the peek
 // is, its own gauge hidden; the stamina tracker flickered, the game hiding it while stamina is full). Everything runs in the screen's own per-frame call (its root script
 // UIGamePlayControlRootStatusGauge, vtable slot kSlotFrame, the shared root frame function; self+8 = the root element),
@@ -108,10 +107,11 @@ FrameFn g_gauge_frame_orig = nullptr;
 U64 g_peek_root = 0;
 struct Peek {
     bool open = false;
-    std::vector<int> entries;        // outfit indices in the Outfits tab's order; -1 = the current, unsaved outfit
+    std::vector<int> entries;        // -1 = No outfit, then outfit indices in the Outfits tab's order
     size_t sel = 0;                  // the highlighted entry (shown in the middle)
     int worn = -1;
-    std::string current_icon;        // the worn chest piece's icon (the unsaved entry)
+    bool applied = false;   // (an outfit applied when it opened: No outfit unequips it, #21)
+    size_t sel0 = 0;        // (the entry it opened on: let go there, nothing changes)
     U64 closing_at = 0;              // closing: its animation plays, then it hides (GetTickCount64 of the close; 0 = not)
     U16 character = 0xFFFF;          // whose outfits it shows (a switch closes it: they'd be the wrong ones)
     U64 self = 0;                    // the status screen it was opened from (loads and their questions go through it)
@@ -144,7 +144,7 @@ bool peek_elements()
 {
     Peek& p = g_peek;
     if (p.wrap && is_element(p.wrap) && has_class(p.wrap, "om-peek-wrap")) return true;
-    p = Peek{p.open, p.entries, p.sel, p.worn, p.current_icon};
+    p = Peek{p.open, p.entries, p.sel, p.worn, p.applied, p.sel0};
     p.wrap = find_by_class(g_peek_root, "om-peek-wrap", 8);
     if (!p.wrap) return false;
     for (int k = 0; k < 5; ++k) {
@@ -179,8 +179,8 @@ void peek_draw(U64 self)
         std::string pic;
         if (shown) {
             int e = p.entries[(p.sel + n + size_t(off % int(n) + int(n))) % n];
-            pic = e == kPeekRelease ? std::string() : e < 0 ? p.current_icon
-                  : e < int(g_outfits.size()) ? g_outfits[size_t(e)].chest_icon : std::string();
+            pic = e < 0 ? std::string("outfitmanager_peek_none") // (No outfit: the slashed armour, drawn as an item icon)
+                        : e < int(g_outfits.size()) ? g_outfits[size_t(e)].chest_icon : std::string();
         }
         if (pic != p.icon_set[k]) {
             int r = pic.empty() ? 1 : set_image_raw(self, p.icon[k], pic.c_str());
@@ -234,13 +234,9 @@ void peek_draw(U64 self)
         if (!caps)
             if (U64 box = find_by_class(p.wrap, "om-hk-caps", 1)) set_class(box, "!cpp-none", true);
     }
-    std::string label = e == kPeekRelease ? lang::t("peek.release_label")
-                        : e < 0           ? lang::t("peek.unsaved_label")
-                                          : lang::f("peek.label", {{"n", std::to_string(e + 1)}});
-    std::string name = e == kPeekRelease        ? lang::t("center.release")
-                       : e < 0                  ? lang::t("peek.unsaved")
-                       : e < int(g_outfits.size()) ? g_outfits[size_t(e)].name
-                                                : "";
+    // (the first entry: No outfit; the others: the saved outfit's number and name)
+    std::string label = e < 0 ? lang::t("peek.none_label") : lang::f("peek.label", {{"n", std::to_string(e + 1)}});
+    std::string name = e < 0 ? lang::t("peek.none") : e < int(g_outfits.size()) ? g_outfits[size_t(e)].name : "";
     if (g_set_text) g_set_text(p.label, label.c_str(), 0), g_set_text(p.name, name.c_str(), 0);
 }
 
@@ -333,19 +329,14 @@ void peek_open(U64 self)
     prepare_outfits(); // (as the wheel does when it opens)
     p.entries.clear();
     p.worn = find_worn_outfit(self);
-    p.current_icon.clear();
-    if (p.worn < 0) { // what is worn isn't a saved outfit: the "current outfit" entry, first
-        WornRaw w[kWornMax];
-        int n = read_worn(self, w, kWornMax);
-        for (int i = 0; i < n; ++i)
-            if (w[i].slot == kChestSlot && w[i].icon) p.current_icon = w[i].icon;
-        p.entries.push_back(-1);
-    }
+    // (the entries: see the top of this section)
+    p.entries.push_back(-1);
+    const int anchor = anchor_outfit();
+    p.applied = anchor >= 0;
     for (size_t i = 0; i < g_outfits.size(); ++i) p.entries.push_back(int(i));
-    bool managed = false; // (an outfit's looks apply: the last entry lets it go, #21)
-    for (const Outfit& o : g_outfits) managed |= o.worn;
-    if (managed) p.entries.push_back(kPeekRelease);
-    p.sel = p.worn < 0 ? 0 : size_t(p.worn);
+    // (on the outfit applied - also when some of its pieces were changed since -, else on No outfit)
+    p.sel = p.applied ? size_t(anchor) + 1 : 0;
+    p.sel0 = p.sel;
     p.open = true;
     p.character = g_character;
     set_class(p.trk, "!cpp-none", false); // (the HP tracker: shown while the peek is, its own gauge hidden)
@@ -375,13 +366,15 @@ void peek_close(bool choose)
     peek_animate(PeekAnim::Out); // (hidden by peek_frame once it has played)
     p.closing_at = GetTickCount64();
     p.open = false;
-    bool load = choose && e >= 0 && e != p.worn && static_cast<size_t>(e) < g_outfits.size();
-    LOG("Outfit Arc: closed on %s%s (%s, wheel notches %u)", e < 0 ? "the current outfit" : ("outfit " + std::to_string(e + 1)).c_str(),
+    // (let go on another entry than the one it opened on: an outfit is put on and applied - also one whose pieces are
+    // already worn after an unequip -; No outfit unequips the one applied)
+    bool load = choose && e >= 0 && p.sel != p.sel0 && static_cast<size_t>(e) < g_outfits.size();
+    LOG("Outfit Arc: closed on %s%s (%s, wheel notches %u)", e < 0 ? "No outfit" : ("outfit " + std::to_string(e + 1)).c_str(),
         !choose ? "" : load ? "; putting it on" : " (nothing to change)", g_peek_by_pad ? "pad" : "key",
         g_wheel_notches.load());
     // as a click on it in the wheel: where each piece is, the questions (pieces on other characters, copies), the load
     if (load) start_loading(p.self, static_cast<U32>(e));
-    else if (choose && e == kPeekRelease) release_outfit(p.self); // (#21: its looks no longer apply)
+    else if (choose && e < 0 && p.applied && p.sel != p.sel0) release_outfit(p.self); // (#21: No outfit)
 }
 
 // The outfits' hotkeys, in play (not in menus, prompts or with the arc open): a press of exactly the combination loads

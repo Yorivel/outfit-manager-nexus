@@ -28,6 +28,7 @@ U64 g_low_elem[kOutfitSlots] = {};   // the disable element: the worn wedge
 bool g_low_shown[kOutfitSlots] = {};
 const char* g_badge_class[kOutfitSlots] = {}; // badge shown on slot i (nullptr: none)
 std::string g_plus_icon; // the "+" slot's picture: the worn chest while no saved outfit is worn ("" : the silhouette)
+std::string g_worn_chest; // the worn chest's icon, whatever is worn (the "+" slot's picture since #21; "": the silhouette)
 
 bool g_amber = false; // the anchor (the last loaded / exactly worn outfit) has been changed by hand: its highlight is amber
 // Equipment slots the game refuses to empty ("There are no Items available to be equipped after removal": the main
@@ -400,17 +401,17 @@ void apply_outfit_slots(U64 self, U32 only)
         }
         bool empty = i < visible && slot_outfit(i) >= g_outfit_count;
         bool saved = i < visible && !empty;
-        std::uint8_t mode = i < visible ? g_slot_mode[i] : std::uint8_t(kModeMain);
-        // (the "+" slot: the worn chest when what is worn is not a saved outfit - what saving would keep)
-        std::string pic = saved ? g_outfits[slot_outfit(i)].chest_icon : empty ? g_plus_icon : std::string();
+        std::uint8_t mode = i < visible ? slot_mode_of(i) : std::uint8_t(kModeMain);
+        // (the "+" slot: the worn chest, whatever is worn - what it unequips / what saving would keep)
+        std::string pic = saved ? g_outfits[slot_outfit(i)].chest_icon : empty ? g_worn_chest : std::string();
         if (saved && pic.empty())
             if (const OutfitItem* c = outfit_piece(g_outfits[slot_outfit(i)], kChestSlot)) pic = piece_icon(*c);
         bool chest = show_slot_image(self, root, i, pic);
-        if (i < visible) show_mode_dots(script, mode_count(i), mode);
+        if (i < visible) show_mode_dots(script, mode_count(i), g_slot_mode[i]); // (the dot, not what it does)
         U64 badge = find_by_class(root, "quickslot-occupancy-icon-chain"), low = find_by_class(root, "cpp-icon-disable-item");
-        const char* want = mode != kModeMain && empty  ? (kPlusSlotCentred ? "om-cog-big" : "om-cog-c") // (settings 1 / 2)
+        const char* want = mode == kModeRelease && empty  ? "om-unequip-c" // (Unequip Outfit: the slashed armour)
+                           : mode != kModeMain && empty  ? (kPlusSlotCentred ? "om-cog-big" : "om-cog-c") // (settings 1 / 2)
                            : mode == kModeSettings               ? "om-cog-c"
-                           : mode == kModeRelease && saved        ? "om-eye-c" // (let go: its looks)
                            : mode == kModeAppearance             ? "om-eye-c"
                            : empty && g_outfit_count < kMaxOutfits ? (kPlusSlotCentred ? "om-plus-big" : "om-plus-c")
                            : saved ? climate_badge(g_outfits[slot_outfit(i)]) // (its Climate marker, or none)
@@ -462,14 +463,24 @@ void apply_outfit_slots(U64 self, U32 only)
             ok &= set_class(icon, "!cpp-none", !sil);
             ok &= set_class(icon, "om-missing", missing);
         }
-        bool worn = saved && int(slot_outfit(i)) == g_worn_outfit;
+        // (unequipped: the gear may still be that outfit's, but no outfit is applied - only the "+" slot shows it, #21)
+        bool worn = saved && int(slot_outfit(i)) == g_worn_outfit && !g_unmanaged.count(g_character);
         // Amber: the last loaded outfit while what is worn has been changed by hand since (not saved); green: the "+" slot
         // while an unsaved set is worn (its chest is previewed there).
         bool drifted = !worn && saved && g_worn_outfit < 0 && g_outfits[slot_outfit(i)].worn && g_amber;
-        bool ready = empty && !g_plus_icon.empty(); // (green, the game's "positive" colour: an unsaved set to save)
-        g_low_elem[i] = low, g_low_shown[i] = worn || drifted || ready;
+        // (the "+" slot: green on its Save dot while what is worn can be saved - no saved outfit is it; white while no
+        // outfit is applied: what is worn is "the current outfit", #21)
+        bool ready = empty && mode == kModeMain && g_worn_outfit < 0 && g_outfit_count < kMaxOutfits;
+        bool current = empty && !ready && anchor_outfit() < 0;
+        // While an outfit change's effect plays, only the slot it is about pulses (the outfit going on; the "+" slot for
+        // Unequip Outfit): the wheel's other highlights follow once it has landed.
+        const int target = fx_busy_target();
+        const bool busy = target != -1 && ((saved && int(slot_outfit(i)) == target) || (empty && target == -2));
+        if (target != -1) worn = drifted = ready = current = false;
+        g_low_elem[i] = low, g_low_shown[i] = busy || worn || drifted || ready || current;
         if (low) {
-            ok &= swap_class(low, g_worn_class[i], worn      ? numbered("om-w%u-%u", visible, i)
+            ok &= swap_class(low, g_worn_class[i], busy ? numbered("om-wb%u-%u", visible, i)
+                                                   : worn || current ? numbered("om-w%u-%u", visible, i)
                                                    : drifted ? numbered("om-wa%u-%u", visible, i)
                                                    : ready   ? numbered("om-wg%u-%u", visible, i) : "");
             ok &= set_class(low, "!cpp-none", !g_low_shown[i]); // (hidden by the game's markup)
@@ -509,9 +520,17 @@ U32 mode_count(U32 i)
         return k < n ? kLookCount : k == n ? kEyeSteps : 0;
     }
     if (g_cfg >= 0) return cfg_dots(i, nullptr);
-    const U32 o = slot_outfit(i); // (the managed outfit: a third dot lets it go, #21)
-    const bool managed = o < g_outfits.size() && g_outfits[o].worn;
-    return managed ? 3 : 2; // (the slot's action, its settings)
+    // (an outfit: its action, its settings; the "+" slot once outfits exist: Unequip Outfit, Save, Settings - #21)
+    return slot_outfit(i) == g_outfits.size() && !g_outfits.empty() ? 3 : 2;
+}
+// What slot i's lit dot does (a SlotMode): the dot itself, but the "+" slot's three are Unequip / Save / Settings.
+std::uint8_t slot_mode_of(U32 i)
+{
+    const std::uint8_t dot = i < kOutfitSlots ? g_slot_mode[i] : std::uint8_t(kModeMain);
+    if (g_eye >= 0 || g_cfg >= 0 || i >= visible_slots() || slot_outfit(i) != g_outfits.size() || g_outfits.empty())
+        return dot;
+    static const std::uint8_t kPlus[3] = {kModeRelease, kModeMain, kModeSettings};
+    return kPlus[dot % 3];
 }
 // The dot lit on slot i: its mode; in the Appearance view a piece's look, the page slot's step.
 U32 mode_lit(U32 i)

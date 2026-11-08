@@ -421,6 +421,7 @@ enum class State { Idle, In, Swapped, Out };
 State g_state = State::Idle;
 U64 g_load_self = 0, g_t = 0;
 U32 g_index = 0;
+constexpr U32 kRelease = 0xFFFFFFFF; // (g_index: Unequip Outfit - at the peak the outfit is let go instead of a load, #21)
 bool g_bypass = false;
 void set_k(float k) { g_k = k, g_k_dirty = true; }
 
@@ -441,7 +442,7 @@ bool transition_on() { return setting() != 0; }
 
 bool fx_defer_load(U64 self, U32 index)
 {
-    if (g_bypass || !transition_on()) return false;
+    if (g_bypass || !transition_on() || !self) return false;
     if (g_state != State::Idle) {
         notify(self, lang::t("toast.still_changing"));
         return true;
@@ -453,6 +454,10 @@ bool fx_defer_load(U64 self, U32 index)
     set_k(0.0f);
     return true;
 }
+
+// Unequip Outfit (#21) the way an outfit change looks: the glow up, the outfit let go at the peak (what it hid shows
+// again under the glow), the glow down.
+bool fx_defer_release(U64 self) { return fx_defer_load(self, kRelease); }
 
 void fx_tick(U64 screen)
 {
@@ -475,7 +480,8 @@ void fx_tick(U64 screen)
         set_k(std::min(1.0f, float(dt) / float(kInMs)));
         if (dt < kInMs) return;
         g_bypass = true;
-        start_loading(g_load_self, g_index);
+        if (g_index == kRelease) release_outfit(g_load_self);
+        else start_loading(g_load_self, g_index);
         g_bypass = false;
         g_state = State::Swapped, g_t = now;
     } else if (g_state == State::Swapped) {
@@ -509,6 +515,7 @@ void fx_tick(U64 screen)
 }
 
 bool fx_transition_busy() { return g_state != State::Idle; }
+int fx_busy_target() { return g_state == State::Idle ? -1 : g_index == kRelease ? -2 : int(g_index); }
 
 void fx_weapon_glow(const std::vector<U32>& names, bool sheathe)
 {

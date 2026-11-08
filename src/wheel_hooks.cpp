@@ -209,10 +209,10 @@ void center_for_focus(U64 self, U64 script, bool hide_otherwise)
     }
     U32 o = i < visible_slots() ? slot_outfit(i) : kOutfitSlots;
     if (o < kOutfitSlots) {
-        std::uint8_t mode = g_slot_mode[i];
+        std::uint8_t mode = slot_mode_of(i);
         bool saved = o < g_outfits.size();
         g_center_name = mode == kModeSettings ? std::string(lang::t(saved ? "center.outfit_settings" : "center.settings"))
-                        : mode == kModeRelease && saved ? std::string(lang::t("center.release"))
+                        : mode == kModeRelease ? std::string(lang::t(anchor_outfit() >= 0 ? "center.release" : "center.no_outfit"))
                         : saved && g_outfits[o].worn && g_worn_outfit != int(o) ? lang::f("center.modified", {{"outfit", g_outfits[o].name}})
                         : saved                              ? g_outfits[o].name
                         : g_outfits.size() >= kMaxOutfits    ? std::string(lang::t("center.limit"))
@@ -438,12 +438,11 @@ void pump(U64 self)
         U32 o = i < visible_slots() ? slot_outfit(i) : kOutfitSlots;
         LOG("%s: focused slot %u (script %llX) -> outfit %u of %zu", click ? "click" : "Space", i,
             script, o, g_outfits.size());
-        std::uint8_t mode = i < visible_slots() ? g_slot_mode[i] : std::uint8_t(kModeMain);
+        std::uint8_t mode = i < visible_slots() ? slot_mode_of(i) : std::uint8_t(kModeMain);
         bool press = click || space;
         if (press && mode == kModeSettings && o <= g_outfits.size()) cfg_enter(self, o); // (the "+" slot: the plugin's)
-        else if (press && mode == kModeRelease && o < g_outfits.size() && g_outfits[o].worn) {
-            release_outfit(self);
-            g_slot_mode[i] = kModeMain;
+        else if (press && mode == kModeRelease) { // (the "+" slot's Unequip Outfit, #21; none applied: nothing to do)
+            if (anchor_outfit() >= 0) release_outfit(self);
             refresh_wheel(self);
             center_for_focus(self, focused_script(self), true);
         } else if (press && o == g_outfits.size() && o < kOutfitSlots) save_new_outfit(self);
@@ -459,6 +458,10 @@ void pump(U64 self)
     }
     // Pieces can leave the inventory while the menu is open (dropped, sold): the greyed-out outfits follow.
     if (U64 now = GetTickCount64(); now - g_missing_checked > 1000 && refresh_missing(self)) apply_outfit_slots(self);
+    { // an outfit change's effect started / ended: its slot pulses, then the highlights follow
+        static int busy_seen = -1;
+        if (int b = fx_busy_target(); b != busy_seen) busy_seen = b, apply_outfit_slots(self);
+    }
     if (g_worn_changed) {
         g_worn_changed = false;
         center_restore(); // the Equipped tag follows
