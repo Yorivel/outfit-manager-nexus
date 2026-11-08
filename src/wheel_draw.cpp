@@ -310,7 +310,7 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
         ok &= set_class(mark, "om-eye-c", false) && set_class(mark, "om-eye2-c", false);
         ok &= set_class(mark, "!cpp-none", !labelled);
         if (U64 text = labelled ? find_by_class(mark, "charged-count") : 0) {
-            const char* label = back ? "Back" : lang::t(kPageName[g_eye_pick % kEyeSteps]); // (Back: as the settings')
+            const char* label = back ? lang::t("setting.back") : lang::t(kPageName[g_eye_pick % kEyeSteps]); // (Back: the settings' word, translated)
             if (g_set_text) g_set_text(text, label, 0);
             ok &= set_class(text, "om-label", true) && set_class(text, "om-label-value", false);
         }
