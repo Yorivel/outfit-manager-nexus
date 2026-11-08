@@ -83,7 +83,9 @@ void write_lists(std::string& out, const Store& s)
                 put(out, "outfit\t%s\n", o.name.c_str());
                 if (!o.chest_icon.empty()) put(out, "chest\t%s\n", o.chest_icon.c_str());
                 if (o.seen) put(out, "seen\t%llX\n", o.seen);
-                if (o.has_weapons) put(out, "weapons\t%d\n", o.load_weapons ? 1 : 0);
+                // (2 = Weapons only, #27: an older version reads it as Load)
+                if (o.has_weapons) put(out, "weapons\t%d\n", o.weapons_only ? 2 : o.load_weapons ? 1 : 0);
+                if (!o.weapon_icon.empty()) put(out, "weaponicon\t%s\n", o.weapon_icon.c_str());
                 if (o.climate) put(out, "climate\t%u\n", o.climate);
                 if (o.stash) put(out, "stash\t%u\n", o.stash);
                 if (o.hk_vk) put(out, "hotkey\t%u\t%u\n", o.hk_vk, o.hk_mods);
@@ -359,6 +361,9 @@ void load_outfits()
             } else if (!list.empty() && v[0] == "weapons" && v.size() >= 2) { // (its weapon slots are in the items)
                 list.back().has_weapons = true;
                 list.back().load_weapons = v[1] != "0";
+                list.back().weapons_only = v[1] == "2";
+            } else if (!list.empty() && v[0] == "weaponicon" && v.size() >= 2) {
+                list.back().weapon_icon = v[1];
             } else if (!list.empty() && v[0] == "stash" && v.size() >= 2) {
                 unsigned x = static_cast<unsigned>(std::strtoul(v[1].c_str(), nullptr, 10));
                 if (x <= 2) list.back().stash = static_cast<std::uint8_t>(x);

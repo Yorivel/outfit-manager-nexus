@@ -216,6 +216,7 @@ void confirmed(U64 self, U32 index, int what, U32 other)
     }
     Outfit o;
     if (!snapshot(self, o)) return;
+    o.weapons_only = g_outfits[index].weapons_only; // (a weapon set stays one: compared on its weapons, #27)
     for (size_t j = 0; j < g_outfits.size(); ++j)
         if (same_saved(g_outfits[j], o)) {
             notify(self, lang::f(j == index ? "toast.already_holds" : "toast.already_saved", {{"outfit", g_outfits[j].name}}));

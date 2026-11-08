@@ -813,6 +813,8 @@ void look_refresh()
 // Marks outfit `index` (or none: -1) as the current character's last loaded one; saves when that changes.
 void mark_worn(int index)
 {
+    // (a weapon set is never the applied outfit: loading one leaves the applied outfit as it is, #27)
+    if (index >= 0 && size_t(index) < g_outfits.size() && is_weapon_set(g_outfits[size_t(index)])) return;
     if (index >= 0) g_unmanaged.erase(g_character); // (a load or a save: the outfit is managed again)
     bool changed = false;
     for (size_t i = 0; i < g_outfits.size(); ++i)
