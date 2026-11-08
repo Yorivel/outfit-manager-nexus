@@ -219,3 +219,8 @@ center.no_outfit = Aucune tenue appliquée
 peek.none_label = RETIRER
 peek.none = Aucune tenue
 toast.released = « {outfit} » retirée : votre équipement reste porté, ses réglages de visibilité sont désactivés jusqu'à ce que vous chargiez ou enregistriez une tenue
+
+# next version: weapon sets, underwear
+value.weapons_only = Armes seules
+desc.weapons.only = Un jeu d'armes : un clic ne change que vos armes. Votre tenue et sa visibilité restent.
+piece.underwear = Sous-vêtements

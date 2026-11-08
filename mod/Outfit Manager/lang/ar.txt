@@ -227,3 +227,8 @@ center.no_outfit = لا يوجد زي مطبّق
 peek.none_label = نزع
 peek.none = بلا زي
 toast.released = نُزع "{outfit}": تبقى معداتك عليك، وإعدادات الظهور الخاصة به متوقفة حتى تحمّل زيًا أو تحفظه
+
+# next version: weapon sets, underwear
+value.weapons_only = الأسلحة فقط
+desc.weapons.only = مجموعة أسلحة: النقر يغيّر أسلحتك فقط. يبقى زيّك وإعدادات ظهوره.
+piece.underwear = الملابس الداخلية

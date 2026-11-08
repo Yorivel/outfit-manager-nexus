@@ -219,3 +219,8 @@ center.no_outfit = Nenhum traje aplicado
 peek.none_label = DESEQUIPAR
 peek.none = Sem traje
 toast.released = "{outfit}" desequipado: seu equipamento continua, as configurações de visibilidade dele ficam desligadas até você carregar ou salvar um traje
+
+# next version: weapon sets, underwear
+value.weapons_only = Só armas
+desc.weapons.only = Um conjunto de armas: um clique troca só as suas armas. Seu traje e a visibilidade dele continuam.
+piece.underwear = Roupa íntima

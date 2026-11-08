@@ -354,6 +354,7 @@ void update_plus_icon(U64 self)
 void carry_looks(const Outfit& from, Outfit& to)
 {
     to.back_look = from.back_look;
+    to.underwear_look = from.underwear_look;
     to.empty_looks.clear();
     for (OutfitItem& it : to.items) it.look = slot_look(from, it.slot);
     auto carry = [&](U16 slot, std::uint8_t look) {
@@ -383,6 +384,7 @@ bool snapshot(U64 self, Outfit& o)
         if (w[i].key == 0xFFFF) continue;
         o.items.push_back({w[i].slot, w[i].key, w[i].uid, 0, pid_of(w[i].key)});
         if (w[i].slot == kChestSlot) o.chest_icon = icon;
+        if (weapon && !icon.empty() && (w[i].slot == kHandR || o.weapon_icon.empty())) o.weapon_icon = icon;
     }
     std::sort(o.items.begin(), o.items.end(), [](const OutfitItem& a, const OutfitItem& b) { return a.slot < b.slot; });
     o.has_back = back_shield_item() ? 1 : 2;
@@ -410,10 +412,12 @@ bool hands_crossed(const Outfit& o, const WornRaw* w, int n, U16 slot)
 bool same_pieces(const Outfit& a, const Outfit& b)
 {
     bool weapons = uses_weapons(a) && uses_weapons(b);
+    const bool set = is_weapon_set(a) || is_weapon_set(b); // (a weapon set: its weapons only, #27)
     auto pieces = [&](const Outfit& o, bool swap) {
         std::vector<std::pair<U16, U64>> v;
         for (const OutfitItem& it : o.items) {
             if (!weapons && is_weapon_slot(it.slot)) continue;
+            if (set && !is_weapon_slot(it.slot)) continue;
             U16 sl = swap && it.slot == kHandR ? kHandL : swap && it.slot == kHandL ? kHandR : it.slot;
             v.push_back({sl, it.uid});
         }
@@ -426,7 +430,41 @@ bool same_pieces(const Outfit& a, const Outfit& b)
 // Saving (+, Overwrite): is the worn gear (b) already saved as a? Also agreeing on the weapons: an outfit that leaves
 // them (Weapons: Leave, or saved before weapons) is not the same as one that loads them (2026-11-06, a player: with
 // only the weapon changed, + found the armour "already saved" and nothing was saved; the weapon never loaded).
-bool same_saved(const Outfit& a, const Outfit& b) { return uses_weapons(a) == uses_weapons(b) && same_pieces(a, b); }
+bool same_saved(const Outfit& a, const Outfit& b)
+{
+    return uses_weapons(a) == uses_weapons(b) && is_weapon_set(a) == is_weapon_set(b) && same_pieces(a, b);
+}
+
+// The worn gear as an outfit (weapon slots included).
+static bool worn_as_outfit(U64 self, Outfit& now)
+{
+    WornRaw w[kWornMax];
+    int n = read_worn(self, w, kWornMax);
+    if (n <= 0) return false;
+    now = {};
+    for (int i = 0; i < n; ++i) {
+        now.has_weapons |= is_weapon_slot(w[i].slot);
+        if (w[i].key != 0xFFFF) now.items.push_back({w[i].slot, w[i].key, w[i].uid});
+    }
+    std::sort(now.items.begin(), now.items.end(), [](const OutfitItem& a, const OutfitItem& b) { return a.slot < b.slot; });
+    return true;
+}
+
+// The weapon set whose weapons are exactly the worn ones (every weapon slot, empty ones too; crossed hands count), or
+// -1 (#27: strict, so a set of two weapons and one with the same two plus more never match together).
+static int weapon_set_matching(const Outfit& now)
+{
+    Outfit w = now;
+    w.weapons_only = true;
+    for (size_t o = 0; o < g_outfits.size(); ++o)
+        if (is_weapon_set(g_outfits[o]) && same_pieces(g_outfits[o], w)) return static_cast<int>(o);
+    return -1;
+}
+int worn_weapon_set(U64 self)
+{
+    Outfit now;
+    return worn_as_outfit(self, now) ? weapon_set_matching(now) : -1;
+}
 
 // The saved outfit whose pieces are the worn ones, or -1.
 int find_worn_outfit(U64 self)
@@ -440,6 +478,7 @@ int find_worn_outfit(U64 self)
         if (w[i].key != 0xFFFF) now.items.push_back({w[i].slot, w[i].key, w[i].uid});
     }
     std::sort(now.items.begin(), now.items.end(), [](const OutfitItem& a, const OutfitItem& b) { return a.slot < b.slot; });
+    const bool weapons_from_set = weapon_set_matching(now) >= 0;
     auto matches = [&](size_t o) {
         Outfit seen = now; // (what this outfit cares about: not the slots it leaves empty that can't be emptied)
         seen.items.erase(std::remove_if(seen.items.begin(), seen.items.end(),
@@ -447,6 +486,12 @@ int find_worn_outfit(U64 self)
                                             return g_keep_slots.count(it.slot) && !outfit_piece(g_outfits[o], it.slot);
                                         }),
                          seen.items.end());
+        if (is_weapon_set(g_outfits[o])) return false; // (never the applied outfit, #27)
+        if (weapons_from_set) { // (the weapons are a weapon set's: the outfit is judged on its armour, #27)
+            Outfit armour = g_outfits[o];
+            armour.load_weapons = false;
+            return same_pieces(armour, seen);
+        }
         return same_pieces(g_outfits[o], seen);
     };
     // (the anchor first: two outfits can match, e.g. the same armour with "Weapons: Leave", and the loaded one stays)

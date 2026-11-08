@@ -370,6 +370,8 @@ void holo_tick(const Player& p, U64 comp)
     if (g_holo.empty() && g_holo_perm) perm(comp, false, 1), g_perm_on = false, g_holo_perm = false;
 }
 
+std::atomic<bool> g_glow_all_req{false}; // (a weapon set's change, #27: glow the worn weapons, no body effect)
+
 void transition_tick(const Player& p, U64 comp)
 {
     float k = g_k.load();
@@ -400,7 +402,8 @@ void __fastcall mat_upd_hook(U64 comp)
         glows = !g_glow_jobs.empty(), holo = !g_holo.empty() || g_holo_perm;
     }
     const bool trans = g_k_dirty.load() || g_k.load() > 0.0f;
-    if (!glows && !holo && !trans) return;
+    const bool glow_all = g_glow_all_req.load();
+    if (!glows && !holo && !trans && !glow_all) return;
     Player p;
     if (!p.actor || comp != p.comp()) return; // (another character's update)
     if (glows) {
@@ -411,6 +414,7 @@ void __fastcall mat_upd_hook(U64 comp)
         }
         for (const auto& names : jobs) glow_named(p, names);
     }
+    if (glow_all && g_glow_all_req.exchange(false)) glow_all_weapons(p), g_glow_end = GetTickCount64() + kGlowMs;
     if (holo) holo_tick(p, comp);
     if (trans) g_k_dirty = false, transition_tick(p, comp);
 }
@@ -421,6 +425,8 @@ enum class State { Idle, In, Swapped, Out };
 State g_state = State::Idle;
 U64 g_load_self = 0, g_t = 0;
 U32 g_index = 0;
+bool g_weapons_fx = false; // (#27: a weapon set's change - the weapons glow out, swap, glow in; no body effect)
+constexpr U64 kSetSwapMs = 450, kSetAttachMs = 600; // (the swap at the old weapons' glow; the new ones glow once on)
 constexpr U32 kRelease = 0xFFFFFFFF; // (g_index: Unequip Outfit - at the peak the outfit is let go instead of a load, #21)
 bool g_bypass = false;
 void set_k(float k) { g_k = k, g_k_dirty = true; }
@@ -449,6 +455,11 @@ bool fx_defer_load(U64 self, U32 index)
     }
     g_load_self = self, g_index = index, g_t = GetTickCount64(), g_state = State::In;
     budget(true);
+    g_weapons_fx = index < g_outfits.size() && is_weapon_set(g_outfits[index]);
+    if (g_weapons_fx) { // (only the weapons: the worn ones glow now, the new ones once they are on)
+        g_glow_all_req = true;
+        return true;
+    }
     g_weapon_hide_after = g_t + kGlowPeakMs; // (weapons the new outfit hides: they go at their glow's peak)
     g_glow_start = true;
     set_k(0.0f);
@@ -476,6 +487,21 @@ void fx_tick(U64 screen)
     }
     if (g_state == State::Idle) return;
     const U64 dt = now - g_t;
+    if (g_weapons_fx) { // a weapon set (#27): swap at the old weapons' glow, glow the new ones, wait for their glow
+        const U64 d = now - g_t;
+        if (g_state == State::In && d >= kSetSwapMs) {
+            g_bypass = true;
+            start_loading(g_load_self, g_index);
+            g_bypass = false;
+            g_state = State::Swapped, g_t = now;
+        } else if (g_state == State::Swapped && d >= kSetAttachMs) {
+            g_glow_all_req = true;
+            g_state = State::Out, g_t = now;
+        } else if (g_state == State::Out && d >= kGlowMs) {
+            g_state = State::Idle, g_weapons_fx = false;
+        }
+        return;
+    }
     if (g_state == State::In) { // glow up on the old outfit, then the load
         set_k(std::min(1.0f, float(dt) / float(kInMs)));
         if (dt < kInMs) return;

@@ -285,6 +285,7 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
 {
     U32 k = i < visible ? slot_outfit(i) : kOutfitSlots;
     bool piece = k < pieces.size(), page = k == pieces.size(), back = k == pieces.size() + 1;
+    const bool under = piece && pieces[k] == kUnderwearPiece; // (no item: a label, like the page slot)
     OutfitItem tmp{};
     const OutfitItem* it = piece ? eye_item(pieces[k], tmp) : nullptr;
     std::string pic = it ? piece_icon(*it) : std::string();
@@ -303,14 +304,16 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
     // Back and the page slot: a label (the page slot names the page its dots chose - its silhouette was easy to misread
     // while scrolling through the three, #23)
     static const char* const kPageName[kEyeSteps] = {"page.armour", "page.weapons", "page.accessories"};
-    const bool labelled = back || page;
+    const bool labelled = back || page || under;
     U64 mark = find_parent_of_class(root, "charged-count");
     if (mark) {
         ok &= labelled ? set_class(mark, "self-center", true) && set_class(mark, "om-label-wrap", true) : clear_label(mark);
         ok &= set_class(mark, "om-eye-c", false) && set_class(mark, "om-eye2-c", false);
         ok &= set_class(mark, "!cpp-none", !labelled);
         if (U64 text = labelled ? find_by_class(mark, "charged-count") : 0) {
-            const char* label = back ? "Back" : lang::t(kPageName[g_eye_pick % kEyeSteps]); // (Back: as the settings')
+            const char* label = back    ? lang::t("setting.back") // (Back: the settings' word, translated)
+                                : under ? lang::t("piece.underwear")
+                                        : lang::t(kPageName[g_eye_pick % kEyeSteps]);
             if (g_set_text) g_set_text(text, label, 0);
             ok &= set_class(text, "om-label", true) && set_class(text, "om-label-value", false);
         }
@@ -327,7 +330,7 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
     if (icon && is_element(icon)) {
         ok &= set_class(icon, "quickslot-item-image-none", false);
         const bool sword = false, necklace = false; // (the page slot: its label now, no silhouette)
-        bool holder = piece && pic.empty() && it->slot != kBackShieldSlot; // (an empty slot: the game's placeholder)
+        bool holder = piece && !under && pic.empty() && it->slot != kBackShieldSlot; // (an empty slot: the game's placeholder)
         bool armor = piece && pic.empty() && !holder;
         ok &= set_class(icon, "om-empty-armor", armor);
         ok &= set_class(icon, "om-empty-sword", sword);
@@ -356,6 +359,16 @@ bool clear_label(U64 mark)
     return ok;
 }
 
+extern U64 g_ring_bg; // (the ring's element: sync_ring below)
+// The settle-in (a fade and scale when the slot count changes while the wheel is open): the class each element has.
+std::string g_settle_list, g_settle_ring;
+bool g_settle_b = false;
+U32 g_settle_from = 0; // (the count before the change: set by apply_outfit_slots, played by both elements)
+void settle(U64 elem, std::string& cls)
+{
+    if (elem && is_element(elem)) swap_class(elem, cls, g_settle_b ? "om-settle-b" : "om-settle-a");
+}
+
 void apply_outfit_slots(U64 self, U32 only)
 {
     U32 tab = g_fake_key.load();
@@ -366,6 +379,9 @@ void apply_outfit_slots(U64 self, U32 only)
     U32 cnt = r32(sv + tab * 0x10ull + 8);
     U32 visible = visible_slots();
     if (only >= kOutfitSlots) { // (the whole wheel)
+        // (the count changed with the wheel open: the new layout settles in instead of snapping; not on opening)
+        const bool settles = g_menu_open && g_applied_visible != 0 && g_applied_visible != visible;
+        if (settles) g_settle_b = !g_settle_b, g_settle_from = g_applied_visible;
         g_applied_visible = visible;
         // (during a character switch the worn gear is already the new character's while the list is still the old
         // one's: comparing them would read as "a new set" and drop the old character's looks, 2026-11-06)
@@ -382,10 +398,15 @@ void apply_outfit_slots(U64 self, U32 only)
         refresh_missing(self);
         U64 body = rp(rp(rp(self + kOffRootBodies) + tab * 8ull) + 8);
         bool list_ok = body && is_element(body) && swap_class(body, g_list_class, numbered("om-list-%u", visible));
+        if (settles) settle(body, g_settle_list), settle(g_ring_bg, g_settle_ring);
         if (!g_slots_logged || !list_ok)
             LOG("  outfit list%s: %s", list_ok ? "" : " (class change skipped)", body ? describe(body).c_str() : "null");
     }
     std::vector<size_t> pieces = eye_pieces();
+    const int worn_set = g_eye < 0 && g_cfg < 0 ? worn_weapon_set(self) : -1; // (#27: its badge is gold)
+    const bool target_is_set = fx_busy_target() >= 0 && size_t(fx_busy_target()) < g_outfits.size() &&
+                               is_weapon_set(g_outfits[size_t(fx_busy_target())]);
+    g_worn_set = worn_set;
     for (U32 i = 0; arr && i < cnt && i < kOutfitSlots; ++i) {
         if (only < kOutfitSlots && i != only) continue;
         U64 script = rp(arr + i * 8ull);
@@ -403,8 +424,10 @@ void apply_outfit_slots(U64 self, U32 only)
         bool saved = i < visible && !empty;
         std::uint8_t mode = i < visible ? slot_mode_of(i) : std::uint8_t(kModeMain);
         // (the "+" slot: the worn chest, whatever is worn - what it unequips / what saving would keep)
-        std::string pic = saved ? g_outfits[slot_outfit(i)].chest_icon : empty ? g_worn_chest : std::string();
-        if (saved && pic.empty())
+        const bool set = saved && is_weapon_set(g_outfits[slot_outfit(i)]); // (a weapon set, #27)
+        std::string pic = set ? weapon_set_picture(g_outfits[slot_outfit(i)])
+                          : saved ? g_outfits[slot_outfit(i)].chest_icon : empty ? g_worn_chest : std::string();
+        if (saved && !set && pic.empty())
             if (const OutfitItem* c = outfit_piece(g_outfits[slot_outfit(i)], kChestSlot)) pic = piece_icon(*c);
         bool chest = show_slot_image(self, root, i, pic);
         if (i < visible) show_mode_dots(script, mode_count(i), g_slot_mode[i]); // (the dot, not what it does)
@@ -414,6 +437,8 @@ void apply_outfit_slots(U64 self, U32 only)
                            : mode == kModeSettings               ? "om-cog-c"
                            : mode == kModeAppearance             ? "om-eye-c"
                            : empty && g_outfit_count < kMaxOutfits ? (kPlusSlotCentred ? "om-plus-big" : "om-plus-c")
+                           : set ? (int(slot_outfit(i)) == fx_busy_target() ? "om-wset-busy-c" // (loading: pulses)
+                                    : int(slot_outfit(i)) == worn_set ? "om-wset-gold-c" : "om-wset-c") // (#27)
                            : saved ? climate_badge(g_outfits[slot_outfit(i)]) // (its Climate marker, or none)
                                                                    : nullptr; // (at the cap: no "+")
         g_badge_elem[i] = badge, g_badge_class[i] = want;
@@ -432,8 +457,9 @@ void apply_outfit_slots(U64 self, U32 only)
         bool hk = ho && ho->hk_vk;
         bool looks = false;
         if (mark) {
-            if (saved && mode == kModeMain)
+            if (saved && !set && mode == kModeMain) // (a weapon set has no looks, #27)
                 for (U16 s = 0; s < 32; ++s) looks |= slot_look(g_outfits[slot_outfit(i)], s) != kLookDefault;
+            if (saved && !set && mode == kModeMain) looks |= g_outfits[slot_outfit(i)].underwear_look != kLookDefault;
             bool climate = want && (!std::strncmp(want, "om-cold", 7) || !std::strncmp(want, "om-heat", 7));
             bool stacked = looks && climate;
             badge_ok &= set_class(mark, "self-center", true);
@@ -474,7 +500,8 @@ void apply_outfit_slots(U64 self, U32 only)
         bool current = empty && !ready && anchor_outfit() < 0;
         // While an outfit change's effect plays, only the slot it is about pulses (the outfit going on; the "+" slot for
         // Unequip Outfit): the wheel's other highlights follow once it has landed.
-        const int target = fx_busy_target();
+        // (a weapon set's change: its badge pulses instead, the wedges - the applied outfit's - stay as they are, #27)
+        const int target = target_is_set ? -1 : fx_busy_target();
         const bool busy = target != -1 && ((saved && int(slot_outfit(i)) == target) || (empty && target == -2));
         if (target != -1) worn = drifted = ready = current = false;
         g_low_elem[i] = low, g_low_shown[i] = busy || worn || drifted || ready || current;
@@ -499,6 +526,20 @@ void apply_outfit_slots(U64 self, U32 only)
     }
     g_slots_logged = true;
 }
+
+// A weapon set's picture (#27): its main weapon (equipment-0, else its first weapon) - saved with it, else from the item.
+std::string weapon_set_picture(const Outfit& o)
+{
+    if (!o.weapon_icon.empty()) return o.weapon_icon;
+    const OutfitItem* first = nullptr;
+    for (const OutfitItem& it : o.items)
+        if (is_weapon_slot(it.slot) && it.key != 0xFFFF) {
+            if (it.slot == kHandR) return piece_icon(it);
+            if (!first) first = &it;
+        }
+    return first ? piece_icon(*first) : o.chest_icon;
+}
+int g_worn_set = -1; // (the weapon set worn when the slots were last drawn)
 
 U64 g_outfits_root_of_slots() { return g_fake_key.load() != 0xFFFF ? g_outfits_root : 0; }
 
@@ -714,7 +755,9 @@ void center_show(U64 self)
             if (desc) g_set_text(e, g_center_desc.c_str(), 0);
             set_class(e, "om-desc", desc);
         }
-        if ((part == kTooltipEquipped && g_center_outfit >= 0 && g_center_outfit == g_worn_outfit) || desc) {
+        // (a weapon set: Equipped while exactly its weapons are worn, #27)
+        if ((part == kTooltipEquipped && g_center_outfit >= 0 && (g_center_outfit == g_worn_outfit || g_center_outfit == g_worn_set)) ||
+            desc) {
             if (take_retry(g_rehide_retry, e)) {
                 g_shown_parts.push_back(e);
             } else if (take_retry(g_unhide_retry, e)) { // the game had it showing anyway

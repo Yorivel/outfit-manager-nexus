@@ -333,9 +333,12 @@ void peek_open(U64 self)
     p.entries.push_back(-1);
     const int anchor = anchor_outfit();
     p.applied = anchor >= 0;
-    for (size_t i = 0; i < g_outfits.size(); ++i) p.entries.push_back(int(i));
+    for (size_t i = 0; i < g_outfits.size(); ++i)
+        if (!is_weapon_set(g_outfits[i])) p.entries.push_back(int(i)); // (weapon sets: the wheel and hotkeys, #27)
     // (on the outfit applied - also when some of its pieces were changed since -, else on No outfit)
-    p.sel = p.applied ? size_t(anchor) + 1 : 0;
+    p.sel = 0;
+    for (size_t k = 0; p.applied && k < p.entries.size(); ++k)
+        if (p.entries[k] == anchor) p.sel = k;
     p.sel0 = p.sel;
     p.open = true;
     p.character = g_character;
@@ -416,7 +419,7 @@ void peek_hotkeys(U64 self, bool free)
         for (size_t j = 0; j < g_outfits.size(); ++j)
             if (g_outfits[j].hk_vk == vk && g_outfits[j].hk_mods == m) idx = int(j);
         if (idx < 0) continue;
-        int worn = find_worn_outfit(self);
+        int worn = is_weapon_set(g_outfits[size_t(idx)]) ? worn_weapon_set(self) : find_worn_outfit(self); // (#27)
         LOG("hotkey %s: \"%s\"%s", hotkey_name(vk, m).c_str(), g_outfits[size_t(idx)].name.c_str(),
             idx == worn ? " (already worn)" : "; putting it on");
         if (idx != worn) start_loading(self, U32(idx));

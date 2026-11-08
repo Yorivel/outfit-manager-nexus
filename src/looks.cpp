@@ -116,6 +116,7 @@ void publish_looks(const Store& s)
                 for (const auto& [slot, look] : o.empty_looks)
                     if (look != kLookDefault && !outfit_has_slot(o, slot)) m[c.character].push_back({slot, 0xFFFF, 0, look});
                 if (o.back_look != kLookDefault) m[c.character].push_back({kBackShieldSlot, 0xFFFF, 0, o.back_look});
+                if (o.underwear_look != kLookDefault) m[c.character].push_back({kUnderwearSlot, 0xFFFF, 0, o.underwear_look});
             }
     std::lock_guard<std::mutex> lock(g_looks_mu);
     g_looks = std::move(m);
@@ -264,6 +265,23 @@ std::vector<int> extra_case_handles(U64 model, const std::string& weapon)
     return v;
 }
 
+// A model's part by name: its handle, or 0 (the underwear: no slot leads to it). Cached per model state.
+int named_handle(U64 model, const char* want)
+{
+    static std::map<std::pair<U64, std::string>, std::pair<U64, int>> cache; // (model, name) -> (part table, handle)
+    U64 tab = rp(model + 0x58);
+    U32 n = r32(model + 0x60);
+    auto& c = cache[{model, want}];
+    if (c.first == tab && c.second) return c.second;
+    c = {tab, 0};
+    for (U32 i = 0; tab && i < n && i < 1024; ++i)
+        if (U64 part = rp(tab + i * 16ull + 8); part && part_name(r32(part + 0x48)) == want) {
+            c.second = static_cast<int>(r32(tab + i * 16ull));
+            break;
+        }
+    return c.second;
+}
+
 // Once per model: every part on it by name (what a piece brings, what the game adds: straps, the horse's shield).
 void log_model_parts(U64 model, U16 ch)
 {
@@ -362,12 +380,15 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
     const std::set<int>& was_forced = g_look_forced[inv];
     for (const LookPiece& p : pieces) {
         state += " equipment-" + std::to_string(p.slot);
-        U64 e = list ? equipped_item(list, p.slot) : 0;
+        const bool underwear = p.slot == kUnderwearSlot; // (no item: the model's Underwear part, by name)
+        U64 e = list && !underwear ? equipped_item(list, p.slot) : 0;
         U64 uid = 0;
         U16 key = 0xFFFF;
-        if (!e || !rd(e, uid) || !rd(e + 8, key)) { state += " empty"; continue; }
-        if (key == 0xFFFF) { state += " empty"; continue; } // (a look belongs to the slot: whatever is there)
-        int h = look_handle(inv, p.slot);
+        if (!underwear) {
+            if (!e || !rd(e, uid) || !rd(e + 8, key)) { state += " empty"; continue; }
+            if (key == 0xFFFF) { state += " empty"; continue; } // (a look belongs to the slot: whatever is there)
+        }
+        int h = underwear ? named_handle(model, "Underwear") : look_handle(inv, p.slot);
         if (!h) { state += " no model part"; continue; }
         wanted.insert(h);
         bool shown = p.look == kLookShown || (p.look == kLookCombat && in_battle) || (p.look == kLookPeace && !in_battle);
@@ -813,6 +834,8 @@ void look_refresh()
 // Marks outfit `index` (or none: -1) as the current character's last loaded one; saves when that changes.
 void mark_worn(int index)
 {
+    // (a weapon set is never the applied outfit: loading one leaves the applied outfit as it is, #27)
+    if (index >= 0 && size_t(index) < g_outfits.size() && is_weapon_set(g_outfits[size_t(index)])) return;
     if (index >= 0) g_unmanaged.erase(g_character); // (a load or a save: the outfit is managed again)
     bool changed = false;
     for (size_t i = 0; i < g_outfits.size(); ++i)

@@ -38,6 +38,7 @@ std::vector<size_t> eye_pieces()
     }
     std::sort(v.begin(), v.end());
     if (g_eye_step == 1) v.push_back(kBackPiece);
+    if (g_eye_step == 0) v.push_back(kUnderwearPiece); // (the Armour page: the underwear last)
     return v;
 }
 
@@ -63,6 +64,10 @@ std::uint8_t slot_look(const Outfit& o, U16 slot)
 const OutfitItem* eye_item(size_t idx, OutfitItem& tmp)
 {
     Outfit& o = g_outfits[size_t(g_eye)];
+    if (idx == kUnderwearPiece) {
+        tmp = {kUnderwearSlot, 0xFFFF, 0, o.underwear_look};
+        return &tmp;
+    }
     if (idx != kBackPiece) {
         for (const OutfitItem& it : o.items)
             if (it.slot == idx) return &it;
@@ -80,6 +85,7 @@ std::uint8_t& eye_look(size_t idx)
 {
     Outfit& o = g_outfits[size_t(g_eye)];
     if (idx == kBackPiece) return o.back_look;
+    if (idx == kUnderwearPiece) return o.underwear_look;
     for (OutfitItem& it : o.items)
         if (it.slot == idx) return it.look;
     return o.empty_looks[static_cast<U16>(idx)];

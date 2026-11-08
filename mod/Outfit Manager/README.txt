@@ -1,4 +1,4 @@
-Outfit Manager 0.5.0 by Strahlimeier
+Outfit Manager 0.6.0 by Strahlimeier
 Adds an Outfits tab to Crimson Desert's gear wheel: save what you wear, switch outfits with one click.
 
 INSTALL (DMM)
@@ -30,6 +30,14 @@ OUTFIT ARC
   Controller: turn it on in the + page (it shows the pad's entry while you use a pad), then hold L1 / LB and press
   down on the d-pad; up and down move along it, let go of L1 / LB to wear the highlighted outfit.
   While it is open, the mouse wheel and the d-pad's up and down only move the arc.
+
+WEAPON SETS
+  On an outfit's settings page, scroll Weapons to Weapons Only: the slot becomes a weapon set. Clicking it (or its
+  hotkey) changes only your weapons; your outfit and its visibility settings stay. Its badge turns gold while you wear
+  exactly its weapons. An outfit on Load still brings its own weapons; on Leave, your weapons stay.
+
+UNDERWEAR
+  An outfit's visibility settings end their Armour page with Underwear: hide it or show it like any piece.
 
 EFFECTS
   Changing outfits plays a glow over the character; the new outfit appears at its peak. Hidden weapons glow when you

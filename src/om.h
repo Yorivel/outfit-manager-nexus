@@ -128,6 +128,11 @@ struct Outfit {
     // outfit's "Weapons: Load / Leave" (Leave: loading and matching ignore the weapon slots).
     bool has_weapons = false;
     bool load_weapons = true;
+    // Weapons: Weapons only (#27): a weapon set. Loading puts on only its weapons (armour left alone), it is never the
+    // applied outfit (no looks, nothing to unequip), and its slot shows the main weapon with the weapon set badge, gold
+    // while exactly its weapons are worn. Its armour stays saved: back to Load / Leave, it is an outfit again.
+    bool weapons_only = false;
+    std::string weapon_icon; // (the main weapon's icon, for a weapon set's picture: set when saved / loaded)
     std::uint8_t climate = 0; // Conditions: 0 Auto (from its resistance), 1 Cold, 2 Heat (manual), 3 Off (a badge only)
     std::uint8_t stash = 0;   // Conditions: Stash, 0 = the global setting, 1 on, 2 off
     // Its hotkey (the outfit's settings, 2026-11-06): a key or mouse button (virtual-key code; 0 = none) and the
@@ -140,6 +145,7 @@ struct Outfit {
     // The shield the character always carries on its back (equipment-23: it shows whatever the shield slot holds; on
     // no wheel, so in no outfit): its look in this outfit (a Look), applied to whatever is in that slot.
     std::uint8_t back_look = 0;
+    std::uint8_t underwear_look = 0; // (the body's Underwear part: a look like a piece's, no item behind it)
     // Whether that slot held anything when the outfit was saved (it is empty while the shield slot holds a shield):
     // 0 unknown (saved before this was kept), 1 yes, 2 no. The eye view lists the back shield only when it can matter.
     std::uint8_t has_back = 0;
@@ -167,6 +173,10 @@ constexpr std::uint8_t kEyeSteps = 3;
 constexpr U16 kAccessorySlots[] = {7, 8, 9, 10, 11, 17, 18};
 
 constexpr size_t kBackPiece = ~size_t(0); // (eye_pieces: the back shield, not one of the outfit's items)
+// The underwear: every character's model has a part named "Underwear" (under the armour, the game hides it): its look
+// is published under a slot no equipment uses, and the looks find its part by name.
+constexpr size_t kUnderwearPiece = ~size_t(1);
+constexpr U16 kUnderwearSlot = 30;
 
 // Saved outfits show their chest piece on the slot's item image (ItemCoolTimeIconOutfit).
 struct SlotImage {
@@ -212,7 +222,7 @@ using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
 const char* const kBadges[] = {"om-plus-big", "om-cog-big", "om-plus-c", "om-cog-c", "om-flag-c", "om-cold-c", "om-heat-c",
                                "om-cold2-c", "om-heat2-c", "om-eye-c", "om-look-shown-c", "om-look-hidden-c",
                                "om-look-combat-c", "om-look-peace-c", "om-return-c", "om-prompt-c", "om-cross-c",
-                               "om-abtn-c", "om-unequip-c"};
+                               "om-abtn-c", "om-unequip-c", "om-wset-c", "om-wset-gold-c", "om-wset-busy-c"};
 // The game's slot refresh (after every equipment change) re-selects every slot's dots with its own count (0 for ours:
 // no items) and -1: the select is hooked, and for our slots' selectors it gets our count and mode instead, so the dots
 // never go blank. Our own calls pass through it as well. Our slots are looked up live (the Outfits menu's slot list).
@@ -481,6 +491,8 @@ bool is_weapon_slot(U16 slot);
 void log_unlisted_slots(); // (the log: equipped items in slots on neither wheel - ammo, the DLC's gear)
 void log_weapon_wheel(U64 self); // (the log: what each Weapons wheel position holds, also ones with no equip slot)
 bool uses_weapons(const Outfit& o);
+bool is_weapon_set(const Outfit& o); // (Weapons: Weapons only, #27)
+int worn_weapon_set(U64 self);       // (the weapon set whose weapons are exactly the worn ones, or -1)
 bool loads_piece(const Outfit& o, U16 slot);
 extern Store g_store;
 extern U16 g_character;

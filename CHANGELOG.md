@@ -2,6 +2,20 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
+## 0.6.0 (2026-11-08)
+
+- New: weapon sets. An outfit's Weapons setting has a third value, Weapons Only. A slot set to it is a weapon set: clicking it (or its hotkey) changes only your weapons; your armour, your outfit and its visibility settings stay. Keep your outfits on Leave and switch weapons with weapon sets on top of whatever you wear, without saving every combination.
+- Weapon sets show their main weapon as the picture, with a sword-and-shield badge where outfits show their thermometer. The badge turns gold, and the centre shows the game's Equipped tag, while you wear exactly that set's weapons (every weapon slot the same); it pulses gold while the set loads.
+- How weapon sets and outfits work together: the outfit decides your look, the last thing you load decides your weapons. An outfit on Load still brings its own weapons; on Leave, your weapons stay. Loading a weapon set never unequips or changes the applied outfit, and doesn't turn it amber. Its visibility rules (a hidden bow, say) apply to the weapon set's weapons too.
+- A weapon set's settings page is shorter (Weapons, Hotkey, Position, Rename, Overwrite, Delete). Its armour stays saved: set Weapons back to Load or Leave and it is an outfit again. Weapon sets aren't on the Outfit Arc; the gear wheel and hotkeys are their home.
+- Changing to a weapon set plays its own effect: your weapons glow, swap, and the new ones glow in. No body hologram.
+- New: underwear visibility. The Armour page of an outfit's visibility settings ends with Underwear, with the same choices as any piece (for example always hidden). The game still hides it under armour. Thanks for the requests!
+- Smoother: when the gear wheel's number of slots changes while it's open (saving, deleting, opening a settings page), the new layout fades in instead of snapping.
+- Fix: the Back button in the visibility settings wasn't translated (English in every language). Thanks for the report!
+- Translations: the new texts in all 15 languages.
+- Technical: weapon sets are saved as "weapons 2" (an older version reads them as Load) with "weaponicon", the main weapon's icon. Matching is strict on the weapon slots, crossed hands included; while the worn weapons are a weapon set's, the applied outfit is judged on its armour. The underwear is the model's part named "Underwear" on every character, found by name; its look is saved as "underwear".
+- Tested on: Crimson Desert 1.0.0.3576 (Steam build 26480954) with DMM 4.8.0.
+
 ## 0.5.0 (2026-11-08)
 
 - New: outfit effects. Changing outfits plays a glow over the whole character, and the new outfit appears at its peak. Weapons glow along with it, and weapons the new outfit hides go at the peak of their glow.

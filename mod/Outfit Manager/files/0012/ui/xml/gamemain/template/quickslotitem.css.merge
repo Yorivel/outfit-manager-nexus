@@ -35,6 +35,11 @@
 .self-center.om-look-hidden-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_hidden); }
 /* The "+" slot's Unequip Outfit dot (#21): the plate armour, slashed. */
 .self-center.om-unequip-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_unequip); }
+/* A weapon set (#27): sword and shield in the climate thermometer's style, in its spot (weapon sets have no climate);
+   gold while exactly its weapons are worn, pulsing gold while it loads (wset_badge_gen.py). */
+.self-center.om-wset-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset); }
+.self-center.om-wset-gold-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_gold); }
+.self-center.om-wset-busy-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
 .self-center.om-look-combat-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_combat); }
 .self-center.om-look-peace-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_peace); }
 .self-center.om-return-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_return); }
@@ -81,6 +86,11 @@
    unused disable element (the lowest: below the badges on the reserve element and the focus, which still shows on
    hover). The engine keeps a removed class's transforms, so every rule sets its own (rotate-z, translate, left/top). */
 @keyframes om-busy-pulse { 0.0% { opacity: 1.000; } 5.0% { opacity: 0.983; } 10.0% { opacity: 0.933; } 15.0% { opacity: 0.856; } 20.0% { opacity: 0.758; } 25.0% { opacity: 0.650; } 30.0% { opacity: 0.542; } 35.0% { opacity: 0.444; } 40.0% { opacity: 0.367; } 45.0% { opacity: 0.317; } 50.0% { opacity: 0.300; } 55.0% { opacity: 0.317; } 60.0% { opacity: 0.367; } 65.0% { opacity: 0.444; } 70.0% { opacity: 0.542; } 75.0% { opacity: 0.650; } 80.0% { opacity: 0.758; } 85.0% { opacity: 0.856; } 90.0% { opacity: 0.933; } 95.0% { opacity: 0.983; } 100.0% { opacity: 1.000; } }
+@keyframes om-settle { 0.0% { opacity: 0.250; scale-x: 0.9600; scale-y: 0.9600; } 12.5% { opacity: 0.498; scale-x: 0.9732; scale-y: 0.9732; } 25.0% { opacity: 0.684; scale-x: 0.9831; scale-y: 0.9831; } 37.5% { opacity: 0.817; scale-x: 0.9902; scale-y: 0.9902; } 50.0% { opacity: 0.906; scale-x: 0.9950; scale-y: 0.9950; } 62.5% { opacity: 0.960; scale-x: 0.9979; scale-y: 0.9979; } 75.0% { opacity: 0.988; scale-x: 0.9994; scale-y: 0.9994; } 87.5% { opacity: 0.999; scale-x: 0.9999; scale-y: 0.9999; } 100.0% { opacity: 1.000; scale-x: 1.0000; scale-y: 1.0000; } }
+.quickslot-item-list-12.om-settle-a { transform-origin: 50% 50%; animation-name: om-settle; animation-duration: 0.2s; animation-timing-function: Linear; animation-fill-mode: forwards; }
+.quickslot-item-list-12.om-settle-b { transform-origin: 50% 50%; animation-name: om-settle; animation-duration: 0.2s; animation-timing-function: Linear; animation-fill-mode: forwards; }
+.quickslot-item-list-bg-12.om-settle-a { transform-origin: 50% 50%; animation-name: om-settle; animation-duration: 0.2s; animation-timing-function: Linear; animation-fill-mode: forwards; }
+.quickslot-item-list-bg-12.om-settle-b { transform-origin: 50% 50%; animation-name: om-settle; animation-duration: 0.2s; animation-timing-function: Linear; animation-fill-mode: forwards; }
 .quickslot-item-list-12.om-list-1 { layout: none; }
 .quickslot-item-list-12.om-list-2 { layout: none; }
 .quickslot-item-list-12.om-list-3 { layout: none; }

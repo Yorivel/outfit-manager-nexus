@@ -219,3 +219,8 @@ center.no_outfit = Uygulanan kıyafet yok
 peek.none_label = ÇIKAR
 peek.none = Kıyafet Yok
 toast.released = "{outfit}" çıkarıldı: ekipmanın üstünde kalır, bir kıyafet yükleyene ya da kaydedene kadar görünürlük ayarları kapalıdır
+
+# next version: weapon sets, underwear
+value.weapons_only = Yalnızca silahlar
+desc.weapons.only = Bir silah seti: tıklamak yalnızca silahlarını değiştirir. Kıyafetin ve görünürlüğü kalır.
+piece.underwear = İç çamaşırı

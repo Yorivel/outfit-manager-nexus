@@ -5,6 +5,7 @@
 #include "ui.h"
 #include "items.h"
 #include "store.h"
+#include "looks.h"
 #include "looks_view.h"
 #include "load.h"
 #include "stash.h"
@@ -45,7 +46,7 @@ std::pair<std::string, std::string> entry_text(int page, U32 index)
         }
         if (index == 0) {
             if (!o.has_weapons) return {"", lang::t("desc.weapons.none")};
-            return {"", lang::t(o.load_weapons ? "desc.weapons.load" : "desc.weapons.leave")};
+            return {"", lang::t(o.weapons_only ? "desc.weapons.only" : o.load_weapons ? "desc.weapons.load" : "desc.weapons.leave")};
         }
         if (index == 1) return {"", stash_description(o)};
     }
@@ -110,9 +111,12 @@ bool g_peek_capture_held[256] = {};      // keys already down when it started wa
 std::vector<std::uint8_t> cfg_entries()
 {
     if (g_cfg < 0) return {};
-    if (size_t(g_cfg) < g_outfits.size())
+    if (size_t(g_cfg) < g_outfits.size()) {
+        if (is_weapon_set(g_outfits[size_t(g_cfg)])) // (a weapon set: no looks, climate or stash, #27)
+            return {kCfgWeapons, kCfgHotkey, kCfgPosition, kCfgRename, kCfgOverwrite, kCfgDelete, kCfgBack};
         return {kCfgVisibility, kCfgClimate, kCfgWeapons, kCfgStash, kCfgHotkey, kCfgPosition, kCfgRename, kCfgOverwrite,
                 kCfgDelete, kCfgBack};
+    }
     // (the Outfit Arc's binding for the input in use: the key, or the pad's; pump re-shows the page when it changes)
     return {kCfgGStash, kCfgParty, kCfgMessages, kCfgEffects, kCfgLanguage, g_pad_in_use ? kCfgPeekPad : kCfgPeekKey,
             kCfgClear, kCfgUninstall, kCfgBack};
@@ -152,8 +156,8 @@ std::vector<const char*> cfg_values(std::uint8_t k, U32& cur)
             return {"value.auto", "value.off", "value.cold", "value.heat"};
         }
         if (k == kCfgWeapons) {
-            cur = uses_weapons(o) ? 0 : 1;
-            return {"value.load", "value.leave"};
+            cur = is_weapon_set(o) ? 2 : uses_weapons(o) ? 0 : 1;
+            return {"value.load", "value.leave", "value.weapons_only"};
         }
         if (k == kCfgStash) {
             cur = o.stash % 3;
@@ -315,7 +319,9 @@ void cfg_scroll(U64 self, U32 i, int step)
                 notify(self, lang::f("toast.no_weapons", {{"outfit", o.name}}));
                 return;
             }
-            o.load_weapons = to == 0;
+            o.load_weapons = to != 1;
+            o.weapons_only = to == 2;
+            if (o.weapons_only && o.worn) mark_worn(-1); // (a weapon set is never the applied outfit)
         } else if (e[k] == kCfgStash) {
             o.stash = static_cast<std::uint8_t>(to);
         }
@@ -334,7 +340,8 @@ void cfg_scroll(U64 self, U32 i, int step)
         LOG("settings: %s -> %s", cfg_name(e[k]), v[to]);
     }
     save_outfits();
-    apply_outfit_slots(self, i);
+    if (cfg_entries().size() != e.size()) cfg_refresh(self); // (to / from Weapons only: the page's entries change, #27)
+    else apply_outfit_slots(self, i);
     center_for_focus(self, focused_script(self), true);
 }
 

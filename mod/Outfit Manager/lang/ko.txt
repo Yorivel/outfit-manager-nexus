@@ -216,3 +216,8 @@ center.no_outfit = 적용된 의상 없음
 peek.none_label = 해제
 peek.none = 의상 없음
 toast.released = '{outfit}' 해제됨: 장비는 그대로이며, 의상을 불러오거나 저장할 때까지 표시 설정이 꺼집니다
+
+# next version: weapon sets, underwear
+value.weapons_only = 무기만
+desc.weapons.only = 무기 세트: 클릭하면 무기만 바뀝니다. 의상과 그 표시는 그대로입니다.
+piece.underwear = 속옷

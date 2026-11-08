@@ -188,6 +188,7 @@ void center_for_focus(U64 self, U64 script, bool hide_otherwise)
             OutfitItem tmp{};
             const OutfitItem& it = *eye_item(pieces[k], tmp);
             std::string nm = it.key != 0xFFFF ? item_name(it.key) : std::string();
+            if (pieces[k] == kUnderwearPiece) nm = lang::t("piece.underwear");
             if (pieces[k] == kBackPiece)
                 nm = nm.empty() ? std::string(lang::t("piece.back_shield")) : lang::f("piece.back_shield_item", {{"item", nm}});
             g_center_name = nm.empty() ? std::string(lang::t("piece.empty")) : nm;
@@ -454,7 +455,8 @@ void pump(U64 self)
     bool due = g_model_swap_orig ? g_worn_dirty.exchange(false) : GetTickCount64() - worn_checked > 250;
     if (due) {
         worn_checked = GetTickCount64();
-        if (find_worn_outfit(self) != g_worn_outfit) apply_outfit_slots(self);
+        // (also when the worn weapons become / stop being a weapon set's: its badge turns gold / back, #27)
+        if (find_worn_outfit(self) != g_worn_outfit || worn_weapon_set(self) != g_worn_set) apply_outfit_slots(self);
     }
     // Pieces can leave the inventory while the menu is open (dropped, sold): the greyed-out outfits follow.
     if (U64 now = GetTickCount64(); now - g_missing_checked > 1000 && refresh_missing(self)) apply_outfit_slots(self);

@@ -24,9 +24,14 @@ bool is_weapon_slot(U16 slot)
         if (g_weapon_slots[i] == slot) return true;
     return false;
 }
-bool uses_weapons(const Outfit& o) { return o.has_weapons && o.load_weapons; }
+bool uses_weapons(const Outfit& o) { return o.has_weapons && (o.load_weapons || o.weapons_only); }
+bool is_weapon_set(const Outfit& o) { return o.has_weapons && o.weapons_only; }
 // The outfit's pieces loading puts on (the weapon ones only when it loads weapons).
-bool loads_piece(const Outfit& o, U16 slot) { return uses_weapons(o) || !is_weapon_slot(slot); }
+bool loads_piece(const Outfit& o, U16 slot)
+{
+    if (is_weapon_set(o)) return is_weapon_slot(slot); // (a weapon set: its weapons only, the armour left alone, #27)
+    return uses_weapons(o) || !is_weapon_slot(slot);
+}
 Store g_store;
 U16 g_character = kNoCharacter;
 

@@ -61,4 +61,6 @@
 <Texture Name="outfitmanager_badge_peace" Filename="UI/texture/image/customizeimage/outfitmanager_badge_peace.dds" Type="Image" GetRect="1,1,80,80"/>
 <Texture Name="outfitmanager_badge_return" Filename="UI/texture/image/customizeimage/outfitmanager_badge_return.dds" Type="Image" GetRect="1,1,80,80"/>
 <Texture Name="outfitmanager_badge_unequip" Filename="UI/texture/image/customizeimage/outfitmanager_badge_unequip.dds" Type="Image" GetRect="1,1,80,80"/>
+<Texture Name="outfitmanager_wset" Filename="UI/texture/image/customizeimage/outfitmanager_wset.dds" Type="Image" GetRect="1,1,46,46"/>
+<Texture Name="outfitmanager_wset_gold" Filename="UI/texture/image/customizeimage/outfitmanager_wset_gold.dds" Type="Image" GetRect="1,1,46,46"/>
 </__dmm_root__>

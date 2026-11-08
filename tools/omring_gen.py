@@ -642,6 +642,11 @@ CSS_HEAD = """/* Outfit Manager: Outfits tab looks (classes set by OutfitManager
 .self-center.om-look-hidden-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_hidden); }
 /* The "+" slot's Unequip Outfit dot (#21): the plate armour, slashed. */
 .self-center.om-unequip-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_unequip); }
+/* A weapon set (#27): sword and shield in the climate thermometer's style, in its spot (weapon sets have no climate);
+   gold while exactly its weapons are worn, pulsing gold while it loads (wset_badge_gen.py). */
+.self-center.om-wset-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset); }
+.self-center.om-wset-gold-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_gold); }
+.self-center.om-wset-busy-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
 .self-center.om-look-combat-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_combat); }
 .self-center.om-look-peace-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_peace); }
 .self-center.om-return-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_return); }
@@ -700,6 +705,19 @@ def write_css():
     # (the busy wedge's pulse: a cosine between full and dim, sampled - the engine's timing is linear between keys)
     keys = ' '.join(f'{100 * k / 20:.1f}% {{ opacity: {0.65 + 0.35 * math.cos(2 * math.pi * k / 20):.3f}; }}' for k in range(21))
     out.append(f'@keyframes om-busy-pulse {{ {keys} }}\n')
+    # The wheel settles in when its slot count changes (a save, a delete, a settings page's length): the slot layer and
+    # the ring fade from 25% and scale from 96% over 0.2 s, easing out (the engine interpolates linearly: sampled keys).
+    # Two class names (a / b) so a change right after another restarts it.
+    keys = []
+    for k in range(9):
+        t = k / 8
+        e = 1 - (1 - t) ** 3
+        keys.append(f'{100 * t:.1f}% {{ opacity: {0.25 + 0.75 * e:.3f}; scale-x: {0.96 + 0.04 * e:.4f}; scale-y: {0.96 + 0.04 * e:.4f}; }}')
+    out.append('@keyframes om-settle { ' + ' '.join(keys) + ' }\n')
+    for el in ('quickslot-item-list-12', 'quickslot-item-list-bg-12'):
+        for ab in ('a', 'b'):
+            out.append(f'.{el}.om-settle-{ab} {{ transform-origin: 50% 50%; animation-name: om-settle; '
+                       f'animation-duration: 0.2s; animation-timing-function: Linear; animation-fill-mode: forwards; }}\n')
     # The engine's radial layout misplaces slots 1+ at 360/N (only slot 0 lands right), and switching it back on
     # leaves stale positions, so the Outfits list always drops it (12 slots too) and each visible slot root is
     # centred on the family's circle at (i+1)*360/N (the cursor's sectors).

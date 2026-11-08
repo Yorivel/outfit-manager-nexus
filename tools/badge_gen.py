@@ -28,6 +28,7 @@ BADGES = {  # name: (atlas png, rect, glyph extent in the 80px canvas) or (None,
     'outfitmanager_badge_peace': (None, glyphs.sheathed, 36),
     'outfitmanager_badge_return': (None, glyphs.return_arrow, 36),   # the view's Back to Outfits step
     'outfitmanager_badge_unequip': (None, glyphs.slashed_plate_armour, 36),  # the "+" slot's Unequip Outfit
+    # (weapon sets, #27: their badge is wset_badge_gen.py's, in the thermometer's style)
 }
 PLUS = ('cd_icon_keyguide_00.png', (83, 411, 80, 80))
 
@@ -78,6 +79,22 @@ def badge(src, extent, seed):
     return img
 
 
+GOLD = (203, 147, 73)  # the game's Equipped / selected gold (the Outfit Arc's selected ring)
+
+
+def gold(img):
+    """A badge lit: its light glyph tinted gold (brightness kept), the dark outline as it was."""
+    out = img.copy()
+    px = out.load()
+    for y in range(out.height):
+        for x in range(out.width):
+            r, g, b, a = px[x, y]
+            if r > 120:  # (the glyph; the outline is dark)
+                k = r / 255 * 1.15
+                px[x, y] = (min(255, int(GOLD[0] * k)), min(255, int(GOLD[1] * k)), min(255, int(GOLD[2] * k)), a)
+    return out
+
+
 def ink(img):
     a = img.getchannel('A')
     l = img.convert('L')
@@ -119,6 +136,8 @@ if __name__ == '__main__':
     d = os.path.join(MOD, *IMG_DIR.split('/'))
     for seed, (nm, (png, rect, extent)) in enumerate(BADGES.items()):
         img = badge(source(png, rect), extent, seed + 1)
+        if nm.endswith('_gold'):  # (the same badge, lit: the same grain as its plain one)
+            img = gold(badge(source(png, rect), extent, seed))
         img.save(os.path.join(SRC, nm + '.png'))
         write_dds(os.path.join(d, nm + '.dds'), img)
         print(nm, 'ink', ink(img), 'extent', extent)
