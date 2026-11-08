@@ -219,3 +219,8 @@ center.no_outfit = Ningún atuendo aplicado
 peek.none_label = QUITAR
 peek.none = Sin atuendo
 toast.released = "{outfit}" quitado: tu equipo se queda puesto y su configuración de visibilidad se desactiva hasta que cargues o guardes un atuendo
+
+# next version: weapon sets, underwear
+value.weapons_only = Solo armas
+desc.weapons.only = Un juego de armas: al hacer clic solo cambian tus armas. Tu atuendo y su visibilidad se quedan.
+piece.underwear = Ropa interior

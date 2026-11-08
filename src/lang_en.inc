@@ -93,6 +93,7 @@
 {"piece.back_shield", "Back shield"},
 {"piece.back_shield_item", "Back shield ({item})"},
 {"piece.empty", "Empty slot"},
+{"piece.underwear", "Underwear"},
 {"slot.helmet", "Helmet"},
 {"slot.chest", "Chest piece"},
 {"slot.gloves", "Gloves"},

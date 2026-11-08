@@ -188,6 +188,7 @@ void center_for_focus(U64 self, U64 script, bool hide_otherwise)
             OutfitItem tmp{};
             const OutfitItem& it = *eye_item(pieces[k], tmp);
             std::string nm = it.key != 0xFFFF ? item_name(it.key) : std::string();
+            if (pieces[k] == kUnderwearPiece) nm = lang::t("piece.underwear");
             if (pieces[k] == kBackPiece)
                 nm = nm.empty() ? std::string(lang::t("piece.back_shield")) : lang::f("piece.back_shield_item", {{"item", nm}});
             g_center_name = nm.empty() ? std::string(lang::t("piece.empty")) : nm;

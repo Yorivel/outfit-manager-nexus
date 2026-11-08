@@ -145,6 +145,7 @@ struct Outfit {
     // The shield the character always carries on its back (equipment-23: it shows whatever the shield slot holds; on
     // no wheel, so in no outfit): its look in this outfit (a Look), applied to whatever is in that slot.
     std::uint8_t back_look = 0;
+    std::uint8_t underwear_look = 0; // (the body's Underwear part: a look like a piece's, no item behind it)
     // Whether that slot held anything when the outfit was saved (it is empty while the shield slot holds a shield):
     // 0 unknown (saved before this was kept), 1 yes, 2 no. The eye view lists the back shield only when it can matter.
     std::uint8_t has_back = 0;
@@ -172,6 +173,10 @@ constexpr std::uint8_t kEyeSteps = 3;
 constexpr U16 kAccessorySlots[] = {7, 8, 9, 10, 11, 17, 18};
 
 constexpr size_t kBackPiece = ~size_t(0); // (eye_pieces: the back shield, not one of the outfit's items)
+// The underwear: every character's model has a part named "Underwear" (under the armour, the game hides it): its look
+// is published under a slot no equipment uses, and the looks find its part by name.
+constexpr size_t kUnderwearPiece = ~size_t(1);
+constexpr U16 kUnderwearSlot = 30;
 
 // Saved outfits show their chest piece on the slot's item image (ItemCoolTimeIconOutfit).
 struct SlotImage {

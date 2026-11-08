@@ -219,3 +219,8 @@ center.no_outfit = Nessun completo applicato
 peek.none_label = TOGLI
 peek.none = Nessun completo
 toast.released = "{outfit}" tolto: il tuo equipaggiamento resta addosso, le sue impostazioni di visibilità sono disattivate finché non carichi o salvi un completo
+
+# next version: weapon sets, underwear
+value.weapons_only = Solo armi
+desc.weapons.only = Un set di armi: un clic cambia solo le tue armi. Il tuo completo e la sua visibilità restano.
+piece.underwear = Biancheria intima

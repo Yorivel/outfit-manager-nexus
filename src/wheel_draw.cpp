@@ -285,6 +285,7 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
 {
     U32 k = i < visible ? slot_outfit(i) : kOutfitSlots;
     bool piece = k < pieces.size(), page = k == pieces.size(), back = k == pieces.size() + 1;
+    const bool under = piece && pieces[k] == kUnderwearPiece; // (no item: a label, like the page slot)
     OutfitItem tmp{};
     const OutfitItem* it = piece ? eye_item(pieces[k], tmp) : nullptr;
     std::string pic = it ? piece_icon(*it) : std::string();
@@ -303,14 +304,16 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
     // Back and the page slot: a label (the page slot names the page its dots chose - its silhouette was easy to misread
     // while scrolling through the three, #23)
     static const char* const kPageName[kEyeSteps] = {"page.armour", "page.weapons", "page.accessories"};
-    const bool labelled = back || page;
+    const bool labelled = back || page || under;
     U64 mark = find_parent_of_class(root, "charged-count");
     if (mark) {
         ok &= labelled ? set_class(mark, "self-center", true) && set_class(mark, "om-label-wrap", true) : clear_label(mark);
         ok &= set_class(mark, "om-eye-c", false) && set_class(mark, "om-eye2-c", false);
         ok &= set_class(mark, "!cpp-none", !labelled);
         if (U64 text = labelled ? find_by_class(mark, "charged-count") : 0) {
-            const char* label = back ? lang::t("setting.back") : lang::t(kPageName[g_eye_pick % kEyeSteps]); // (Back: the settings' word, translated)
+            const char* label = back    ? lang::t("setting.back") // (Back: the settings' word, translated)
+                                : under ? lang::t("piece.underwear")
+                                        : lang::t(kPageName[g_eye_pick % kEyeSteps]);
             if (g_set_text) g_set_text(text, label, 0);
             ok &= set_class(text, "om-label", true) && set_class(text, "om-label-value", false);
         }
@@ -327,7 +330,7 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
     if (icon && is_element(icon)) {
         ok &= set_class(icon, "quickslot-item-image-none", false);
         const bool sword = false, necklace = false; // (the page slot: its label now, no silhouette)
-        bool holder = piece && pic.empty() && it->slot != kBackShieldSlot; // (an empty slot: the game's placeholder)
+        bool holder = piece && !under && pic.empty() && it->slot != kBackShieldSlot; // (an empty slot: the game's placeholder)
         bool armor = piece && pic.empty() && !holder;
         ok &= set_class(icon, "om-empty-armor", armor);
         ok &= set_class(icon, "om-empty-sword", sword);
@@ -456,6 +459,7 @@ void apply_outfit_slots(U64 self, U32 only)
         if (mark) {
             if (saved && !set && mode == kModeMain) // (a weapon set has no looks, #27)
                 for (U16 s = 0; s < 32; ++s) looks |= slot_look(g_outfits[slot_outfit(i)], s) != kLookDefault;
+            if (saved && !set && mode == kModeMain) looks |= g_outfits[slot_outfit(i)].underwear_look != kLookDefault;
             bool climate = want && (!std::strncmp(want, "om-cold", 7) || !std::strncmp(want, "om-heat", 7));
             bool stacked = looks && climate;
             badge_ok &= set_class(mark, "self-center", true);

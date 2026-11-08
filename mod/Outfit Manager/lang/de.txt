@@ -219,3 +219,8 @@ center.no_outfit = Kein Outfit aktiv
 peek.none_label = ABLEGEN
 peek.none = Kein Outfit
 toast.released = „{outfit}“ abgelegt: deine Ausrüstung bleibt an, seine Sichtbarkeitseinstellungen sind aus, bis du ein Outfit lädst oder speicherst
+
+# next version: weapon sets, underwear
+value.weapons_only = Nur Waffen
+desc.weapons.only = Ein Waffenset: Ein Klick wechselt nur deine Waffen. Dein Outfit und seine Sichtbarkeit bleiben.
+piece.underwear = Unterwäsche

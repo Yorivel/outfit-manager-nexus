@@ -91,6 +91,7 @@ void write_lists(std::string& out, const Store& s)
                 if (o.hk_vk) put(out, "hotkey\t%u\t%u\n", o.hk_vk, o.hk_mods);
                 if (o.worn) put(out, "worn\t1\n");
                 if (o.back_look) put(out, "backlook\t%u\n", o.back_look);
+                if (o.underwear_look) put(out, "underwear\t%u\n", o.underwear_look);
                 if (o.has_back) put(out, "backshield\t%u\n", o.has_back);
                 for (const auto& [slot, look] : o.empty_looks)
                     if (look) put(out, "slotlook\t%u\t%u\n", slot, look);
@@ -380,6 +381,9 @@ void load_outfits()
             } else if (!list.empty() && v[0] == "backlook" && v.size() >= 2) {
                 unsigned b = static_cast<unsigned>(std::strtoul(v[1].c_str(), nullptr, 10));
                 list.back().back_look = static_cast<std::uint8_t>(b < kLookCount ? b : 0);
+            } else if (!list.empty() && v[0] == "underwear" && v.size() >= 2) {
+                unsigned b = static_cast<unsigned>(std::strtoul(v[1].c_str(), nullptr, 10));
+                list.back().underwear_look = static_cast<std::uint8_t>(b < kLookCount ? b : 0);
             } else if (!list.empty() && v[0] == "backshield" && v.size() >= 2) {
                 unsigned b = static_cast<unsigned>(std::strtoul(v[1].c_str(), nullptr, 10));
                 list.back().has_back = static_cast<std::uint8_t>(b <= 2 ? b : 0);

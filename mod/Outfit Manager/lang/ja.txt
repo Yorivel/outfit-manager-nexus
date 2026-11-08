@@ -216,3 +216,8 @@ center.no_outfit = 適用中の衣装なし
 peek.none_label = 外す
 peek.none = 衣装なし
 toast.released = 「{outfit}」を外しました：装備はそのままで、衣装を読み込むか保存するまで表示設定はオフになります
+
+# next version: weapon sets, underwear
+value.weapons_only = 武器のみ
+desc.weapons.only = 武器セット：クリックすると武器だけが変わります。衣装とその表示はそのままです。
+piece.underwear = 下着

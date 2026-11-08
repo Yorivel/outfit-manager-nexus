@@ -354,6 +354,7 @@ void update_plus_icon(U64 self)
 void carry_looks(const Outfit& from, Outfit& to)
 {
     to.back_look = from.back_look;
+    to.underwear_look = from.underwear_look;
     to.empty_looks.clear();
     for (OutfitItem& it : to.items) it.look = slot_look(from, it.slot);
     auto carry = [&](U16 slot, std::uint8_t look) {

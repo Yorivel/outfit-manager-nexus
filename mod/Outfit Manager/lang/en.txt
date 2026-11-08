@@ -111,6 +111,7 @@ look.shown = Visibility: always shown
 piece.back_shield = Back shield
 piece.back_shield_item = Back shield ({item})
 piece.empty = Empty slot
+piece.underwear = Underwear
 
 # --- Pieces and characters (in messages) -----------------------------------------------------------------------------
 slot.helmet = Helmet

@@ -216,3 +216,8 @@ center.no_outfit = 未套用套裝
 peek.none_label = 卸下
 peek.none = 無套裝
 toast.released = 已卸下「{outfit}」：裝備保持穿戴，在你載入或儲存套裝前，其顯示設定處於關閉狀態
+
+# next version: weapon sets, underwear
+value.weapons_only = 僅武器
+desc.weapons.only = 武器套組：點擊只更換武器。你的套裝及其顯示保持不變。
+piece.underwear = 內衣

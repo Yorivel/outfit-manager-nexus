@@ -233,3 +233,8 @@ center.no_outfit = Brak zastosowanego stroju
 peek.none_label = ZDEJMIJ
 peek.none = Bez stroju
 toast.released = „{outfit}” zdjęty: twój ekwipunek zostaje, jego ustawienia widoczności są wyłączone, dopóki nie wczytasz lub nie zapiszesz stroju
+
+# next version: weapon sets, underwear
+value.weapons_only = Tylko broń
+desc.weapons.only = Zestaw broni: kliknięcie zmienia tylko broń. Twój strój i jego widoczność zostają.
+piece.underwear = Bielizna

@@ -233,3 +233,8 @@ center.no_outfit = Наряд не применён
 peek.none_label = СНЯТЬ
 peek.none = Без наряда
 toast.released = «{outfit}» снят: снаряжение остаётся на вас, его настройки видимости отключены, пока вы не загрузите или не сохраните наряд
+
+# next version: weapon sets, underwear
+value.weapons_only = Только оружие
+desc.weapons.only = Набор оружия: щелчок меняет только оружие. Наряд и его видимость остаются.
+piece.underwear = Нижнее бельё
