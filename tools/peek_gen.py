@@ -164,6 +164,28 @@ def frame(selected):
     return im
 
 
+NONE_PX = 254          # the "No outfit" icon: as the item icons (256px, drawn in the same icon box)
+NONE_FILL = 0.8        # its glyph's extent in that box
+
+
+def no_outfit_icon():
+    """The Outfit Arc's "No outfit" entry: glyphs.no_outfit() off-white with a soft dark edge, in a box the size of the
+    item icons the other entries show, so the Arc draws it at their scale."""
+    import glyphs
+    m = glyphs.no_outfit()
+    m = m.crop(m.getbbox())
+    k = NONE_PX * NONE_FILL / max(m.size)
+    m = m.resize((round(m.width * k), round(m.height * k)), Image.LANCZOS)
+    mask = Image.new('L', (NONE_PX, NONE_PX), 0)
+    mask.paste(m, ((NONE_PX - m.width) // 2, (NONE_PX - m.height) // 2))
+    edge = mask.filter(ImageFilter.MaxFilter(7)).filter(ImageFilter.GaussianBlur(2))
+    img = Image.new('RGBA', mask.size, (10, 9, 8, 0))
+    img.putalpha(edge.point(lambda v: v * 150 // 255))
+    tone = [Image.new('L', mask.size, t) for t in (222, 214, 200)]
+    img.alpha_composite(Image.merge('RGBA', (*tone, mask)))
+    return img
+
+
 def slot_pos(k):
     """Position k (0..4, 2 = the middle): its centre on the circle, its distance from the middle."""
     p = k - 2
@@ -310,6 +332,8 @@ ARCS = {n: arc_image(n) for n in range(1, 6)}
 def atlas_merge():
     rows = [f'<Texture Name="{n}" Filename="UI/texture/image/customizeimage/{n}.dds" Type="Image" GetRect="1,1,126,126"/>'
             for n in ('outfitmanager_peek_slot', 'outfitmanager_peek_slot_sel')]
+    rows.append(f'<Texture Name="outfitmanager_peek_none" Filename="UI/texture/image/customizeimage/outfitmanager_peek_none.dds" '
+                f'Type="Image" GetRect="1,1,{NONE_PX},{NONE_PX}"/>')
     rows += [f'<Texture Name="outfitmanager_peek_arc_n{n}" Filename="UI/texture/image/customizeimage/outfitmanager_peek_arc_n{n}.dds" '
              f'Type="Image" GetRect="1,1,{im.width},{im.height}"/>' for n, im in ARCS.items()]
     return '<__dmm_root__>\n' + '\n'.join(rows) + '\n</__dmm_root__>\n'
@@ -320,6 +344,7 @@ if __name__ == '__main__':
     os.makedirs(img, exist_ok=True)
     write_dds(os.path.join(img, 'outfitmanager_peek_slot.dds'), frame(False), 128)
     write_dds(os.path.join(img, 'outfitmanager_peek_slot_sel.dds'), frame(True), 128)
+    write_dds(os.path.join(img, 'outfitmanager_peek_none.dds'), no_outfit_icon(), 256)
     for n, im in ARCS.items():
         write_dds(os.path.join(img, f'outfitmanager_peek_arc_n{n}.dds'), im, tex_size(im))
     for rel, text in ((('ui', 'xml', 'texture', 'cd_hud_status_02.xml.merge'), atlas_merge()),

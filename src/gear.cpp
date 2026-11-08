@@ -35,6 +35,43 @@ U64 equipped_item(U64 list, U16 slot)
     return 0;
 }
 
+// Equipped items in slots on neither wheel (an outfit never records them): logged by name, to learn which slots ammo
+// and the DLC's gear use (bug report 2026-11-08: Damiane's harpoon and bullets aren't switched).
+U64 equipment_list();
+const char* character_name(U16 key);
+bool is_placeholder(U16 key);
+void log_unlisted_slots()
+{
+    U64 list = equipment_list();
+    U64 e = list ? rp(list + 8) : 0;
+    U32 n = list ? r32(list + 0x10) : 0;
+    { // (again only when it changed)
+        static U64 last = 0;
+        U64 sig = 1469598103934665603ull ^ g_character;
+        for (U32 i = 0; e && i < n && i < 64; ++i) {
+            U64 uid = 0;
+            U16 slot = 0;
+            if (!rd(e + i * 0xd0ull, uid) || !rd(e + i * 0xd0ull + kOffEntrySlot, slot)) break;
+            sig = (sig ^ uid ^ (U64(slot) << 48)) * 1099511628211ull;
+        }
+        if (sig == last) return;
+        last = sig;
+    }
+    LOG("equipped, on no wheel (%s):", character_name(g_character));
+    for (U32 i = 0; e && i < n && i < 64; ++i) {
+        U16 key = 0xFFFF, slot = 0xFFFF, at1 = 0;
+        U64 uid = 0;
+        U64 x = e + i * 0xd0ull;
+        if (!rd(x + 8, key) || !rd(x, uid) || !rd(x + kOffEntrySlot, slot) || !rd(x + 0xca, at1)) break;
+        if (key == 0xFFFF || !uid || slot == 0xFFFF || is_weapon_slot(slot)) continue;
+        bool armour = false;
+        for (U32 k = 0; k < g_armor_slot_count; ++k) armour |= g_armor_slots[k] == slot;
+        if (armour) continue;
+        LOG("  (not on a wheel) equipment-%u key %u \"%s\" uid %llX, +CA %u%s", slot, key, item_name(key).c_str(), uid, at1,
+            is_placeholder(key) ? " (placeholder)" : "");
+    }
+}
+
 U64 equipment_list()
 {
     U64 ctx[4] = {};
@@ -175,6 +212,70 @@ int read_worn_from(U64 self, WornRaw* out, int max, U64 list, int& found)
         n = -3;
     }
     return n;
+}
+
+// The Weapons wheel's positions as the menu holds them (its slot scripts, record 0): what each shows, also the ones
+// with no equip slot (ammo is one of them - bug report 2026-11-08). For the log only.
+void log_weapon_wheel_body(U64 self)
+{
+    {
+        U64 sv = self ? *reinterpret_cast<U64*>(self + kOffRootSlotVecs) : 0;
+        if (!sv || *reinterpret_cast<U32*>(self + kOffRootSlotVecCount) == 0) {
+            LOG("weapon wheel: no slot scripts");
+            return;
+        }
+        U64 arr = *reinterpret_cast<U64*>(sv + 0);
+        U32 cnt = *reinterpret_cast<U32*>(sv + 8);
+        U64 empty = *reinterpret_cast<U64*>(g_base + kRvaEmptyItem);
+        { // (logged again only when something on it changed: every open would flood the log)
+            static U64 last = 0;
+            U64 sig = 1469598103934665603ull ^ g_character;
+            for (U32 i = 0; arr && i < cnt && i < 16; ++i) {
+                U64 script = *reinterpret_cast<U64*>(arr + i * 8ull);
+                U64 data = script ? *reinterpret_cast<U64*>(script + kOffScriptData) : 0;
+                for (int alt = 0; data && alt < 2; ++alt) {
+                    U64 item = data + (alt ? kOffDataItemAlt : kOffDataItem);
+                    if (item_valid(item, empty)) sig = (sig ^ *reinterpret_cast<U64*>(item) ^ (U64(*reinterpret_cast<U16*>(item + 8)) << 48)) * 1099511628211ull;
+                }
+            }
+            if (sig == last) return;
+            last = sig;
+        }
+        LOG("weapon wheel (%s): %u positions", character_name(g_character), cnt);
+        for (U32 i = 0; arr && i < cnt && i < 16; ++i) {
+            U64 script = *reinterpret_cast<U64*>(arr + i * 8ull);
+            U64 data = script ? *reinterpret_cast<U64*>(script + kOffScriptData) : 0;
+            if (!data) {
+                LOG("  position %u: script %llX, no data", i, script);
+                continue;
+            }
+            U16 qslot = *reinterpret_cast<U16*>(script + kOffScriptEquipIdx);
+            unsigned type = *reinterpret_cast<std::uint8_t*>(data + kOffDataType);
+            for (int alt = 0; alt < 2; ++alt) {
+                U64 item = data + (alt ? kOffDataItemAlt : kOffDataItem);
+                bool valid = item_valid(item, empty);
+                U16 key = valid ? *reinterpret_cast<U16*>(item + 8) : 0xFFFF;
+                U64 uid = valid ? *reinterpret_cast<U64*>(item) : 0;
+                LOG("  position %u (equip idx %u, type %u) %s: %s key %u \"%s\" uid %llX", i, qslot, type,
+                    alt ? "alt item" : "item", valid ? "valid" : "empty", key, key != 0xFFFF ? item_name(key).c_str() : "", uid);
+            }
+            std::string raw; // (the data's first bytes: where else an ammo choice could sit)
+            char b[8];
+            for (U32 k = 0; k < 0x60; ++k) {
+                snprintf(b, sizeof b, "%02X%s", *reinterpret_cast<std::uint8_t*>(data + k), (k & 7) == 7 ? " " : "");
+                raw += b;
+            }
+            LOG("    data %llX: %s", data, raw.c_str());
+        }
+    }
+}
+void log_weapon_wheel(U64 self) // (the body has strings: the fault guard lives here)
+{
+    __try {
+        log_weapon_wheel_body(self);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        LOG("weapon wheel: fault while reading");
+    }
 }
 
 int read_worn(U64 self, WornRaw* out, int max)

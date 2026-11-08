@@ -61,3 +61,41 @@ def return_arrow():
     ax, ay = cx - r + w / 2, cy + 6
     d.polygon([(ax - 70, ay - 10), (ax + 70, ay - 10), (ax, ay + 80)], fill=255)
     return m
+
+
+def slashed_plate_armour():
+    """The game's plate armour icon (cd_icon_ability_PLATE_ARMOR) with the slash of its Hidden eye: the "+" slot's
+    Unequip Outfit dot (the outfit stops applying; picked by the user 2026-11-08 from tools/unequip_badges_preview.py)."""
+    import os
+    from PIL import ImageChops
+    src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 're', 'omring', 'badge',
+                       'cd_icon_common_01.png')
+    im = Image.open(src).convert('RGBA').crop((483, 433, 483 + 52, 433 + 52)).resize((S, S), Image.LANCZOS)
+    lum = im.convert('L').point(lambda v: max(0, min(255, (v - 60) * 255 // 120)))
+    m = ImageChops.multiply(im.getchannel('A'), lum)
+    d = ImageDraw.Draw(m)
+    d.line((40, 360, 360, 40), fill=0, width=60)
+    d.line((52, 348, 348, 52), fill=255, width=26)
+    return m
+
+
+def no_outfit():
+    """The Outfit Arc's "No outfit" entry (2026-11-08): the plate armour icon traced into sharp shapes (the game has it
+    only at 52px - scaled up it is blurry), and a shorter, round-ended slash that stays inside the slot's inner ring.
+    Chosen by the user from tools/no_outfit_icon_preview.py (crisp 140/8, slash k=105)."""
+    import os
+    from PIL import ImageChops, ImageFilter
+    src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 're', 'omring', 'badge',
+                       'cd_icon_common_01.png')
+    big = 1600
+    im = Image.open(src).convert('RGBA').crop((483, 433, 483 + 52, 433 + 52))
+    lum = im.convert('L').point(lambda v: max(0, min(255, (v - 60) * 255 // 120)))
+    m = ImageChops.multiply(im.getchannel('A'), lum).resize((big, big), Image.BICUBIC)
+    m = m.filter(ImageFilter.GaussianBlur(8)).point(lambda v: 255 if v >= 140 else 0).resize((S, S), Image.LANCZOS)
+    d = ImageDraw.Draw(m)
+    c, k, cut, bar = S / 2, 105, 60, 26
+    d.line((c - k - 12, c + k + 12, c + k + 12, c - k - 12), fill=0, width=cut)
+    d.line((c - k, c + k, c + k, c - k), fill=255, width=bar)
+    for x, y in ((c - k, c + k), (c + k, c - k)):
+        d.ellipse((x - bar / 2, y - bar / 2, x + bar / 2, y + bar / 2), fill=255)
+    return m

@@ -180,8 +180,6 @@ feature.settings = kıyafet ayarları (kaydırma)
 
 # Outfit Arc
 peek.label = KIYAFET {n}
-peek.unsaved_label = KAYDEDİLMEDİ
-peek.unsaved = Mevcut kıyafet
 setting.peekkey = Kıyafet Yayı
 setting.peekpad = Kıyafet Yayı
 value.press_key = Bir tuşa basın...
@@ -204,3 +202,20 @@ desc.hotkey.wait = Kullanmak istediğin tuşa veya kombinasyona bas (Ctrl, Alt, 
 toast.hotkey_moved = {hotkey} "{outfit}" kıyafetinden buraya taşındı
 toast.hotkey_arc = {hotkey} Kıyafet Yayı'nı açar; başka bir tuş seç
 toast.piece_lost = {piece} çantalarına ulaşmadı. Eksikse kaydetme: geri almak için oyunu yeniden başlat.
+
+# 0.5.0: outfit effects, Unequip Outfit, stacking mods
+setting.effects = Efektler
+value.performance = Performans
+value.quality = Kalite
+desc.effects.off = Kıyafetler anında değişir, gizli silahlar efektsiz belirir ve kaybolur.
+desc.effects.performance = Kıyafetler bir parıltıyla değişir, gizli silahlar belirirken ve kaybolurken parlar. Silah kıvılcımları olmadan: kalabalık sahnelerde daha hafif.
+desc.effects.quality = Kıyafetler bir parıltıyla değişir, gizli silahlar belirirken ve kaybolurken kıvılcımlarla parlar.
+toast.still_changing = Bir kıyafet hâlâ giyiliyor
+feature.effects = kıyafet efektleri
+toast.stacking_mod = Desert Link Unlimited Stacks zırh ve silahları yığılabilir yapar: parçalar oyunun kuşanmadığı yığınlarda birleşebilir. Ekipmanı dışarıda bırakan bir sürüm kullan.
+toast.shared_left_on = Üstünde bırakıldı (kimliğini başka bir eşyayla paylaşıyor, çıkarmak onu kaybettirirdi): {pieces}
+center.release = Kıyafeti Çıkar
+center.no_outfit = Uygulanan kıyafet yok
+peek.none_label = ÇIKAR
+peek.none = Kıyafet Yok
+toast.released = "{outfit}" çıkarıldı: ekipmanın üstünde kalır, bir kıyafet yükleyene ya da kaydedene kadar görünürlük ayarları kapalıdır

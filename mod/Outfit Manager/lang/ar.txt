@@ -188,8 +188,6 @@ feature.settings = إعدادات الأزياء (التمرير)
 
 # Outfit Arc
 peek.label = الزي {n}
-peek.unsaved_label = غير محفوظ
-peek.unsaved = الزي الحالي
 setting.peekkey = قوس الأزياء
 setting.peekpad = قوس الأزياء
 value.press_key = اضغط على مفتاح...
@@ -212,3 +210,20 @@ desc.hotkey.wait = اضغط على المفتاح أو المجموعة المر
 toast.hotkey_moved = نُقل {hotkey} إلى هنا من "{outfit}"
 toast.hotkey_arc = {hotkey} يفتح قوس الأزياء؛ اختر مفتاحًا آخر
 toast.piece_lost = لم يصل {piece} إلى حقائبك. إن كان مفقودًا فلا تحفظ: أعد تشغيل اللعبة لاستعادته.
+
+# 0.5.0: outfit effects, Unequip Outfit, stacking mods
+setting.effects = التأثيرات
+value.performance = الأداء
+value.quality = الجودة
+desc.effects.off = تتغير الأزياء فورًا، وتظهر الأسلحة المخفية وتختفي بلا تأثير.
+desc.effects.performance = تتغير الأزياء مع توهج، وتتوهج الأسلحة المخفية عند ظهورها واختفائها. بلا شرارات الأسلحة: أخف في المشاهد المزدحمة.
+desc.effects.quality = تتغير الأزياء مع توهج، وتتوهج الأسلحة المخفية عند ظهورها واختفائها، مع شرارات.
+toast.still_changing = ما زال ارتداء زي جاريًا
+feature.effects = تأثيرات الأزياء
+toast.stacking_mod = يجعل Desert Link Unlimited Stacks الدروع والأسلحة قابلة للتكديس: قد تندمج القطع في أكوام لا تجهّزها اللعبة. استخدم إصدارًا يستثني المعدات.
+toast.shared_left_on = تُرك مرتديًا (يشارك معرّفه مع عنصر آخر، ونزعه سيضيّعه): {pieces}
+center.release = نزع الزي
+center.no_outfit = لا يوجد زي مطبّق
+peek.none_label = نزع
+peek.none = بلا زي
+toast.released = نُزع "{outfit}": تبقى معداتك عليك، وإعدادات الظهور الخاصة به متوقفة حتى تحمّل زيًا أو تحفظه

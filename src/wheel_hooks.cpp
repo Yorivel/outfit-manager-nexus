@@ -629,6 +629,8 @@ U64 __fastcall open_hook(U64 self, U64 a, U64 b, U64 c)
                 if (w[i].key != 0xFFFF)
                     LOG("  equipment-%u key %u \"%s\" uid %llX", w[i].slot, w[i].key, item_name(w[i].key).c_str(), w[i].uid);
         }
+        log_unlisted_slots(); // (these two: whenever what they show changed - ammo, the DLC's gear)
+        log_weapon_wheel(self);
     }
     reset_modes();
     g_force_images = 3;

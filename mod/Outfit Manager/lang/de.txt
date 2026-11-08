@@ -180,8 +180,6 @@ feature.settings = Outfit-Einstellungen (Scrollen)
 
 # Outfit Arc
 peek.label = OUTFIT {n}
-peek.unsaved_label = NICHT GESPEICHERT
-peek.unsaved = Aktuelles Outfit
 setting.peekkey = Outfit-Bogen
 setting.peekpad = Outfit-Bogen
 value.press_key = Taste drücken...
@@ -204,3 +202,20 @@ desc.hotkey.wait = Drücke die gewünschte Taste oder Kombination (Strg, Alt, Um
 toast.hotkey_moved = {hotkey} wurde von „{outfit}“ hierher verschoben
 toast.hotkey_arc = {hotkey} öffnet den Outfit-Bogen; wähle eine andere Taste
 toast.piece_lost = {piece} ist nicht in deinen Taschen angekommen. Falls es fehlt, nicht speichern: Starte das Spiel neu, um es zurückzubekommen.
+
+# 0.5.0: outfit effects, Unequip Outfit, stacking mods
+setting.effects = Effekte
+value.performance = Leistung
+value.quality = Qualität
+desc.effects.off = Outfits wechseln sofort, ausgeblendete Waffen erscheinen und verschwinden ohne Effekt.
+desc.effects.performance = Outfits wechseln mit einem Leuchten, ausgeblendete Waffen leuchten beim Erscheinen und Verschwinden. Ohne die Funken der Waffen: schonender in vollen Szenen.
+desc.effects.quality = Outfits wechseln mit einem Leuchten, ausgeblendete Waffen leuchten beim Erscheinen und Verschwinden, mit Funken.
+toast.still_changing = Ein Outfit wird noch angelegt
+feature.effects = Outfit-Effekte
+toast.stacking_mod = Desert Link Unlimited Stacks macht Rüstungen und Waffen stapelbar: Teile können zu Stapeln verschmelzen, die das Spiel nicht anlegt. Nutze eine Version, die Ausrüstung auslässt.
+toast.shared_left_on = Angelassen (teilt seine ID mit einem anderen Gegenstand, Ablegen würde es verlieren): {pieces}
+center.release = Outfit ablegen
+center.no_outfit = Kein Outfit aktiv
+peek.none_label = ABLEGEN
+peek.none = Kein Outfit
+toast.released = „{outfit}“ abgelegt: deine Ausrüstung bleibt an, seine Sichtbarkeitseinstellungen sind aus, bis du ein Outfit lädst oder speicherst

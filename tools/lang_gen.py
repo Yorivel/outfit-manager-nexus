@@ -1,13 +1,13 @@
-"""Outfit Manager's languages: the mod's lang\\en.txt -> plugin/src/lang_en.inc (the English built into the plugin), every
-other lang\\<code>.txt -> plugin/src/lang_all.inc (built in too, so a missing lang folder never means English), and a
+"""Outfit Manager's languages: the mod's lang\\en.txt -> src/lang_en.inc (the English built into the plugin), every
+other lang\\<code>.txt -> src/lang_all.inc (built in too, so a missing lang folder never means English), and a
 check of each against English (keys English doesn't have, {placeholders} that differ, lines missing).
 lang_gen.py            (run before building the plugin when any language file changed)"""
 import os, re, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LANG = os.path.join(ROOT, 'mod', 'Outfit Manager', 'lang')
-INC = os.path.join(ROOT, 'plugin', 'src', 'lang_en.inc')
-ALL = os.path.join(ROOT, 'plugin', 'src', 'lang_all.inc')
+INC = os.path.join(ROOT, 'src', 'lang_en.inc')
+ALL = os.path.join(ROOT, 'src', 'lang_all.inc')
 PLURAL = ('.zero', '.one', '.two', '.few', '.many', '.other')
 
 

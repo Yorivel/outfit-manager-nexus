@@ -180,8 +180,6 @@ feature.settings = réglages des tenues (défilement)
 
 # Outfit Arc
 peek.label = TENUE {n}
-peek.unsaved_label = NON ENREGISTRÉE
-peek.unsaved = Tenue actuelle
 setting.peekkey = Arc des tenues
 setting.peekpad = Arc des tenues
 value.press_key = Appuyez sur une touche...
@@ -204,3 +202,20 @@ desc.hotkey.wait = Appuyez sur la touche ou la combinaison à utiliser (Ctrl, Al
 toast.hotkey_moved = {hotkey} a été déplacé ici depuis « {outfit} »
 toast.hotkey_arc = {hotkey} ouvre l'Arc des tenues ; choisissez une autre touche
 toast.piece_lost = {piece} n'est pas arrivé dans vos sacs. S'il manque, ne sauvegardez pas : relancez le jeu pour le récupérer.
+
+# 0.5.0: outfit effects, Unequip Outfit, stacking mods
+setting.effects = Effets
+value.performance = Performances
+value.quality = Qualité
+desc.effects.off = Les tenues changent d'un coup, et les armes masquées apparaissent et disparaissent sans effet.
+desc.effects.performance = Les tenues changent dans une lueur, et les armes masquées s'illuminent en apparaissant et en disparaissant. Sans les étincelles des armes : plus léger dans les scènes chargées.
+desc.effects.quality = Les tenues changent dans une lueur, et les armes masquées s'illuminent en apparaissant et en disparaissant, avec étincelles.
+toast.still_changing = Une tenue est encore en train d’être enfilée
+feature.effects = effets de tenue
+toast.stacking_mod = Desert Link Unlimited Stacks rend les armures et les armes empilables : des pièces peuvent fusionner en piles que le jeu n'équipe pas. Utilisez une version qui laisse l'équipement de côté.
+toast.shared_left_on = Laissé porté (il partage son ID avec un autre objet, le retirer le ferait perdre) : {pieces}
+center.release = Retirer la tenue
+center.no_outfit = Aucune tenue appliquée
+peek.none_label = RETIRER
+peek.none = Aucune tenue
+toast.released = « {outfit} » retirée : votre équipement reste porté, ses réglages de visibilité sont désactivés jusqu'à ce que vous chargiez ou enregistriez une tenue

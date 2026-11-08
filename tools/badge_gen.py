@@ -27,6 +27,7 @@ BADGES = {  # name: (atlas png, rect, glyph extent in the 80px canvas) or (None,
     'outfitmanager_badge_combat': ('cd_icon_common_00.png', (693, 331, 60, 60), 36),  # cd_icon_common_faction_sword
     'outfitmanager_badge_peace': (None, glyphs.sheathed, 36),
     'outfitmanager_badge_return': (None, glyphs.return_arrow, 36),   # the view's Back to Outfits step
+    'outfitmanager_badge_unequip': (None, glyphs.slashed_plate_armour, 36),  # the "+" slot's Unequip Outfit
 }
 PLUS = ('cd_icon_keyguide_00.png', (83, 411, 80, 80))
 

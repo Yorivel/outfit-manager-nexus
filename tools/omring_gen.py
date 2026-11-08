@@ -640,6 +640,8 @@ CSS_HEAD = """/* Outfit Manager: Outfits tab looks (classes set by OutfitManager
 .self-center.om-eye2-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: -20px; background-image: textureid(outfitmanager_badge_eye); }
 .self-center.om-look-shown-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_eye); }
 .self-center.om-look-hidden-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_hidden); }
+/* The "+" slot's Unequip Outfit dot (#21): the plate armour, slashed. */
+.self-center.om-unequip-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_unequip); }
 .self-center.om-look-combat-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_combat); }
 .self-center.om-look-peace-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_peace); }
 .self-center.om-return-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_return); }
@@ -695,6 +697,9 @@ def fmt(v):
 
 def write_css():
     out = [CSS_HEAD]
+    # (the busy wedge's pulse: a cosine between full and dim, sampled - the engine's timing is linear between keys)
+    keys = ' '.join(f'{100 * k / 20:.1f}% {{ opacity: {0.65 + 0.35 * math.cos(2 * math.pi * k / 20):.3f}; }}' for k in range(21))
+    out.append(f'@keyframes om-busy-pulse {{ {keys} }}\n')
     # The engine's radial layout misplaces slots 1+ at 360/N (only slot 0 lands right), and switching it back on
     # leaves stale positions, so the Outfits list always drops it (12 slots too) and each visible slot root is
     # centred on the family's circle at (i+1)*360/N (the cursor's sectors).
@@ -733,6 +738,12 @@ def write_css():
             for cls, tw in ((f'om-w{n}-{i}', name_worn(n)), (f'om-wa{n}-{i}', name_worn_amber(n)), (f'om-wg{n}-{i}', name_worn_green(n))):
                 out.append(f'.self-center.{cls} {{ display: block; opacity: 1; {full} pa-pickable: none; '
                            f'translate-x: -{fmt(DISP / 2)}px; translate-y: -{fmt(DISP / 2)}px; background-image: textureid({tw}); }}\n')
+            # The outfit being put on (or, on the "+" slot, the one being unequipped) while its effect plays: the
+            # white wedge, pulsing (om-busy-pulse) until the change has landed.
+            out.append(f'.self-center.om-wb{n}-{i} {{ display: block; opacity: 1; {full} pa-pickable: none; '
+                       f'translate-x: -{fmt(DISP / 2)}px; translate-y: -{fmt(DISP / 2)}px; background-image: textureid({name_worn(n)}); '
+                       f'animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; '
+                       f'animation-timing-function: Linear; }}\n')
     path = os.path.join(MOD, 'ui', 'xml', 'gamemain', 'template', 'quickslotitem.css.merge')
     open(path, 'w', newline='\n').write(''.join(out))
 

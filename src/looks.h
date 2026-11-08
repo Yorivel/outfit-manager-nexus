@@ -31,9 +31,9 @@ void look_settled();
 void look_refresh();
 extern U64 g_weapon_hide_after;
 extern U64 g_sheathe_refresh_at; // (GetTickCount64: a sheathed hidden weapon's glow peak is over - the looks again)
-// the sneak peek glow on one hidden weapon's parts (part name ids) as it is drawn (false) or sheathed (true) - fx_probe.cpp
+// the sneak peek glow on one hidden weapon's parts (part name ids) as it is drawn (false) or sheathed (true) - transition.cpp
 void fx_weapon_glow(const std::vector<U32>& names, bool sheathe);
-// the hologram on a scabbard's model part(s) (handles) as its hidden weapon is drawn / sheathed - fx_probe.cpp
+// the hologram on a scabbard's model part(s) (handles) as its hidden weapon is drawn / sheathed - transition.cpp
 void fx_scabbard_holo(const std::vector<U32>& handles, bool sheathe);
 bool fx_scab_applied_after(U64 t);
 bool fx_transition_busy(); // (an outfit transition runs)
