@@ -194,8 +194,6 @@ feature.settings = ustawienia strojów (przewijanie)
 
 # Outfit Arc
 peek.label = STRÓJ {n}
-peek.unsaved_label = NIEZAPISANY
-peek.unsaved = Obecny strój
 setting.peekkey = Łuk strojów
 setting.peekpad = Łuk strojów
 value.press_key = Naciśnij klawisz...
@@ -218,3 +216,20 @@ desc.hotkey.wait = Naciśnij klawisz lub kombinację (Ctrl, Alt, Shift i klawisz
 toast.hotkey_moved = {hotkey} przeniesiono tutaj z „{outfit}”
 toast.hotkey_arc = {hotkey} otwiera Łuk strojów; wybierz inny klawisz
 toast.piece_lost = {piece} nie trafił do twoich toreb. Jeśli go brakuje, nie zapisuj: uruchom grę ponownie, aby go odzyskać.
+
+# 0.5.0: outfit effects, Unequip Outfit, stacking mods
+setting.effects = Efekty
+value.performance = Wydajność
+value.quality = Jakość
+desc.effects.off = Stroje zmieniają się od razu, a ukryta broń pojawia się i znika bez efektu.
+desc.effects.performance = Stroje zmieniają się z poświatą, a ukryta broń świeci, gdy się pojawia i znika. Bez iskier broni: lżej w zatłoczonych scenach.
+desc.effects.quality = Stroje zmieniają się z poświatą, a ukryta broń świeci, gdy się pojawia i znika, z iskrami.
+toast.still_changing = Strój jest jeszcze zakładany
+feature.effects = efekty strojów
+toast.stacking_mod = Desert Link Unlimited Stacks pozwala łączyć zbroje i broń w stosy: części mogą się złączyć w stosy, których gra nie założy. Użyj wersji, która pomija ekwipunek.
+toast.shared_left_on = Zostawiono (dzieli ID z innym przedmiotem, zdjęcie by go utraciło): {pieces}
+center.release = Zdejmij strój
+center.no_outfit = Brak zastosowanego stroju
+peek.none_label = ZDEJMIJ
+peek.none = Bez stroju
+toast.released = „{outfit}” zdjęty: twój ekwipunek zostaje, jego ustawienia widoczności są wyłączone, dopóki nie wczytasz lub nie zapiszesz stroju

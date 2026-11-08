@@ -177,8 +177,6 @@ feature.settings = 衣装の設定（スクロール）
 
 # Outfit Arc
 peek.label = 衣装 {n}
-peek.unsaved_label = 未保存
-peek.unsaved = 現在の衣装
 setting.peekkey = 衣装アーク
 setting.peekpad = 衣装アーク
 value.press_key = キーを押してください...
@@ -201,3 +199,20 @@ desc.hotkey.wait = 使うキーまたは組み合わせを押してください�
 toast.hotkey_moved = {hotkey} を「{outfit}」からここへ移しました
 toast.hotkey_arc = {hotkey} は衣装アークを開きます。別のキーを選んでください
 toast.piece_lost = {piece}がバッグに戻りませんでした。見当たらない場合はセーブせずにゲームを再起動すると戻ります。
+
+# 0.5.0: outfit effects, Unequip Outfit, stacking mods
+setting.effects = エフェクト
+value.performance = パフォーマンス
+value.quality = 品質
+desc.effects.off = 衣装はすぐに切り替わり、非表示の武器はエフェクトなしで現れ、消えます。
+desc.effects.performance = 衣装は光とともに切り替わり、非表示の武器は現れるときと消えるときに光ります。武器の火花なし：負荷の高い場面でも軽めです。
+desc.effects.quality = 衣装は光とともに切り替わり、非表示の武器は現れるときと消えるときに火花とともに光ります。
+toast.still_changing = 衣装をまだ着替えています
+feature.effects = 衣装エフェクト
+toast.stacking_mod = Desert Link Unlimited Stacksは防具と武器をスタック可能にします：装備がゲームの装備できないスタックにまとまることがあります。装備を対象外にするバージョンを使ってください。
+toast.shared_left_on = 装備したまま（他のアイテムとIDが同じため、外すと失われます）：{pieces}
+center.release = 衣装を外す
+center.no_outfit = 適用中の衣装なし
+peek.none_label = 外す
+peek.none = 衣装なし
+toast.released = 「{outfit}」を外しました：装備はそのままで、衣装を読み込むか保存するまで表示設定はオフになります

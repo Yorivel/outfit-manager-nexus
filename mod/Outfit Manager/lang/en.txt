@@ -20,8 +20,6 @@ center.back_settings = Back to Settings
 
 # --- The quick peek (the outfits on an arc beside the character) -----------------------------------------------------
 peek.label = OUTFIT {n}
-peek.unsaved_label = UNSAVED
-peek.unsaved = Current Outfit
 
 # --- Settings (an outfit's, and the mod's on the "+" slot) -----------------------------------------------------------
 setting.visibility = Visibility
@@ -219,3 +217,20 @@ desc.hotkey.wait = Press the key or combination to use (Ctrl, Alt, Shift and a k
 toast.hotkey_moved = {hotkey} moved here from "{outfit}"
 toast.hotkey_arc = {hotkey} opens the Outfit Arc; choose another key
 toast.piece_lost = {piece} didn't reach your bags. If it's missing, don't save: restart the game to get it back.
+
+# 0.5.0: outfit effects, Unequip Outfit, stacking mods
+setting.effects = Effects
+value.performance = Performance
+value.quality = Quality
+desc.effects.off = Outfits change at once, and hidden weapons appear and go without an effect.
+desc.effects.performance = Outfits change with a glow, and hidden weapons glow as they appear and go. Without the weapons' sparkles: lighter on busy scenes.
+desc.effects.quality = Outfits change with a glow, and hidden weapons glow as they appear and go, with sparkles.
+toast.still_changing = An outfit is still being put on
+feature.effects = outfit effects
+toast.stacking_mod = Desert Link Unlimited Stacks makes armour and weapons stackable: pieces can merge into stacks the game won't equip. Use a version that leaves equipment out.
+toast.shared_left_on = Left on (it shares its ID with another item, taking it off would lose it): {pieces}
+center.release = Unequip Outfit
+center.no_outfit = No outfit applied
+peek.none_label = UNEQUIP
+peek.none = No Outfit
+toast.released = "{outfit}" unequipped: your gear stays on, its visibility settings are off until you load or save an outfit

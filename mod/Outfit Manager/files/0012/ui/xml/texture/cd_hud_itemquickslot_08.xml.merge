@@ -51,6 +51,8 @@
 <Texture Name="outfitmanager_worn_12" Filename="UI/texture/image/customizeimage/outfitmanager_worn_12.dds" Type="Image" GetRect="1,1,900,900"/>
 <Texture Name="outfitmanager_worn_amber_12" Filename="UI/texture/image/customizeimage/outfitmanager_worn_amber_12.dds" Type="Image" GetRect="1,1,900,900"/>
 <Texture Name="outfitmanager_worn_green_12" Filename="UI/texture/image/customizeimage/outfitmanager_worn_green_12.dds" Type="Image" GetRect="1,1,900,900"/>
+<Texture Name="outfitmanager_key_cross" Filename="UI/texture/image/customizeimage/outfitmanager_key_cross.dds" Type="Image" GetRect="1,1,80,80"/>
+<Texture Name="outfitmanager_key_a" Filename="UI/texture/image/customizeimage/outfitmanager_key_a.dds" Type="Image" GetRect="1,1,80,80"/>
 <Texture Name="outfitmanager_badge_cog" Filename="UI/texture/image/customizeimage/outfitmanager_badge_cog.dds" Type="Image" GetRect="1,1,80,80"/>
 <Texture Name="outfitmanager_badge_flag" Filename="UI/texture/image/customizeimage/outfitmanager_badge_flag.dds" Type="Image" GetRect="1,1,80,80"/>
 <Texture Name="outfitmanager_badge_eye" Filename="UI/texture/image/customizeimage/outfitmanager_badge_eye.dds" Type="Image" GetRect="1,1,80,80"/>
@@ -58,6 +60,5 @@
 <Texture Name="outfitmanager_badge_combat" Filename="UI/texture/image/customizeimage/outfitmanager_badge_combat.dds" Type="Image" GetRect="1,1,80,80"/>
 <Texture Name="outfitmanager_badge_peace" Filename="UI/texture/image/customizeimage/outfitmanager_badge_peace.dds" Type="Image" GetRect="1,1,80,80"/>
 <Texture Name="outfitmanager_badge_return" Filename="UI/texture/image/customizeimage/outfitmanager_badge_return.dds" Type="Image" GetRect="1,1,80,80"/>
-<Texture Name="outfitmanager_key_cross" Filename="UI/texture/image/customizeimage/outfitmanager_key_cross.dds" Type="Image" GetRect="1,1,80,80"/>
-<Texture Name="outfitmanager_key_a" Filename="UI/texture/image/customizeimage/outfitmanager_key_a.dds" Type="Image" GetRect="1,1,80,80"/>
+<Texture Name="outfitmanager_badge_unequip" Filename="UI/texture/image/customizeimage/outfitmanager_badge_unequip.dds" Type="Image" GetRect="1,1,80,80"/>
 </__dmm_root__>

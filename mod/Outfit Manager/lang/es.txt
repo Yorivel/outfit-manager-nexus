@@ -180,8 +180,6 @@ feature.settings = ajustes de atuendos (desplazar)
 
 # Outfit Arc
 peek.label = ATUENDO {n}
-peek.unsaved_label = SIN GUARDAR
-peek.unsaved = Atuendo actual
 setting.peekkey = Arco de atuendos
 setting.peekpad = Arco de atuendos
 value.press_key = Pulsa una tecla...
@@ -204,3 +202,20 @@ desc.hotkey.wait = Pulsa la tecla o combinación que quieras usar (Ctrl, Alt, Ma
 toast.hotkey_moved = {hotkey} se ha movido aquí desde «{outfit}»
 toast.hotkey_arc = {hotkey} abre el Arco de atuendos; elige otra tecla
 toast.piece_lost = {piece} no ha llegado a tus bolsas. Si falta, no guardes: reinicia el juego para recuperarlo.
+
+# 0.5.0: outfit effects, Unequip Outfit, stacking mods
+setting.effects = Efectos
+value.performance = Rendimiento
+value.quality = Calidad
+desc.effects.off = Los atuendos cambian al instante y las armas ocultas aparecen y desaparecen sin efecto.
+desc.effects.performance = Los atuendos cambian con un brillo y las armas ocultas brillan al aparecer y desaparecer. Sin los destellos de las armas: más ligero en escenas cargadas.
+desc.effects.quality = Los atuendos cambian con un brillo y las armas ocultas brillan al aparecer y desaparecer, con destellos.
+toast.still_changing = Todavía se está poniendo un atuendo
+feature.effects = efectos de atuendo
+toast.stacking_mod = Desert Link Unlimited Stacks hace apilables las armaduras y las armas: las piezas pueden fundirse en pilas que el juego no equipa. Usa una versión que deje fuera el equipo.
+toast.shared_left_on = Se queda puesto (comparte su ID con otro objeto; quitarlo lo perdería): {pieces}
+center.release = Quitar atuendo
+center.no_outfit = Ningún atuendo aplicado
+peek.none_label = QUITAR
+peek.none = Sin atuendo
+toast.released = "{outfit}" quitado: tu equipo se queda puesto y sus ajustes de visibilidad se desactivan hasta que cargues o guardes un atuendo

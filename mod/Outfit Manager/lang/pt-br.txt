@@ -180,8 +180,6 @@ feature.settings = configurações dos trajes (rolar)
 
 # Outfit Arc
 peek.label = TRAJE {n}
-peek.unsaved_label = NÃO SALVO
-peek.unsaved = Traje atual
 setting.peekkey = Arco de trajes
 setting.peekpad = Arco de trajes
 value.press_key = Pressione uma tecla...
@@ -204,3 +202,20 @@ desc.hotkey.wait = Pressione a tecla ou combinação a usar (Ctrl, Alt, Shift e 
 toast.hotkey_moved = {hotkey} foi movido para cá de "{outfit}"
 toast.hotkey_arc = {hotkey} abre o Arco de trajes; escolha outra tecla
 toast.piece_lost = {piece} não chegou às suas bolsas. Se estiver faltando, não salve: reinicie o jogo para recuperá-lo.
+
+# 0.5.0: outfit effects, Unequip Outfit, stacking mods
+setting.effects = Efeitos
+value.performance = Desempenho
+value.quality = Qualidade
+desc.effects.off = Os trajes mudam na hora e as armas ocultas aparecem e somem sem efeito.
+desc.effects.performance = Os trajes mudam com um brilho e as armas ocultas brilham ao aparecer e sumir. Sem as faíscas das armas: mais leve em cenas cheias.
+desc.effects.quality = Os trajes mudam com um brilho e as armas ocultas brilham ao aparecer e sumir, com faíscas.
+toast.still_changing = Um traje ainda está sendo vestido
+feature.effects = efeitos de traje
+toast.stacking_mod = Desert Link Unlimited Stacks torna armaduras e armas empilháveis: peças podem se juntar em pilhas que o jogo não equipa. Use uma versão que deixe o equipamento de fora.
+toast.shared_left_on = Mantido (compartilha seu ID com outro item, tirá-lo o faria se perder): {pieces}
+center.release = Desequipar traje
+center.no_outfit = Nenhum traje aplicado
+peek.none_label = DESEQUIPAR
+peek.none = Sem traje
+toast.released = "{outfit}" desequipado: seu equipamento continua, as configurações de visibilidade dele ficam desligadas até você carregar ou salvar um traje

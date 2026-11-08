@@ -177,8 +177,6 @@ feature.settings = 套裝設定（滾動）
 
 # Outfit Arc
 peek.label = 套裝 {n}
-peek.unsaved_label = 未儲存
-peek.unsaved = 目前套裝
 setting.peekkey = 套裝弧
 setting.peekpad = 套裝弧
 value.press_key = 請按下按鍵...
@@ -201,3 +199,20 @@ desc.hotkey.wait = 按下要使用的按鍵或組合（Ctrl、Alt、Shift 加一
 toast.hotkey_moved = {hotkey} 已從「{outfit}」移到此處
 toast.hotkey_arc = {hotkey} 用於開啟套裝弧，請選擇其他按鍵
 toast.piece_lost = {piece}沒有回到你的背包。如果它不見了，請不要存檔：重新啟動遊戲即可找回。
+
+# 0.5.0: outfit effects, Unequip Outfit, stacking mods
+setting.effects = 效果
+value.performance = 效能
+value.quality = 畫質
+desc.effects.off = 套裝立即切換，隱藏的武器出現和消失時沒有效果。
+desc.effects.performance = 套裝伴隨光芒切換，隱藏的武器出現和消失時會發光。不含武器的火花：在複雜場景中更輕量。
+desc.effects.quality = 套裝伴隨光芒切換，隱藏的武器出現和消失時會發光，並帶有火花。
+toast.still_changing = 仍在換上套裝
+feature.effects = 套裝效果
+toast.stacking_mod = Desert Link Unlimited Stacks讓護甲和武器可以堆疊：裝備可能合併成遊戲無法裝備的堆疊。請使用不包含裝備的版本。
+toast.shared_left_on = 保持穿戴（它與另一件物品共用 ID，脫下會遺失）：{pieces}
+center.release = 卸下套裝
+center.no_outfit = 未套用套裝
+peek.none_label = 卸下
+peek.none = 無套裝
+toast.released = 已卸下「{outfit}」：裝備保持穿戴，在你載入或儲存套裝前，其顯示設定處於關閉狀態

@@ -1,4 +1,4 @@
-Outfit Manager 0.4.2 by Strahlimeier
+Outfit Manager 0.5.0 by Strahlimeier
 Adds an Outfits tab to Crimson Desert's gear wheel: save what you wear, switch outfits with one click.
 
 INSTALL (DMM)
@@ -17,15 +17,24 @@ USE
   Open the gear wheel, switch to the Outfits tab.
   Click + to save the armour you are wearing; click an outfit to put it on.
   Scroll over an outfit for its settings, or over + for the global ones.
+  Once you have outfits, + has three dots: Unequip Outfit (the default), Save and Settings.
+  Unequip Outfit takes nothing off: the outfit stops applying (its visibility settings are off and your gear shows as
+  it is) until you load or save an outfit.
   Controller: aim with the stick, press A / Cross to confirm, L2 / R2 to scroll a slot (shown on the slot).
 
 OUTFIT ARC
   Switch without opening the wheel: hold the Outfit Arc's key, scroll to pick an outfit, let go to wear it.
+  Its first entry, No Outfit, unequips the outfit. It opens on the outfit you have on; letting go there changes nothing.
   Set the key on the + page (Outfit Arc, Off by default): click it, then press any key or mouse button (middle, 4, 5).
   Esc cancels, Backspace turns it off.
   Controller: turn it on in the + page (it shows the pad's entry while you use a pad), then hold L1 / LB and press
   down on the d-pad; up and down move along it, let go of L1 / LB to wear the highlighted outfit.
   While it is open, the mouse wheel and the d-pad's up and down only move the arc.
+
+EFFECTS
+  Changing outfits plays a glow over the character; the new outfit appears at its peak. Hidden weapons glow when you
+  draw them and when you put them away. Set it in the global settings (scroll over +): Effects Off, Performance (no
+  weapon sparkles) or Quality (the default).
 
 HOTKEYS
   On an outfit's settings page, click Hotkey and press a key, with Ctrl, Alt or Shift if you like (or none).
@@ -59,7 +68,7 @@ FILES
   OutfitManager.log there records what the plugin did; please attach it to bug reports.
 
 NOTES
-  Tested on Crimson Desert 1.0.0.3549 (with the Charting the Unknown expansion) and DMM 4.7.3.
+  Tested on Crimson Desert 1.0.0.3576 (with the Charting the Unknown expansion) and DMM 4.8.0.
   Controllers: tested on a DualSense, both directly and through Steam Input (Xbox layout).
   The mod ships none of the game's own files: the plugin adds the Outfits tab to the gear wheel while the game loads
   it, onto whatever copy it loads (the game's, or another mod's), and DMM merges the mod's CSS and texture list into

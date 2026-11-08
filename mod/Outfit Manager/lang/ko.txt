@@ -177,8 +177,6 @@ feature.settings = 의상 설정 (스크롤)
 
 # Outfit Arc
 peek.label = 의상 {n}
-peek.unsaved_label = 저장 안 됨
-peek.unsaved = 현재 의상
 setting.peekkey = 의상 아크
 setting.peekpad = 의상 아크
 value.press_key = 키를 누르세요...
@@ -201,3 +199,20 @@ desc.hotkey.wait = 사용할 키나 조합을 누르세요(Ctrl, Alt, Shift와 �
 toast.hotkey_moved = {hotkey}을(를) "{outfit}"에서 여기로 옮겼습니다
 toast.hotkey_arc = {hotkey}은(는) 의상 아크를 엽니다. 다른 키를 고르세요
 toast.piece_lost = {piece}이(가) 가방에 들어오지 않았습니다. 없어졌다면 저장하지 말고 게임을 다시 시작하면 돌아옵니다.
+
+# 0.5.0: outfit effects, Unequip Outfit, stacking mods
+setting.effects = 효과
+value.performance = 성능
+value.quality = 품질
+desc.effects.off = 의상이 즉시 바뀌고, 숨긴 무기는 효과 없이 나타나고 사라집니다.
+desc.effects.performance = 의상이 빛과 함께 바뀌고, 숨긴 무기는 나타나고 사라질 때 빛납니다. 무기 불꽃 없음: 복잡한 장면에서 더 가볍습니다.
+desc.effects.quality = 의상이 빛과 함께 바뀌고, 숨긴 무기는 나타나고 사라질 때 불꽃과 함께 빛납니다.
+toast.still_changing = 아직 의상을 입는 중입니다
+feature.effects = 의상 효과
+toast.stacking_mod = Desert Link Unlimited Stacks은(는) 방어구와 무기를 겹칠 수 있게 합니다: 장비가 게임이 착용하지 않는 묶음으로 합쳐질 수 있습니다. 장비를 제외하는 버전을 사용하세요.
+toast.shared_left_on = 착용 유지 (다른 아이템과 ID를 공유하여 벗으면 사라집니다): {pieces}
+center.release = 의상 해제
+center.no_outfit = 적용된 의상 없음
+peek.none_label = 해제
+peek.none = 의상 없음
+toast.released = '{outfit}' 해제됨: 장비는 그대로이며, 의상을 불러오거나 저장할 때까지 표시 설정이 꺼집니다

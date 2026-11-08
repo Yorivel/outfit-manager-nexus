@@ -180,8 +180,6 @@ feature.settings = impostazioni dei completi (scorrimento)
 
 # Outfit Arc
 peek.label = COMPLETO {n}
-peek.unsaved_label = NON SALVATO
-peek.unsaved = Completo attuale
 setting.peekkey = Arco dei completi
 setting.peekpad = Arco dei completi
 value.press_key = Premi un tasto...
@@ -204,3 +202,20 @@ desc.hotkey.wait = Premi il tasto o la combinazione da usare (Ctrl, Alt, Maiusc 
 toast.hotkey_moved = {hotkey} spostata qui da "{outfit}"
 toast.hotkey_arc = {hotkey} apre l'Arco dei completi; scegli un altro tasto
 toast.piece_lost = {piece} non è arrivato nelle tue borse. Se manca, non salvare: riavvia il gioco per recuperarlo.
+
+# 0.5.0: outfit effects, Unequip Outfit, stacking mods
+setting.effects = Effetti
+value.performance = Prestazioni
+value.quality = Qualità
+desc.effects.off = I completi cambiano subito e le armi nascoste appaiono e spariscono senza effetto.
+desc.effects.performance = I completi cambiano con un bagliore e le armi nascoste si illuminano quando appaiono e spariscono. Senza le scintille delle armi: più leggero nelle scene affollate.
+desc.effects.quality = I completi cambiano con un bagliore e le armi nascoste si illuminano quando appaiono e spariscono, con scintille.
+toast.still_changing = Un completo si sta ancora indossando
+feature.effects = effetti dei completi
+toast.stacking_mod = Desert Link Unlimited Stacks rende impilabili armature e armi: i pezzi possono unirsi in pile che il gioco non equipaggia. Usa una versione che escluda l'equipaggiamento.
+toast.shared_left_on = Lasciato addosso (condivide il suo ID con un altro oggetto, toglierlo lo farebbe perdere): {pieces}
+center.release = Togli completo
+center.no_outfit = Nessun completo applicato
+peek.none_label = TOGLI
+peek.none = Nessun completo
+toast.released = "{outfit}" tolto: il tuo equipaggiamento resta addosso, le sue impostazioni di visibilità sono disattivate finché non carichi o salvi un completo

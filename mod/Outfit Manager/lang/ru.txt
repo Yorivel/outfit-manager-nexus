@@ -194,8 +194,6 @@ feature.settings = настройки нарядов (прокрутка)
 
 # Outfit Arc
 peek.label = НАРЯД {n}
-peek.unsaved_label = НЕ СОХРАНЁН
-peek.unsaved = Текущий наряд
 setting.peekkey = Дуга нарядов
 setting.peekpad = Дуга нарядов
 value.press_key = Нажмите клавишу...
@@ -218,3 +216,20 @@ desc.hotkey.wait = Нажмите клавишу или сочетание (Ctrl
 toast.hotkey_moved = {hotkey} перенесена сюда с «{outfit}»
 toast.hotkey_arc = {hotkey} открывает Дугу нарядов; выберите другую клавишу
 toast.piece_lost = {piece} не попал в ваши сумки. Если предмета нет, не сохраняйтесь: перезапустите игру, чтобы вернуть его.
+
+# 0.5.0: outfit effects, Unequip Outfit, stacking mods
+setting.effects = Эффекты
+value.performance = Производительность
+value.quality = Качество
+desc.effects.off = Наряды меняются мгновенно, а скрытое оружие появляется и исчезает без эффекта.
+desc.effects.performance = Наряды меняются со свечением, а скрытое оружие светится, когда появляется и исчезает. Без искр оружия: легче в насыщенных сценах.
+desc.effects.quality = Наряды меняются со свечением, а скрытое оружие светится, когда появляется и исчезает, с искрами.
+toast.still_changing = Наряд ещё надевается
+feature.effects = эффекты нарядов
+toast.stacking_mod = Desert Link Unlimited Stacks делает броню и оружие складываемыми: предметы могут слиться в стопки, которые игра не наденет. Используйте версию, которая не трогает снаряжение.
+toast.shared_left_on = Оставлено (его ID совпадает с другим предметом, снятие привело бы к потере): {pieces}
+center.release = Снять наряд
+center.no_outfit = Наряд не применён
+peek.none_label = СНЯТЬ
+peek.none = Без наряда
+toast.released = «{outfit}» снят: снаряжение остаётся на вас, его настройки видимости отключены, пока вы не загрузите или не сохраните наряд
