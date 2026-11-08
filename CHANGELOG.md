@@ -2,6 +2,27 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
+## 0.5.0 (2026-11-08)
+
+- New: outfit effects. Changing outfits plays a glow over the whole character, and the new outfit appears at its peak. Weapons glow along with it, and weapons the new outfit hides go at the peak of their glow.
+- New: hidden weapons glow when they appear and go. A sword or bow you've hidden appears in a glow when you draw it and goes in one when you put it away, scabbards and quivers included. Weapons set to show only in combat glow in and out the same way.
+- New: an Effects setting on the gear wheel's + settings page: Off, Performance or Quality (the default). Performance leaves out the weapons' sparkles; Off changes outfits at once, as before.
+- New: Unequip Outfit. Once you have outfits, the + slot has three dots: Unequip Outfit (the default), Save and Settings. Unequipping takes nothing off: the outfit just stops applying, so its visibility settings are off and your gear shows as it is. Loading or saving an outfit applies one again. It plays the outfit effect too, so anything the outfit hid appears under the glow.
+- Changed: the Outfit Arc's first entry is now "No Outfit" (unequips the outfit applied), followed by your outfits. It opens on the outfit applied, or on No Outfit, and only does something when you let go on another entry. An outfit you've changed by hand keeps your changes. The old "Current Outfit" entry is gone.
+- New: while an outfit change plays, its slot in the gear wheel pulses until the outfit is on (the + slot while unequipping), so it's clear which one is changing.
+- New: the Outfit Arc slides when you scroll: every outfit glides one place along the arc and the name moves with it, so you can see which way it goes.
+- New: the visibility view's page slot shows its page's name (Armour, Weapons, Accessories) and the click prompt instead of a silhouette.
+- Fix: the Outfit Arc floated at the rider's head on a horse or other mount. It now sits beside the rider at the mount's back, on every mount, and glides to the new height when you mount or dismount with it open.
+- Fix: changing only your weapon and saving saved nothing (it counted as "already saved"), and Overwrite couldn't add the weapon either. An outfit now only counts as the same if it also agrees on whether weapons load.
+- Fix: pieces disappearing after a load with "Desert Link Unlimited Stacks" installed. That mod can make armour and weapons stackable, and a piece taken off could merge into a stack and vanish. Kliff's loads now go through the game's own equip requests (as its menu does), every worn piece comes off before the outfit's go on, and a worn piece that shares its ID with an item in your bags is left on (with a message naming it). The mod also warns once per session when it finds Desert Link Unlimited Stacks with equipment stacking on. Use a version that leaves equipment out.
+- Fix: falling leaves could vanish for a moment while the weapon glow played in busy spots. The glow's particles pushed them out of the game's particle budget, which is now raised while a glow plays.
+- A new game starts without outfits (they belonged to the previous save's characters).
+- Translations: the new texts in all 15 languages (AI-made like the rest; corrections welcome).
+- Technical: the effect is the game's own outfit-change material effect, sent from a hook of the player's material update: one "on" and one "off" per change, with a restart when the old pieces leave the model's part table and another once every new piece has loaded. Scabbards, quivers and a bow on the back render like armour and get the effect per part. The weapon glow is the game's mesh effect with a dark grey colour. The particle budget (gv_effect_totalParticleCountRatio) is found by name and put back only if it still holds our value.
+- Technical: the source is split into modules (#14); BUILDING.md describes them. Kliff's loads use the equip / unequip requests; storage and wardrobe pieces still use the direct put-on (the request answers "Item not found" for them). After every load a loss check compares what came off with every bag, storage and companion.
+- Technical: the log lists the Weapons wheel's positions and any equipped item on no wheel whenever they change (to look into ammo and the DLC's gear, #24).
+- Tested on: Crimson Desert 1.0.0.3576 (Steam build 26480954) with DMM 4.8.0.
+
 ## 0.4.2 (2026-11-06)
 
 - Fix: scrolling the Outfit Arc with the mouse wheel did nothing in 0.4.1 (the selection flickered and landed back on the worn outfit). Each wheel notch was counted several times (6 steps per notch); with 3 outfits that goes round the arc exactly twice. One notch is one outfit again. Controllers were not affected.
