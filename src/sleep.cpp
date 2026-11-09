@@ -57,13 +57,18 @@ U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64
             if (!g_hook_asleep.exchange(true)) {
                 g_hook_ctx[0] = ctx, g_hook_ctx[1] = 0, g_hook_since = GetTickCount64();
                 g_fell = true;
+                LOG("sleep: seen falling asleep (state %08X, ctx %llX)", target, ctx);
             } else if (g_hook_ctx[0] != ctx && !g_hook_ctx[1]) {
                 g_hook_ctx[1] = ctx; // (the other body half)
             }
         } else if (g_hook_asleep.load() && (ctx == g_hook_ctx[0].load() || ctx == g_hook_ctx[1].load()) &&
                    GetTickCount64() - g_hook_since.load() >= kWakeAfterMs &&
                    !std::binary_search(std::begin(kQuiet), std::end(kQuiet), target)) {
-            if (g_hook_asleep.exchange(false)) g_woke = true;
+            if (g_hook_asleep.exchange(false)) {
+                g_woke = true;
+                LOG("sleep: seen waking up (state %08X, ctx %llX, %llu ms asleep)", target, ctx,
+                    GetTickCount64() - g_hook_since.load());
+            }
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
@@ -198,6 +203,13 @@ void sleep_install()
 // The HUD frame (peek_frame): a sleep that began or ended since the last frame.
 void sleep_tick(U64 self)
 {
+    { // (does the HUD tick during the sleep? a gap of over a second while a sleep is pending or on is logged)
+        static U64 last = 0;
+        U64 now = GetTickCount64();
+        if (last && now - last > 1000 && (g_asleep || g_fell.load() || g_hook_asleep.load()))
+            LOG("sleep: the HUD frame was away for %llu ms", now - last);
+        last = now;
+    }
     if (g_fell.exchange(false) && !g_asleep) fell_asleep(self);
     if (g_woke.exchange(false) && g_asleep) woke_up(self);
     drop_temp();
