@@ -1,16 +1,23 @@
-// Activity: Sleeping (2026-11-09; keksdieb101's idea on Nexus): when the character goes to sleep, a sleepwear outfit goes on
-// (several: one at random); on waking, the outfit worn before comes back, or, when none was, the pieces worn before.
+// Activity: Sleeping (2026-11-09; keksdieb101's idea on Nexus): when the character gets into bed, a sleepwear outfit goes
+// on (several: one at random); when they get out again - having slept or not - the outfit worn before comes back, or,
+// when none was, the pieces worn before.
 //
-// Seen through the game's action charts: the branch evaluator (kRvaBranchEval) is hooked and every taken branch
-// (result 0) is looked at. The sleep states are in sequencer_action_pc, a chart only the played character runs (all
-// three characters use Kliff's: only 1_phm has sequencer charts): bed_sleep start / loop / end, two variants
-// (bed and bedroll / inn). Asleep: a branch into a start or loop state; the contexts that took it (the lower and upper
-// body, ~4 ms apart) are remembered. Awake: one of them takes a branch into any state outside the sequencer charts
-// and the game's hand-over idles (kQuiet) - control is back (ChartProbe 2026-11-09: basic_upper / basic_lower idle).
+// Getting into bed: the game reads the bed's scene from its packs every time a bed is used - gimmick_sleep_bed_left /
+// _right (the side Kliff climbs in from), gimmick_camp_straw - about a second after the interaction, while the screen
+// is black (MO2CDLoader's lookup log, 2026-11-09). The pack lookup (found as MO2CDLoader finds it: the call in the pack
+// reader's open slot, class ResourceLoadWorker_Package) is hooked and watches for those paths.
+// Whose bed: the game takes the character over for the interaction - a branch into one of ai_basic_lower's one-step
+// states (kStep), taken by the played character's chart contexts just before; those contexts are remembered.
+// Getting out: one of them takes a branch into a state outside the scripted / hand-over ones (kQuiet: the player-only
+// sequencer charts and ai_basic_lower's idles) - control is back (cancelled at the hours menu, or awake).
+// The branch evaluator (kRvaBranchEval) is hooked for those branches (result 0 = taken). A sleep that begins without a
+// known bed scene (a sleeping spot with another scene) is still seen at the sleep itself: bed_sleep start / loop
+// (sequencer_action_pc).
 //
-// The game itself only HIDES the helmet, cloak and weapons in bed, it doesn't unequip them (DIAG 2026-11-09: no slot
-// changed), so what is worn is read when the sleep is seen. The hook only sets flags (it runs on the game's worker
-// threads); the HUD frame (peek_frame) does the loads.
+// The game only HIDES the helmet, cloak and weapons in bed, it doesn't unequip them (2026-11-09: no slot changed), so
+// what is worn is read when the bed is seen. The hooks only set flags and post kWmSleep to the game window: its thread
+// is the UI thread, and its messages keep coming while the HUD is hidden (the HUD frame, peek_frame, is the fallback).
+// The sleep's outfit changes play no outfit effect (its timeline runs on HUD frames; the screen is black anyway).
 //
 // In bed, the looks (looks.cpp, sleep_looks): a sleepwear outfit's own looks win over the game's in-bed hiding (a cloak
 // set to Shown stays shown; Default goes the game's way); any other outfit steps back as in flight.
@@ -21,30 +28,62 @@
 #include "looks.h"
 #include "store.h"
 #include "log.h"
+#include "game.h"
+#include "wheel_hooks.h"
 #include <MinHook.h>
 #include <algorithm>
 #include <atomic>
+#include <cstring>
 #include <random>
+#include <string>
+#include <vector>
 
 namespace om {
 
 #include "sleep_states.inc"
 
+extern std::atomic<HWND> g_game_hwnd; // (input.cpp)
+constexpr UINT kWmSleep = WM_APP + 0x51;
+
 namespace {
 
-// bed_sleep start / loop states (sequencer_action_pc, game 2.04.08): the sleep has begun
+// bed_sleep start / loop states (sequencer_action_pc, game 2.04.08): the sleep itself (the fallback signal)
 constexpr U32 kSleepStart[] = {0xD1F9862D, 0xE2B2EE2F, 0x70571FD6, 0xF50A6DC9}; // stt_02, ing_02, stt_03, ing_03
-constexpr U64 kWakeAfterMs = 1500; // (a wake needs the sleep to have lasted: the states around the start aren't a wake)
+// ai_basic_lower's one-step states: the game taking the character over for an interaction
+constexpr U32 kStep[] = {0x00D286FD, 0x2CAC00E9, 0x7D527861, 0x96A64775, 0xEF3C23FF};
+// the scenes a bed / sleeping spot plays when used (sequencer/.../gimmickcalledseq/<name>.*)
+const char* const kBedScenes[] = {"gimmick_sleep_bed_", "gimmick_camp_straw"};
+constexpr U64 kStepWindowMs = 4000; // (the step before the scene: within this)
+constexpr U64 kOutAfterMs = 1500;   // (getting out needs the bed to have lasted: the states around getting in aren't it)
 
 using EvalFn = U32*(__fastcall*)(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64 a7, const U64* link, U64 a9,
                                  U64 a10);
 EvalFn g_eval_orig = nullptr;
+using FindFn = bool(__fastcall*)(U64 map, U64 key, U64* out_path, std::uint8_t* out_record);
+FindFn g_find_orig = nullptr;
 
-// set on the game's threads, taken on the HUD frame
-std::atomic<bool> g_hook_asleep{false};
+// set on the game's threads, taken on the UI thread
+std::atomic<bool> g_hook_asleep{false}; // (in bed: sleeping, or at the hours menu)
 std::atomic<U64> g_hook_ctx[2] = {0, 0};
 std::atomic<U64> g_hook_since{0};
 std::atomic<bool> g_fell{false}, g_woke{false};
+std::atomic<U64> g_step_ctx[2] = {0, 0}; // the contexts the game last took over (kStep), and when
+std::atomic<U64> g_step_at{0};
+std::atomic<U64> g_out_at{0}; // (out of bed: when; the scene read again while getting up is no new bed)
+
+void post()
+{
+    if (HWND w = g_game_hwnd.load()) PostMessageW(w, kWmSleep, 0, 0); // (now, not at the next HUD frame)
+}
+
+void into_bed(U64 ctx0, U64 ctx1, const char* why)
+{
+    if (g_hook_asleep.exchange(true)) return;
+    g_hook_ctx[0] = ctx0, g_hook_ctx[1] = ctx1, g_hook_since = GetTickCount64();
+    g_fell = true;
+    post();
+    LOG("sleep: into bed (%s; ctx %llX %llX)", why, ctx0, ctx1);
+}
 
 U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64 a7, const U64* link, U64 a9, U64 a10)
 {
@@ -52,22 +91,23 @@ U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64
     __try {
         if (!r || *r != 0 || !link || !link[0]) return r;
         U32 target = *reinterpret_cast<const U32*>(link[0] + 0x14);
-        bool start = std::find(std::begin(kSleepStart), std::end(kSleepStart), target) != std::end(kSleepStart);
-        if (start) {
-            if (!g_hook_asleep.exchange(true)) {
-                g_hook_ctx[0] = ctx, g_hook_ctx[1] = 0, g_hook_since = GetTickCount64();
-                g_fell = true;
-                LOG("sleep: seen falling asleep (state %08X, ctx %llX)", target, ctx);
-            } else if (g_hook_ctx[0] != ctx && !g_hook_ctx[1]) {
-                g_hook_ctx[1] = ctx; // (the other body half)
-            }
+        U64 now = GetTickCount64();
+        if (std::find(std::begin(kStep), std::end(kStep), target) != std::end(kStep)) {
+            if (now - g_step_at.load() > 500) g_step_ctx[0] = ctx, g_step_ctx[1] = 0; // (a new take-over)
+            else if (g_step_ctx[0].load() != ctx) g_step_ctx[1] = ctx;              // (the other body half)
+            g_step_at = now;
+        }
+        if (std::find(std::begin(kSleepStart), std::end(kSleepStart), target) != std::end(kSleepStart)) {
+            into_bed(ctx, 0, "the sleep itself");
+            if (g_hook_ctx[0].load() != ctx && !g_hook_ctx[1].load()) g_hook_ctx[1] = ctx;
         } else if (g_hook_asleep.load() && (ctx == g_hook_ctx[0].load() || ctx == g_hook_ctx[1].load()) &&
-                   GetTickCount64() - g_hook_since.load() >= kWakeAfterMs &&
+                   now - g_hook_since.load() >= kOutAfterMs &&
                    !std::binary_search(std::begin(kQuiet), std::end(kQuiet), target)) {
             if (g_hook_asleep.exchange(false)) {
                 g_woke = true;
-                LOG("sleep: seen waking up (state %08X, ctx %llX, %llu ms asleep)", target, ctx,
-                    GetTickCount64() - g_hook_since.load());
+                g_out_at = now;
+                post();
+                LOG("sleep: out of bed (state %08X, ctx %llX, after %llu ms)", target, ctx, now - g_hook_since.load());
             }
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -75,7 +115,52 @@ U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64
     return r;
 }
 
-// HUD side
+// The pack lookup: a bed's scene being read is the character getting into bed.
+bool __fastcall find_hook(U64 map, U64 key, U64* out_path, std::uint8_t* out_record)
+{
+    __try {
+        const char* path = key ? **reinterpret_cast<const char***>(key) : nullptr;
+        if (path) {
+            while (*path == '/') ++path;
+            if ((path[0] == 's' || path[0] == 'S') && _strnicmp(path, "sequencer/", 10) == 0 && !g_hook_asleep.load())
+                if (const char* g = std::strstr(path, "gimmickcalledseq/"))
+                    for (const char* scene : kBedScenes)
+                        if (_strnicmp(g + 17, scene, std::strlen(scene)) == 0) {
+                            U64 now = GetTickCount64();
+                            if (now - g_out_at.load() < 5000) break; // (getting up)
+                            bool stepped = now - g_step_at.load() < kStepWindowMs && g_step_ctx[0].load();
+                            if (stepped) into_bed(g_step_ctx[0].load(), g_step_ctx[1].load(), g + 17);
+                            else LOG("sleep: a bed scene read with no character taken over just before: ignored (%s)", g + 17);
+                            break;
+                        }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    return g_find_orig(map, key, out_path, out_record);
+}
+
+// The pack lookup, as MO2CDLoader finds it: the pack reader's open slot (vtable +0x10) calls it first, right after
+// `mov rcx, [rcx+20h]`.
+U64 find_pack_lookup()
+{
+    void** vt = game::find_vtable(".?AVResourceLoadWorker_Package@pa@@");
+    if (!vt) return 0;
+    U64 open = reinterpret_cast<U64>(vt[2]);
+    const game::Module m = game::main_module();
+    auto inside = [&](U64 a) { return a >= m.base && a + 16 < m.base + m.size; };
+    if (!inside(open)) return 0;
+    for (U64 p = open; p < open + 0x100; ++p) {
+        const std::uint8_t* b = reinterpret_cast<const std::uint8_t*>(p);
+        if (b[0] == 0x48 && b[1] == 0x8b && b[2] == 0x49 && b[3] == 0x20 && b[4] == 0xe8) {
+            U64 t = p + 9 + *reinterpret_cast<const std::int32_t*>(p + 5);
+            return inside(t) ? t : 0;
+        }
+    }
+    return 0;
+}
+
+// HUD side (the HUD frame, or the game window's thread when it is the UI thread: kWmSleep)
+U64 g_sleep_self = 0; // (the status screen the HUD frame last gave: its object outlives a hidden HUD)
 bool g_asleep = false;
 std::atomic<int> g_sleep_look{0}; // what sleep_looks() answers: 0 awake, 1 step back, 2 sleepwear wins (read by look_sync)
 bool g_swapped = false;        // a sleepwear outfit was put on for this sleep: something to give back on waking
@@ -132,7 +217,9 @@ void fell_asleep(U64 self)
     U32 pick = wear[std::uniform_int_distribution<size_t>(0, wear.size() - 1)(rng)];
     LOG("sleep: putting on \"%s\"%s", g_outfits[pick].name.c_str(), wear.size() > 1 ? " (picked at random)" : "");
     g_swapped = true;
+    g_load_plain = true; // (in the dark: no effect, which would wait for the hidden HUD's frames)
     start_loading(self, pick);
+    g_load_plain = false;
 }
 
 void woke_up(U64 self)
@@ -154,7 +241,9 @@ void woke_up(U64 self)
             if (g_outfits[i].name == g_before_name && !g_outfits[i].temp) back = int(i);
     if (back >= 0) {
         LOG("sleep: awake; \"%s\" goes back on", g_outfits[size_t(back)].name.c_str());
+        g_load_plain = true; // (the sleep's changes never play the outfit effect, either way)
         start_loading(self, U32(back));
+        g_load_plain = false;
     } else if (g_have_items) {
         // (the pieces as a temporary outfit: loaded like any other, never saved, removed once it is on)
         Outfit t = g_before_items;
@@ -164,7 +253,9 @@ void woke_up(U64 self)
         g_outfits.push_back(t);
         g_temp_loading = true;
         LOG("sleep: awake; the %zu pieces worn before go back on", t.items.size());
+        g_load_plain = true; // (the sleep's changes never play the outfit effect, either way)
         start_loading(self, U32(g_outfits.size() - 1));
+        g_load_plain = false;
     } else {
         LOG("sleep: awake; the outfit worn before (\"%s\") is gone: nothing given back", g_before_name.c_str());
     }
@@ -198,22 +289,42 @@ void sleep_install()
         return;
     }
     LOG("sleep: watching for sleep (evaluator +%llX)", kRvaBranchEval);
+    // getting into bed: the pack lookup (MO2CDLoader may hook it too: MinHook chains)
+    U64 f = find_pack_lookup();
+    void* ft = reinterpret_cast<void*>(f);
+    if (!f || MH_CreateHook(ft, reinterpret_cast<void*>(&find_hook), reinterpret_cast<void**>(&g_find_orig)) != MH_OK ||
+        MH_EnableHook(ft) != MH_OK) {
+        LOG("sleep: the pack lookup %s; sleepwear goes on at the sleep itself, not when getting into bed",
+            f ? "couldn't be hooked" : "wasn't found");
+        g_find_orig = nullptr;
+        return;
+    }
+    LOG("sleep: watching beds (pack lookup +%llX)", f - g_base);
 }
 
 // The HUD frame (peek_frame): a sleep that began or ended since the last frame.
 void sleep_tick(U64 self)
 {
-    { // (does the HUD tick during the sleep? a gap of over a second while a sleep is pending or on is logged)
-        static U64 last = 0;
-        U64 now = GetTickCount64();
-        if (last && now - last > 1000 && (g_asleep || g_fell.load() || g_hook_asleep.load()))
-            LOG("sleep: the HUD frame was away for %llu ms", now - last);
-        last = now;
-    }
+    g_sleep_self = self;
     if (g_fell.exchange(false) && !g_asleep) fell_asleep(self);
     if (g_woke.exchange(false) && g_asleep) woke_up(self);
     drop_temp();
     update_look_mode();
+}
+
+// kWmSleep on the game window's thread: the sleep's work at once, when that thread is the UI thread (else the HUD frame
+// does it when it comes back). True: the message was ours.
+bool sleep_message()
+{
+    static bool said = false;
+    bool ui = g_ui_thread && GetCurrentThreadId() == g_ui_thread;
+    if (!said) said = true, LOG("sleep: the window's thread %s the UI thread%s", ui ? "is" : "is NOT",
+                                ui ? ": the outfit changes at once" : ": changes wait for the HUD");
+    if (ui && g_sleep_self) {
+        if (g_fell.load() || g_woke.load()) LOG("sleep: handled from the window message");
+        sleep_tick(g_sleep_self);
+    }
+    return true;
 }
 
 int sleep_looks()

@@ -17,6 +17,9 @@ namespace om {
 // (+0xf1: the caret-moved flag the game's own keys set, so the caret is drawn there at once).
 
 WNDPROC g_game_wndproc = nullptr;
+std::atomic<HWND> g_game_hwnd{nullptr}; // (sleep.cpp posts kWmSleep to it: the window's messages keep coming while the
+                                         // HUD is hidden, as in the sleep's fade)
+bool sleep_message(); // (sleep.cpp: kWmSleep handled)
 
 // The wheel hook is in (the arc open): it alone counts the notches. The window and raw input routes then only keep
 // the wheel from the game (2026-11-06: all three counted, 6 steps per notch, and with 3 outfits the arc went round
@@ -41,6 +44,7 @@ bool hotkey_held_now(U32 vk)
 
 LRESULT CALLBACK name_wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
 {
+    if (m == WM_APP + 0x51 && sleep_message()) return 0; // (kWmSleep: a sleep began or ended)
     if ((m == WM_KEYDOWN || m == WM_KEYUP || m == WM_SYSKEYDOWN || m == WM_SYSKEYUP) && hotkey_held_now(U32(wp)))
         return 0; // (an outfit's hotkey: its key does nothing else in play)
     if (m == WM_MBUTTONDOWN || m == WM_MBUTTONUP || m == WM_XBUTTONDOWN || m == WM_XBUTTONUP) {
@@ -74,7 +78,9 @@ void watch_game_chars()
     HWND w = GetForegroundWindow();
     g_game_wndproc = reinterpret_cast<WNDPROC>(
         SetWindowLongPtrW(w, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&name_wndproc)));
-    LOG("rename: watching typed characters (window %p)", static_cast<void*>(w));
+    g_game_hwnd = w;
+    LOG("rename: watching typed characters (window %p, its thread %lu, ui thread %lu)", static_cast<void*>(w),
+        GetWindowThreadProcessId(w, nullptr), g_ui_thread);
 }
 
 bool game_focused()

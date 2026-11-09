@@ -530,10 +530,13 @@ void finish_load(U64 self, AskedLoad& p)
 
 // Space / click on a saved outfit: where is each piece? Then asks (pieces on other characters, copies of gone ones) or
 // loads.
+bool g_load_plain = false; // (set around a start_loading: no outfit effect - sleep.cpp, its fade: the effect's timeline
+                           // runs on HUD frames, which stop while the HUD is hidden)
+
 void start_loading(U64 self, U32 index)
 {
     if (g_ask_modal || g_ask_next) return;
-    if (fx_defer_load(self, index)) return; // (the outfit effect: the glow up first; fx_tick loads it at the peak)
+    if (!g_load_plain && fx_defer_load(self, index)) return; // (the outfit effect: the glow up first; fx_tick loads it at the peak)
     const Outfit& o = g_outfits[index];
     std::vector<Owned> owned;
     if (!read_owned(self, owned)) {
