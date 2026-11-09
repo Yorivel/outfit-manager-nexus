@@ -17,7 +17,8 @@
 // The game only HIDES the helmet, cloak and weapons in bed, it doesn't unequip them (2026-11-09: no slot changed), so
 // what is worn is read when the bed is seen. The hooks only set flags and post kWmSleep to the game window: its thread
 // is the UI thread, and its messages keep coming while the HUD is hidden (the HUD frame, peek_frame, is the fallback).
-// The sleep's outfit changes play no outfit effect (its timeline runs on HUD frames; the screen is black anyway).
+// The sleep's outfit changes play the outfit effect; its timeline (fx_tick, on HUD frames) is carried by a window timer
+// while the HUD is hidden for the bed's fade (fx_carry).
 //
 // In bed, the looks (looks.cpp, sleep_looks): a sleepwear outfit's own looks win over the game's in-bed hiding (a cloak
 // set to Shown stays shown; Default goes the game's way); any other outfit steps back as in flight.
@@ -33,6 +34,7 @@
 #include <MinHook.h>
 #include <algorithm>
 #include <atomic>
+#include <cstdio>
 #include <cstring>
 #include <random>
 #include <string>
@@ -54,6 +56,7 @@ constexpr U32 kStep[] = {0x00D286FD, 0x2CAC00E9, 0x7D527861, 0x96A64775, 0xEF3C2
 // the scenes a bed / sleeping spot plays when used (sequencer/.../gimmickcalledseq/<name>.*)
 const char* const kBedScenes[] = {"gimmick_sleep_bed_", "gimmick_camp_straw"};
 constexpr U64 kStepWindowMs = 4000; // (the step before the scene: within this)
+constexpr U32 kPlayerIdle = 0x662EC8AD; // (basic_upper s109: the played character's plain idle, taken by his context only)
 constexpr U64 kOutAfterMs = 1500;   // (getting out needs the bed to have lasted: the states around getting in aren't it)
 
 using EvalFn = U32*(__fastcall*)(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64 a7, const U64* link, U64 a9,
@@ -70,6 +73,9 @@ std::atomic<bool> g_fell{false}, g_woke{false};
 std::atomic<U64> g_step_ctx[2] = {0, 0}; // the contexts the game last took over (kStep), and when
 std::atomic<U64> g_step_at{0};
 std::atomic<U64> g_out_at{0}; // (out of bed: when; the scene read again while getting up is no new bed)
+std::atomic<U64> g_player_ctx{0}; // (the context that last took kPlayerIdle: the played character's upper body)
+std::atomic<U64> g_player_ring[8] = {}; // (its last states: target << 32 | the tick's low 32 bits; logged at a bed)
+std::atomic<U32> g_player_ring_at{0};
 
 void post()
 {
@@ -92,6 +98,12 @@ U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64
         if (!r || *r != 0 || !link || !link[0]) return r;
         U32 target = *reinterpret_cast<const U32*>(link[0] + 0x14);
         U64 now = GetTickCount64();
+        if (target == kPlayerIdle) g_player_ctx = ctx;
+        if (ctx == g_player_ctx.load()) {
+            U32 i = g_player_ring_at.load();
+            if (U32(g_player_ring[(i + 7) % 8].load() >> 32) != target)
+                g_player_ring[i % 8] = U64(target) << 32 | U32(now), g_player_ring_at = i + 1;
+        }
         if (std::find(std::begin(kStep), std::end(kStep), target) != std::end(kStep)) {
             if (now - g_step_at.load() > 500) g_step_ctx[0] = ctx, g_step_ctx[1] = 0; // (a new take-over)
             else if (g_step_ctx[0].load() != ctx) g_step_ctx[1] = ctx;              // (the other body half)
@@ -128,9 +140,27 @@ bool __fastcall find_hook(U64 map, U64 key, U64* out_path, std::uint8_t* out_rec
                         if (_strnicmp(g + 17, scene, std::strlen(scene)) == 0) {
                             U64 now = GetTickCount64();
                             if (now - g_out_at.load() < 5000) break; // (getting up)
+                            U64 pc = g_player_ctx.load();
                             bool stepped = now - g_step_at.load() < kStepWindowMs && g_step_ctx[0].load();
-                            if (stepped) into_bed(g_step_ctx[0].load(), g_step_ctx[1].load(), g + 17);
-                            else LOG("sleep: a bed scene read with no character taken over just before: ignored (%s)", g + 17);
+                            if (!pc && !stepped) {
+                                LOG("sleep: a bed scene read before the played character was seen: ignored (%s)", g + 17);
+                                break;
+                            }
+                            { // (the played character's last states, for telling his bed from another's later)
+                                char buf[200];
+                                int len = 0;
+                                U32 at = g_player_ring_at.load();
+                                for (U32 k = 0; k < 8 && len < 180; ++k)
+                                    if (U64 e = g_player_ring[(at + k) % 8].load())
+                                        len += std::snprintf(buf + len, sizeof buf - size_t(len), " %08X(-%u)", U32(e >> 32),
+                                                             U32(now) - U32(e));
+                                buf[len] = 0;
+                                LOG("sleep: bed scene %s; the character's last states:%s%s", g + 17, buf,
+                                    stepped ? " (taken over just before)" : "");
+                            }
+                            U64 c1 = stepped ? g_step_ctx[0].load() : 0;
+                            if (c1 == pc) c1 = stepped ? g_step_ctx[1].load() : 0;
+                            into_bed(pc ? pc : g_step_ctx[0].load(), c1, g + 17);
                             break;
                         }
         }
@@ -189,6 +219,17 @@ void update_look_mode()
     }
 }
 
+// The outfit effect's timeline (fx_tick) runs on HUD frames, and the HUD hides for the bed's fade: while an effect the
+// sleep started plays, a window timer on the same (UI) thread carries it on frames the HUD misses.
+constexpr UINT_PTR kFxTimer = 0x51EE;
+U64 g_hud_at = 0; // (the last HUD frame)
+
+void fx_carry()
+{
+    if (!fx_transition_busy()) return;
+    if (HWND w = g_game_hwnd.load()) SetTimer(w, kFxTimer, 15, nullptr);
+}
+
 void fell_asleep(U64 self)
 {
     g_asleep = true;
@@ -217,9 +258,8 @@ void fell_asleep(U64 self)
     U32 pick = wear[std::uniform_int_distribution<size_t>(0, wear.size() - 1)(rng)];
     LOG("sleep: putting on \"%s\"%s", g_outfits[pick].name.c_str(), wear.size() > 1 ? " (picked at random)" : "");
     g_swapped = true;
-    g_load_plain = true; // (in the dark: no effect, which would wait for the hidden HUD's frames)
     start_loading(self, pick);
-    g_load_plain = false;
+    fx_carry();
 }
 
 void woke_up(U64 self)
@@ -241,9 +281,8 @@ void woke_up(U64 self)
             if (g_outfits[i].name == g_before_name && !g_outfits[i].temp) back = int(i);
     if (back >= 0) {
         LOG("sleep: awake; \"%s\" goes back on", g_outfits[size_t(back)].name.c_str());
-        g_load_plain = true; // (the sleep's changes never play the outfit effect, either way)
         start_loading(self, U32(back));
-        g_load_plain = false;
+        fx_carry();
     } else if (g_have_items) {
         // (the pieces as a temporary outfit: loaded like any other, never saved, removed once it is on)
         Outfit t = g_before_items;
@@ -253,9 +292,8 @@ void woke_up(U64 self)
         g_outfits.push_back(t);
         g_temp_loading = true;
         LOG("sleep: awake; the %zu pieces worn before go back on", t.items.size());
-        g_load_plain = true; // (the sleep's changes never play the outfit effect, either way)
         start_loading(self, U32(g_outfits.size() - 1));
-        g_load_plain = false;
+        fx_carry();
     } else {
         LOG("sleep: awake; the outfit worn before (\"%s\") is gone: nothing given back", g_before_name.c_str());
     }
@@ -306,6 +344,7 @@ void sleep_install()
 void sleep_tick(U64 self)
 {
     g_sleep_self = self;
+    g_hud_at = GetTickCount64();
     if (g_fell.exchange(false) && !g_asleep) fell_asleep(self);
     if (g_woke.exchange(false) && g_asleep) woke_up(self);
     drop_temp();
@@ -324,6 +363,18 @@ bool sleep_message()
         if (g_fell.load() || g_woke.load()) LOG("sleep: handled from the window message");
         sleep_tick(g_sleep_self);
     }
+    return true;
+}
+
+// WM_TIMER on the game window: kFxTimer carries the sleep's outfit effect while the HUD frames are away. True: ours.
+bool sleep_fx_timer(WPARAM id)
+{
+    if (id != kFxTimer) return false;
+    if (!g_ui_thread || GetCurrentThreadId() != g_ui_thread || !fx_transition_busy()) {
+        if (HWND w = g_game_hwnd.load()) KillTimer(w, kFxTimer);
+        return true;
+    }
+    if (g_sleep_self && GetTickCount64() - g_hud_at > 40) fx_tick(g_sleep_self); // (the HUD away: the timer's frame)
     return true;
 }
 

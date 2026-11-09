@@ -15,7 +15,6 @@ std::string slot_list(const Outfit& o, const std::vector<U16>& slots);
 std::string piece_label(const Outfit& o, U16 slot);
 void finish_load(U64 self, AskedLoad& p);
 void start_loading(U64 self, U32 index);
-extern bool g_load_plain; // (start_loading without the outfit effect)
 void pump_async(U64 self);
 void prepare_outfits();
 
