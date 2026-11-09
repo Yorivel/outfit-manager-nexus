@@ -200,6 +200,8 @@ bool g_have_items = false;
 bool g_temp_loading = false;   // the pieces worn before are going back on, as a temporary outfit (removed after)
 std::string g_before_name;     // (the outfit worn before, found again by name: the list may change while asleep)
 U16 g_sleep_char = kNoCharacter;
+bool g_before_let_go = false;  // ("No outfit" was on before the sleep (Unequip Outfit, #21): it comes back on waking)
+int g_before_let_go_of = -1;   // (its g_unmanaged value: the outfit let go)
 
 int worn_index()
 {
@@ -240,7 +242,13 @@ void fell_asleep(U64 self)
     for (size_t i = 0; i < g_outfits.size(); ++i)
         if (g_outfits[i].activity == kActivitySleep && !g_outfits[i].temp && !is_weapon_set(g_outfits[i])) wear.push_back(U32(i));
     int worn = find_worn_outfit(self);
-    LOG("sleep: asleep (character %u, %zu sleepwear outfit(s), worn outfit %d)", g_character, wear.size(), worn);
+    g_before_let_go = false;
+    if (auto u = g_unmanaged.find(g_character); u != g_unmanaged.end()) { // ("No outfit": the pieces, not an outfit)
+        g_before_let_go = true, g_before_let_go_of = u->second;
+        worn = -1;
+    }
+    LOG("sleep: asleep (character %u, %zu sleepwear outfit(s), worn outfit %d%s)", g_character, wear.size(), worn,
+        g_before_let_go ? ", No outfit" : "");
     if (wear.empty()) return; // (the looks step back; nothing to change)
     if (worn >= 0 && g_outfits[size_t(worn)].activity == kActivitySleep) {
         LOG("sleep: \"%s\" is sleepwear already: kept", g_outfits[size_t(worn)].name.c_str());
@@ -308,6 +316,7 @@ void drop_temp()
     for (size_t i = g_outfits.size(); i-- > 0;)
         if (g_outfits[i].temp) was_worn |= g_outfits[i].worn, g_outfits.erase(g_outfits.begin() + std::ptrdiff_t(i));
     if (was_worn) mark_worn(-1); // (what is worn is no outfit again, as before the sleep)
+    if (g_before_let_go) g_unmanaged[g_sleep_char] = g_before_let_go_of, g_before_let_go = false; // ("No outfit" again)
     LOG("sleep: the pieces worn before are back on");
 }
 
