@@ -88,7 +88,7 @@ void write_lists(std::string& out, const Store& s)
                 if (!o.weapon_icon.empty()) put(out, "weaponicon\t%s\n", o.weapon_icon.c_str());
                 if (o.climate) put(out, "climate\t%u\n", o.climate);
                 if (o.stash) put(out, "stash\t%u\n", o.stash);
-                if (o.sleepwear) put(out, "sleepwear\t1\n");
+                if (o.activity) put(out, "activity\t%u\n", o.activity);
                 if (o.hk_vk) put(out, "hotkey\t%u\t%u\n", o.hk_vk, o.hk_mods);
                 if (o.worn) put(out, "worn\t1\n");
                 if (o.back_look) put(out, "backlook\t%u\n", o.back_look);
@@ -369,8 +369,9 @@ void load_outfits()
                 list.back().has_weapons = true;
                 list.back().load_weapons = v[1] != "0";
                 list.back().weapons_only = v[1] == "2";
-            } else if (!list.empty() && v[0] == "sleepwear" && v.size() >= 2) {
-                list.back().sleepwear = v[1] == "1";
+            } else if (!list.empty() && (v[0] == "activity" || v[0] == "sleepwear") && v.size() >= 2) {
+                unsigned x = static_cast<unsigned>(std::strtoul(v[1].c_str(), nullptr, 10));
+                if (x < kActivityCount) list.back().activity = static_cast<std::uint8_t>(x); // (sleepwear 1 = Sleeping)
             } else if (!list.empty() && v[0] == "weaponicon" && v.size() >= 2) {
                 list.back().weapon_icon = v[1];
             } else if (!list.empty() && v[0] == "stash" && v.size() >= 2) {

@@ -135,9 +135,10 @@ struct Outfit {
     std::string weapon_icon; // (the main weapon's icon, for a weapon set's picture: set when saved / loaded)
     std::uint8_t climate = 0; // Conditions: 0 Auto (from its resistance), 1 Cold, 2 Heat (manual), 3 Off (a badge only)
     std::uint8_t stash = 0;   // Conditions: Stash, 0 = the global setting, 1 on, 2 off
-    // Sleepwear (2026-11-09): put on when the character goes to sleep (several: one at random), the outfit or items
-    // worn before back on waking; its own looks win over the game's in-bed hiding (sleep.cpp).
-    bool sleepwear = false;
+    // Activity (2026-11-09): what the outfit is worn for, put on when the character starts it (several: one at random),
+    // the outfit or items worn before back when it ends. kActivitySleep: in bed (sleep.cpp); its own looks win over the
+    // game's in-bed hiding. (The first build's "Sleepwear: On" reads as Sleeping.)
+    std::uint8_t activity = 0; // kActivityNone / kActivitySleep
     // A temporary outfit (sleep.cpp: the pieces worn before a sleep, going back on): loaded like any other, never saved.
     bool temp = false;
     // Its hotkey (the outfit's settings, 2026-11-06): a key or mouse button (virtual-key code; 0 = none) and the
@@ -157,6 +158,7 @@ struct Outfit {
     // Looks of the slots the outfit holds nothing in (a look belongs to the slot: it applies to whatever is worn there).
     std::map<U16, std::uint8_t> empty_looks;
 };
+constexpr std::uint8_t kActivityNone = 0, kActivitySleep = 1, kActivityCount = 2;
 constexpr U16 kBackShieldSlot = 23;
 constexpr U32 kMaxWeaponSlots = 16;
 constexpr U32 kWornMax = kOutfitSlots + kMaxWeaponSlots; // worn entries: armour, then weapons
@@ -407,7 +409,7 @@ enum Confirm { kConfirmNone, kConfirmOverwrite, kConfirmDelete, kConfirmSwap, kC
 enum CfgKind : std::uint8_t {
     kCfgVisibility, kCfgClimate, kCfgWeapons, kCfgStash, kCfgPosition, kCfgRename, kCfgOverwrite, kCfgDelete, // a saved outfit's
     kCfgGStash, kCfgParty, kCfgMessages, kCfgClear, kCfgUninstall,                               // the "+" slot's
-    kCfgBack, kCfgLanguage, kCfgPeekKey, kCfgPeekPad, kCfgHotkey, kCfgEffects, kCfgSleepwear
+    kCfgBack, kCfgLanguage, kCfgPeekKey, kCfgPeekPad, kCfgHotkey, kCfgEffects, kCfgActivity
 };
 
 // Every move gives the piece a new uid. The stash knows what it moved, so it follows each piece exactly: the copy of its

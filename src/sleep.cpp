@@ -1,4 +1,4 @@
-// Sleepwear (2026-11-09; keksdieb101's idea on Nexus): when the character goes to sleep, a sleepwear outfit goes on
+// Activity: Sleeping (2026-11-09; keksdieb101's idea on Nexus): when the character goes to sleep, a sleepwear outfit goes on
 // (several: one at random); on waking, the outfit worn before comes back, or, when none was, the pieces worn before.
 //
 // Seen through the game's action charts: the branch evaluator (kRvaBranchEval) is hooked and every taken branch
@@ -91,7 +91,7 @@ int worn_index()
 void update_look_mode()
 {
     int w = worn_index();
-    int mode = !g_asleep ? 0 : (w >= 0 && g_outfits[size_t(w)].sleepwear && !g_outfits[size_t(w)].temp) ? 2 : 1;
+    int mode = !g_asleep ? 0 : (w >= 0 && g_outfits[size_t(w)].activity == kActivitySleep && !g_outfits[size_t(w)].temp) ? 2 : 1;
     if (mode != g_sleep_look.load()) {
         g_sleep_look = mode;
         LOG("sleep: looks %s", mode == 0 ? "as usual" : mode == 1 ? "left to the game's in-bed hiding" : "the sleepwear outfit's own");
@@ -107,11 +107,11 @@ void fell_asleep(U64 self)
     g_sleep_char = g_character;
     std::vector<U32> wear;
     for (size_t i = 0; i < g_outfits.size(); ++i)
-        if (g_outfits[i].sleepwear && !g_outfits[i].temp && !is_weapon_set(g_outfits[i])) wear.push_back(U32(i));
+        if (g_outfits[i].activity == kActivitySleep && !g_outfits[i].temp && !is_weapon_set(g_outfits[i])) wear.push_back(U32(i));
     int worn = find_worn_outfit(self);
     LOG("sleep: asleep (character %u, %zu sleepwear outfit(s), worn outfit %d)", g_character, wear.size(), worn);
     if (wear.empty()) return; // (the looks step back; nothing to change)
-    if (worn >= 0 && g_outfits[size_t(worn)].sleepwear) {
+    if (worn >= 0 && g_outfits[size_t(worn)].activity == kActivitySleep) {
         LOG("sleep: \"%s\" is sleepwear already: kept", g_outfits[size_t(worn)].name.c_str());
         return;
     }
