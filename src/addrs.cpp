@@ -177,6 +177,7 @@ U64 kRvaCursorSlot51 = 0x11d1080;    // RadialCursor slots 51, 199, 215
 U64 kRvaCursorSlot199 = 0x11d1d10;
 U64 kRvaCursorSlot215 = 0x11d1020;
 U64 kRvaSlotScript164 = 0x10b74b0;    // EquipmentItemQuickSlot slots 164, 166, 178, 185, 35
+U64 kRvaBranchEval = 0x251fbe0;       // action chart branch evaluator: (ctx, out result, ..., link) - sleep (sleep.cpp)
 U64 kRvaSlotScript166 = 0x10b9f50;
 U64 kRvaSlotScript178 = 0x10b95c0;
 U64 kRvaSlotScript185 = 0x10b60a0;

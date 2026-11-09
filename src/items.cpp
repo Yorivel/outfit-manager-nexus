@@ -205,6 +205,7 @@ void outfit_resistance(const Outfit& o, int& ice, int& fire)
 // or the manual Cold / Heat (plain), or none.
 const char* climate_badge(const Outfit& o)
 {
+    if (o.sleepwear) return "om-sleep-c"; // (sleepwear: the bed, in the thermometer's spot)
     if (o.climate == 1) return "om-cold-c";
     if (o.climate == 2) return "om-heat-c";
     if (o.climate == 3) return nullptr;

@@ -14,6 +14,8 @@
 
 namespace om {
 
+int sleep_looks(); // (sleep.cpp)
+
 VisSetFn g_vis_set = nullptr;
 VisReleaseFn g_vis_release = nullptr;
 BattleVisFn g_battle_vis_orig = nullptr;
@@ -369,6 +371,10 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
     g_look_model_inv[model] = inv;
     std::map<U16, int>& applied = g_look_applied[inv]; // slot (a case: slot | 0x100) -> handle
     bool flying = g_flying.count(inv) && g_flying[inv];
+    // (asleep, sleep.cpp: any outfit but a sleepwear one steps back as in flight; a sleepwear outfit's looks win over the
+    // game's in-bed hiding - its game_hides yield is skipped)
+    const int sleep = inv == player_inventory() ? sleep_looks() : 0;
+    if (sleep == 1) flying = true;
     // (the weapon slots come from the Weapons wheel's record: read here too, the load screen comes before any wheel)
     if (!g_weapon_slot_count && g_qsi_get) collect_weapon_slots();
     U64 list = rp(inv + kOffInvEquipList);
@@ -544,7 +550,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
                 continue;
             }
         }
-        int by = flying ? -1 : game_hides(model, h, look_part(model, h));
+        int by = flying || sleep == 2 ? -1 : game_hides(model, h, look_part(model, h));
         if ((shown || drawn) && (flying || by >= 0)) { // (the game's mechanics win; released below)
             state += flying ? " left to the game (flight)" : " left to the game (its layer " + std::to_string(by) + " hides it)";
             continue;

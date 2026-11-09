@@ -460,7 +460,8 @@ void apply_outfit_slots(U64 self, U32 only)
             if (saved && !set && mode == kModeMain) // (a weapon set has no looks, #27)
                 for (U16 s = 0; s < 32; ++s) looks |= slot_look(g_outfits[slot_outfit(i)], s) != kLookDefault;
             if (saved && !set && mode == kModeMain) looks |= g_outfits[slot_outfit(i)].underwear_look != kLookDefault;
-            bool climate = want && (!std::strncmp(want, "om-cold", 7) || !std::strncmp(want, "om-heat", 7));
+            bool climate = want && (!std::strncmp(want, "om-cold", 7) || !std::strncmp(want, "om-heat", 7) ||
+                                    !std::strcmp(want, "om-sleep-c"));
             bool stacked = looks && climate;
             badge_ok &= set_class(mark, "self-center", true);
             badge_ok &= set_class(mark, "om-eye-c", looks && !stacked);

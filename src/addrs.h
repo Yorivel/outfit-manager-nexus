@@ -133,6 +133,7 @@ extern U64 kRvaBodyVt;
 extern U64 kRvaEquipSlotVt;
 extern U64 kRvaHudVt;
 extern U64 kRvaSlotScript164;
+extern U64 kRvaBranchEval;
 extern U64 kRvaSlotScript181;
 extern U64 kRvaSlotScript182;
 extern U64 kRvaEquipRequest;

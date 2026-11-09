@@ -25,6 +25,8 @@
 /* Resistance Lv. 15+ (immune to Freeze / Burn): the "phase" thermometers. */
 .self-center.om-cold2-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(cd_icon_temperature_freeze_phase_00); }
 .self-center.om-heat2-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(cd_icon_temperature_burn_phase_00); }
+/* Sleepwear (2026-11-09): the game's housing bed, white, in the thermometer's spot (a sleepwear outfit shows it instead). */
+.self-center.om-sleep-c { display: block; opacity: 1; left: 50%; top: 50%; width: 28px; height: 28px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(cd_uitexture_tab_icon_housing_Bed); }
 /* Appearance. om-eye-c: the eye (badge spot): the eye scroll mode on the occupancy-chain element, and the marker of a
    saved outfit with looks set (main mode) on its charge-count wrap (a second badge element, given self-center by the
    plugin); om-eye2-c: that marker above the climate thermometer (same centre as the badges, one badge up). In the

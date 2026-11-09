@@ -209,6 +209,7 @@ void peek_draw(U64 self)
         if (!std::strcmp(c, "om-cold2-c")) return "cd_icon_temperature_freeze_phase_00";
         if (!std::strcmp(c, "om-heat-c")) return "cd_icon_temperature_burn_00";
         if (!std::strcmp(c, "om-heat2-c")) return "cd_icon_temperature_burn_phase_00";
+        if (!std::strcmp(c, "om-sleep-c")) return "cd_uitexture_tab_icon_housing_Bed";
         return nullptr;
     };
     for (int k = 0; k < 5; ++k) {
@@ -520,8 +521,11 @@ void peek_ride_place()
     }
 }
 
+void sleep_tick(U64 self); // (sleep.cpp)
+
 void peek_frame(U64 self)
 {
+    sleep_tick(self); // (a sleep begun or ended: the sleepwear goes on / what was worn comes back)
     U64 root = rp(self + 8);
     if (root != g_peek_root) { // (first frame, or the screen was made again: a load)
         g_peek_root = root, g_peek = Peek{};

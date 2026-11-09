@@ -88,6 +88,7 @@ void write_lists(std::string& out, const Store& s)
                 if (!o.weapon_icon.empty()) put(out, "weaponicon\t%s\n", o.weapon_icon.c_str());
                 if (o.climate) put(out, "climate\t%u\n", o.climate);
                 if (o.stash) put(out, "stash\t%u\n", o.stash);
+                if (o.sleepwear) put(out, "sleepwear\t1\n");
                 if (o.hk_vk) put(out, "hotkey\t%u\t%u\n", o.hk_vk, o.hk_mods);
                 if (o.worn) put(out, "worn\t1\n");
                 if (o.back_look) put(out, "backlook\t%u\n", o.back_look);
@@ -204,7 +205,12 @@ void save_outfits()
         LOG("outfit change dropped: a save was loaded meanwhile");
         return;
     }
-    store_for(g_character).outfits = g_outfits;
+    { // (temporary outfits are never saved: sleep.cpp)
+        std::vector<Outfit>& kept = store_for(g_character).outfits;
+        kept.clear();
+        for (const Outfit& o : g_outfits)
+            if (!o.temp) kept.push_back(o);
+    }
     g_published = g_store;
     publish_looks(g_store);
     bool ok = write_store_file();
@@ -363,6 +369,8 @@ void load_outfits()
                 list.back().has_weapons = true;
                 list.back().load_weapons = v[1] != "0";
                 list.back().weapons_only = v[1] == "2";
+            } else if (!list.empty() && v[0] == "sleepwear" && v.size() >= 2) {
+                list.back().sleepwear = v[1] == "1";
             } else if (!list.empty() && v[0] == "weaponicon" && v.size() >= 2) {
                 list.back().weapon_icon = v[1];
             } else if (!list.empty() && v[0] == "stash" && v.size() >= 2) {

@@ -114,8 +114,8 @@ std::vector<std::uint8_t> cfg_entries()
     if (size_t(g_cfg) < g_outfits.size()) {
         if (is_weapon_set(g_outfits[size_t(g_cfg)])) // (a weapon set: no looks, climate or stash, #27)
             return {kCfgWeapons, kCfgHotkey, kCfgPosition, kCfgRename, kCfgOverwrite, kCfgDelete, kCfgBack};
-        return {kCfgVisibility, kCfgClimate, kCfgWeapons, kCfgStash, kCfgHotkey, kCfgPosition, kCfgRename, kCfgOverwrite,
-                kCfgDelete, kCfgBack};
+        return {kCfgVisibility, kCfgClimate, kCfgSleepwear, kCfgWeapons, kCfgStash, kCfgHotkey, kCfgPosition, kCfgRename,
+                kCfgOverwrite, kCfgDelete, kCfgBack};
     }
     // (the Outfit Arc's binding for the input in use: the key, or the pad's; pump re-shows the page when it changes)
     return {kCfgGStash, kCfgParty, kCfgMessages, kCfgEffects, kCfgLanguage, g_pad_in_use ? kCfgPeekPad : kCfgPeekKey,
@@ -128,8 +128,9 @@ const char* cfg_name(std::uint8_t k)
                                     "setting.position",   "setting.rename",  "setting.overwrite", "setting.delete",
                                     "setting.stash",      "setting.party",   "setting.messages", "setting.clear",
                                     "setting.uninstall",  "setting.back",    "setting.language", "setting.peekkey",
-                                    "setting.peekpad",    "setting.hotkey",    "setting.effects"};
-    return k <= kCfgEffects ? lang::t(n[k]) : "";
+                                    "setting.peekpad",    "setting.hotkey",    "setting.effects",
+                                    "setting.sleepwear"};
+    return k <= kCfgSleepwear ? lang::t(n[k]) : "";
 }
 
 // A text that stays where it is (the settings' values are kept as pointers between refreshes: a reused std::string's
@@ -162,6 +163,10 @@ std::vector<const char*> cfg_values(std::uint8_t k, U32& cur)
         if (k == kCfgStash) {
             cur = o.stash % 3;
             return {"value.default", "value.on", "value.off"};
+        }
+        if (k == kCfgSleepwear) {
+            cur = o.sleepwear ? 1 : 0;
+            return {"value.off", "value.on"};
         }
         if (k == kCfgHotkey) { // (one value: the hotkey, or the wait for one)
             bool waiting = g_peek_capture && g_capture_outfit == g_cfg;
@@ -222,6 +227,7 @@ std::string cfg_description(std::uint8_t k)
         if (k == kCfgClimate) t = entry_text(kPageConditions, 3);
         else if (k == kCfgWeapons) t = entry_text(kPageConditions, 0);
         else if (k == kCfgStash) t = entry_text(kPageConditions, 1);
+        else if (k == kCfgSleepwear) t.second = lang::t(g_outfits[size_t(g_cfg)].sleepwear ? "desc.sleepwear.on" : "desc.sleepwear.off");
         else if (k == kCfgRename) t = entry_text(kPageOutfit, 0);
         else if (k == kCfgOverwrite)
             t.second = lang::t(g_overwrite_reset ? "desc.overwrite.reset" : "desc.overwrite.keep");
@@ -324,6 +330,8 @@ void cfg_scroll(U64 self, U32 i, int step)
             if (o.weapons_only && o.worn) mark_worn(-1); // (a weapon set is never the applied outfit)
         } else if (e[k] == kCfgStash) {
             o.stash = static_cast<std::uint8_t>(to);
+        } else if (e[k] == kCfgSleepwear) {
+            o.sleepwear = to == 1;
         }
         LOG("settings \"%s\": %s -> %s", o.name.c_str(), cfg_name(e[k]), v[to]);
     } else {
