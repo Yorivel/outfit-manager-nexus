@@ -30,11 +30,10 @@
 //   it is held. Not known: whether it burns when a save is loaded (until it is lit or put out once).
 // With Unequip Outfit (no looks) nothing is changed.
 //
-// Whose sounds: every character has a sound object of its own, numbered from 100001 in the order they came (Kliff
-// 100001; Damiane 100002; Oongka 100004 in one session, 100005 in another). The played one's is the object at the
-// played actor's place: the actor's component (+0x40, the node the model holder hangs from too) keeps its position
-// as 3 floats at +0x168 - found by searching the actor's memory for the objects' positions, the same place for
-// Damiane and Oongka. The objects' positions come from Wwise's SetPosition (doubles, metres).
+// Whose sounds: every character has a sound object of its own, numbered from 100001 as objects register (the numbers
+// differ per session and per save load). The played one's is read the way the game finds it when it sets the
+// character's armorkey: actor -> component -> its effects -> its sound component -> sound handle -> number
+// (player_object; found by following the game's call chain from the switch back to the gear change, 2026-11-11).
 #include "om.h"
 #include "addrs.h"
 #include "game.h"
@@ -44,10 +43,12 @@
 #include "looks.h"
 #include "log.h"
 #include <MinHook.h>
+#include <intrin.h>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstring>
+#include <map>
 #include <utility>
 #include <vector>
 #include <string>
@@ -57,8 +58,9 @@ namespace om {
 namespace {
 
 constexpr U64 kUiObj = 2, kPoolFirst = 0x61A80, kPartyFirst = 100001;
-constexpr U32 kPoolSize = 256, kPartySize = 32; // (the characters' objects: the first numbers)
-constexpr U32 kNearSize = 1024; // (objects from 100001 whose positions are kept: the characters', their lanterns')
+constexpr U32 kPoolSize = 256;
+// (objects from 100001: the characters' - numbered on as they spawn, also across save loads - and others')
+constexpr U32 kPartySize = 1u << 14;
 constexpr U32 kEvArmorLoop = 0x34F371D9, kEvShield = 0x74C41A56, kEvPlateShoe = 0x554A8706, kEvCollideMetal = 0x0D27F39D,
               kEvEquipA = 0x2361D7A5, kEvEquipB = 0xB074E90E;
 constexpr U32 kEvLanternLit = 0x3A0056B4 /* sfx_move_lantern_fire_engage */, kEvLanternLit2 = 0xC4286E38 /* sfx_lantern_fire_engage */,
@@ -69,9 +71,11 @@ constexpr U32 kSwCollideType = 0x29235BB9, kSwFootstep = 0x6F394B77;
 constexpr U16 kShieldSlot = 13, kBootsSlot = 6;
 constexpr U16 kArmourSlots[] = {3, kChestSlot, 5, kBootsSlot, 16}; // helm, chest, gloves, boots, cloak
 constexpr U32 kOffItemMaterial = 0x4C;                             // (ItemInfo: its MaterialMatchInfo key, u16)
-constexpr U32 kOffCompNode = 0x40, kOffNodePos = 0x168;            // (the actor's component -> node -> position, 3 floats)
+constexpr U32 kOffCompEffects = 0x60, kOffEffectsSound = 0x18, kOffSoundHandle = 0x70, kOffHandleObject = 0x18; // (player_object)
 constexpr double kOwnReach = 1.5; // (m: his own gear's collisions were 0.3 - 1.1 from his object)
-constexpr double kLanternReach = 2.5; // (m: the played character's lantern - on the hip or in the hand - from his object)
+constexpr U32 kOffCompLantern = 0x50, kOffLanternLit = 0x18C; // (the actor's component -> ... -> lit: 1 / out: 0)
+constexpr U32 kOffLanternNear = 0x19C; // (... -> 1 while a memory fragment is in range, +0x190 the fragment; +0x198 blinks
+                                       //  with its alert every ~15-20 s - TO CONFIRM that it clears when leaving)
 
 using PostFn = U32(__fastcall*)(U32 id, U64 go, U32 flags, void* cb, void* cookie, U32 n, void* ext, U32 playing);
 using SwitchFn = U32(__fastcall*)(U32 group, U32 state, U64 go);
@@ -84,16 +88,15 @@ ActionFn g_action = nullptr;
 
 std::atomic<U64> g_player_obj{0};                 // (the played character's sound object; 0: not known)
 double g_pool_pos[kPoolSize][3];                  // (written on the game's threads, read on them: plain values)
-double g_party_pos[kNearSize][3];
+double g_party_pos[kPartySize][3];
 bool g_pool_gear[kPoolSize];                      // (the emitter's last collidetype wasn't footstep)
 // each character object: what the game last set, and what is set now
 struct Party { std::atomic<U32> armor{0}, shoe{0}, armor_applied{0}, shoe_applied{0}; };
 Party g_party[kPartySize];
 // from the HUD frame (sound_tick), for the hooks
 std::atomic<bool> g_chest_hidden{false}, g_boots_hidden{false}, g_shield_hidden{false}, g_metal_hidden{false};
-// the played character's lantern: burning, and its own sound object (0: not seen yet)
+// the played character's lantern burns (read in sound_tick)
 std::atomic<bool> g_lantern_lit{false};
-std::atomic<U64> g_lantern_obj{0};
 
 // (UI thread) a material key -> the switch value the game gave a chest (armorkey) or boots (material_game) of it
 struct Learned { U16 material; U32 sound; };
@@ -124,25 +127,6 @@ void stop_event(U32 event, U64 go)
     if (g_action) g_action(event, 0 /* stop */, go, 100, 4 /* linear */, 0);
 }
 
-// (the lantern's sounds, on the lantern's own object - lit / put out, from its wheel or in the world alike: the played
-// character's when that object is at his)
-void lantern_event(U32 id, U64 go)
-{
-    const bool lit = id == kEvLanternLit || id == kEvLanternLit2, out = id == kEvLanternOff || id == kEvLanternBlow;
-    if (!lit && !out) return;
-    const U64 player = g_player_obj.load();
-    if (go != g_lantern_obj.load()) {
-        if (!player || go - kPartyFirst >= kNearSize) return;
-        const double* a = g_party_pos[go - kPartyFirst];
-        const double* b = g_party_pos[player - kPartyFirst];
-        double d2 = 0;
-        for (int k = 0; k < 3; ++k) d2 += (a[k] - b[k]) * (a[k] - b[k]);
-        if ((a[0] == 0 && a[1] == 0 && a[2] == 0) || d2 > kLanternReach * kLanternReach) return; // (another's)
-        g_lantern_obj = go;
-    }
-    g_lantern_lit = lit;
-}
-
 bool muted(U32 id, U64 go)
 {
     const U64 player = g_player_obj.load();
@@ -164,7 +148,6 @@ bool muted(U32 id, U64 go)
 
 U32 __fastcall post_hook(U32 id, U64 go, U32 flags, void* cb, void* cookie, U32 n, void* ext, U32 playing)
 {
-    lantern_event(id, go);
     if (muted(id, go)) return 0; // (AK_INVALID_PLAYING_ID: not played)
     if (id == kEvArmorLoop && go && go == g_player_obj.load()) stop_event(id, go); // (ours, or an older one of the game's)
     return g_post(id, go, flags, cb, cookie, n, ext, playing);
@@ -194,7 +177,7 @@ U32 __fastcall setpos_hook(U64 go, const void* xform, U32 flags)
 {
     if (xform) {
         if (go - kPoolFirst < kPoolSize) std::memcpy(g_pool_pos[go - kPoolFirst], static_cast<const char*>(xform) + 24, 24);
-        else if (go - kPartyFirst < kNearSize) std::memcpy(g_party_pos[go - kPartyFirst], static_cast<const char*>(xform) + 24, 24);
+        else if (go - kPartyFirst < kPartySize) std::memcpy(g_party_pos[go - kPartyFirst], static_cast<const char*>(xform) + 24, 24);
     }
     return g_setpos(go, xform, flags);
 }
@@ -217,36 +200,21 @@ U16 worn_material(U64 list, U16 slot)
     return material;
 }
 
-// (UI thread) how far a character object is from the played actor: the largest difference of the coordinates, compared
-// by size (the game's and Wwise's axes may be ordered / signed differently). 1e9: no position.
-double distance_to_player(U32 i, const float* at)
-{
-    const double* p = g_party_pos[i];
-    if (p[0] == 0 && p[1] == 0 && p[2] == 0) return 1e9;
-    double x[3] = {std::fabs(double(at[0])), std::fabs(double(at[1])), std::fabs(double(at[2]))};
-    double y[3] = {std::fabs(p[0]), std::fabs(p[1]), std::fabs(p[2])};
-    std::sort(x, x + 3), std::sort(y, y + 3);
-    return std::max({std::fabs(x[0] - y[0]), std::fabs(x[1] - y[1]), std::fabs(x[2] - y[2])});
-}
-
-// (UI thread) the played character's sound object: the one at the played actor's place. Kept while it stays close (two
-// characters can stand side by side); 0 while none is.
-U64 find_player_object(U64 current)
+// (UI thread) the played character's sound object, as the game finds it when it sets the character's armorkey (its
+// gear-change code, +B8A1D0 from +A8A736, game 2026-11-06): actor +0x68 -> +0x60 -> +0x18 (the character's sound
+// component) -> +0x70 (its sound handle) -> +0x18 the object's number. 0: not there.
+U64 player_object()
 {
     U64 ctx[4] = {};
     U64 actor = acquire_player(ctx);
     U64 comp = actor ? rp(actor + kOffActorComp) : 0;
-    U64 node = comp ? rp(comp + kOffCompNode) : 0;
-    float at[3] = {};
-    const bool ok = node && rd(node + kOffNodePos, at[0]) && rd(node + kOffNodePos + 4, at[1]) && rd(node + kOffNodePos + 8, at[2]);
+    U64 fx = comp ? rp(comp + kOffCompEffects) : 0;
+    U64 snd = fx ? rp(fx + kOffEffectsSound) : 0;
+    U64 handle = snd ? rp(snd + kOffSoundHandle) : 0;
+    U32 id = 0;
+    const bool ok = handle && rd(handle + kOffHandleObject, id);
     if (ctx[0]) release_player(ctx);
-    if (!ok || (at[0] == 0 && at[1] == 0 && at[2] == 0)) return current;
-    if (current && distance_to_player(U32(current - kPartyFirst), at) < 2.5) return current;
-    U32 best = kPartySize;
-    double best_d = 1.5;
-    for (U32 i = 0; i < kPartySize; ++i)
-        if (double d = distance_to_player(i, at); d < best_d) best_d = d, best = i;
-    return best < kPartySize ? kPartyFirst + best : 0;
+    return ok && id - kPartyFirst < kPartySize ? id : 0;
 }
 
 // (UI thread) the switches of a character's object as the game has them: when it stops being the played one
@@ -265,6 +233,7 @@ void give_back(U64 obj)
 } // namespace
 
 bool lantern_lit() { return g_lantern_lit.load(); }
+
 
 
 
@@ -295,12 +264,55 @@ void sound_tick()
     const U64 now = GetTickCount64();
     const U16 ch = current_character();
 
-    { // the lantern: lit or put out since - the looks again (a hidden lantern shows while it burns); another character
-      // played: theirs isn't known to burn
+    { // the lantern: burning, read from the played character (component +0x50 -> +0x18C: 1 lit, 0 out - compared over
+      // three lit and three out, 2026-11-11); changed: the looks again (a hidden lantern shows while it burns)
         static bool was_lit = false;
-        static U16 lantern_ch = kNoCharacter;
-        if (ch != lantern_ch) lantern_ch = ch, g_lantern_lit = false, g_lantern_obj = 0;
-        if (const bool lit = g_lantern_lit.load(); lit != was_lit) {
+        U64 ctx[4] = {};
+        U64 actor = acquire_player(ctx);
+        U64 comp = actor ? rp(actor + kOffActorComp) : 0;
+        U64 holder = comp ? rp(comp + kOffCompLantern) : 0;
+        U32 v = 0;
+        const bool burns = holder && rd(holder + kOffLanternLit, v) && v == 1;
+        U32 nv = 0;
+        const bool near_fragment = holder && rd(holder + kOffLanternNear, nv) && nv == 1;
+        const bool lit = burns; // (near a memory fragment: not known yet - +0x19C stays set after leaving, +0x198 only blinks)
+        { // DIAG: both, as they change
+            static int was_b = -1, was_n = -1;
+            if (int(burns) != was_b || int(near_fragment) != was_n)
+                LOG("DIAG lantern: burns %d, near a fragment %d (raw %X)", int(burns), int(near_fragment), nv), was_b = burns, was_n = near_fragment;
+        }
+        { // DIAG (2026-11-11): the values around it as they change (the memory fragment glow, lantern lit or not)
+            static U32 last[3][0x80] = {};
+            static bool seen[3][0x80] = {};
+            static std::uint8_t churn[3][0x80] = {};
+            static U64 next = 0;
+            const U64 t = GetTickCount64();
+            if (comp && t >= next) {
+                next = t + 250;
+                const U32 offs[3] = {0x50, 0x38, 0xF0};
+                std::string ch;
+                for (int r = 0; r < 3; ++r) {
+                    U64 base = rp(comp + offs[r]);
+                    for (U32 w = 0; base && w < 0x80 && ch.size() < 700; ++w) {
+                        U32 x = 0;
+                        if (!rd(base + w * 4, x) || (seen[r][w] && x == last[r][w])) continue;
+                        const U32 was = last[r][w];
+                        const bool first = !seen[r][w];
+                        last[r][w] = x, seen[r][w] = true;
+                        if (first) continue;
+                        if (churn[r][w] < 255) ++churn[r][w];
+                        if (churn[r][w] > 6) continue; // (changes all the time)
+                        char one[48];
+                        std::snprintf(one, sizeof one, " comp->+%X+%X:%X>%X", offs[r], w * 4, was, x);
+                        ch += one;
+                    }
+                }
+                if (!ch.empty()) LOG("DIAG lantern: changed (lit %d):%s", int(lit), ch.c_str());
+            }
+        }
+        if (ctx[0]) release_player(ctx);
+        g_lantern_lit = lit;
+        if (lit != was_lit) {
             was_lit = lit;
             LOG("sounds: the lantern %s", lit ? "burns" : "is out");
             look_refresh();
@@ -309,7 +321,7 @@ void sound_tick()
     { // whose object: the one at the played actor's place (the one before gets the game's switches back)
         static U16 was_ch = kNoCharacter;
         const U64 before = g_player_obj.load();
-        const U64 obj = find_player_object(ch == was_ch ? before : 0);
+        const U64 obj = player_object();
         if (obj != before || ch != was_ch) {
             if (obj != before) {
                 g_chest_hidden = false, g_boots_hidden = false, g_shield_hidden = false, g_metal_hidden = false;
