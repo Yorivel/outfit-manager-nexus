@@ -134,9 +134,9 @@ extern U64 kRvaEquipSlotVt;
 extern U64 kRvaHudVt;
 extern U64 kRvaSlotScript164;
 extern U64 kRvaBranchEval;
-extern U64 kRvaLanternLight, kRvaLanternDim, kRvaLanternCheck, kRvaGearSounds, kRvaGearSoundsFrom, kRvaItemInfoRead;
+extern U64 kRvaLanternLight, kRvaLanternDim, kRvaLanternCheck, kRvaGearSounds, kRvaGearSoundsFrom, kRvaCollideSound;
 extern U64 kOffCompLantern, kOffLanternLit, kOffCompEffects, kOffEffectsSound, kOffSoundHandle, kOffHandleObject,
-    kOffItemMaterial;
+    kOffContactBody, kOffCompBody;
 extern U64 kRvaSlotScript181;
 extern U64 kRvaSlotScript182;
 extern U64 kRvaEquipRequest;

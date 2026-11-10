@@ -354,6 +354,9 @@ constexpr resolver::Alt kAlts_kRvaMeshCollect[] = {
     {resolver::AltKind::Ref, "E8 ?? ?? ?? ?? B9 9C 00 00 00 41 8B 04 0C", 0, 1, 5, -1, 0, 0x57ed6c},
     {resolver::AltKind::Ref, "E8 ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? 48 8D 4D 07", 0, 1, 5, -1, 0, 0x580622},
 };
+constexpr resolver::Alt kAlts_kRvaCollideSound[] = {
+    {resolver::AltKind::Ref, "E8 ?? ?? ?? ?? 40 B6 01 0F B6 84 24 F0 00 00 00 A8 10 75 1D", 0, 1, 5, -1, 0, 0x34e8dc3},
+};
 constexpr resolver::Alt kAlts_kRvaRestyle[] = {
     {resolver::AltKind::Ref, "48 8B 4B 08 E8 ?? ?? ?? ?? 48 8B CB E8 ?? ?? ?? ?? 48 8B 9C 24 C0 01 00 00", 12, 1, 5, -1, 0, 0xe021f6},
     {resolver::AltKind::Ref, "E8 ?? ?? ?? ?? 48 8B 5F 20 48 8B 03 48 8B 88 A0 00 00 00 48 85 C9 74 07 48 83 79 08 00 75 2E 83 3D ?? ?? ?? ?? 00 74 25 48 8B 4B 08 48 8D 15 ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 11 48 8B 4B 08 E8 ?? ?? ?? ?? 48 8B CB E8 ?? ?? ?? ?? 80 BE 25 01 00 00 00", 0, 1, 5, -1, 0, 0x1001b4f},
@@ -713,7 +716,6 @@ constexpr resolver::Recipe kRecipes[] = {
     {"kRvaErrorMgr", resolver::Kind::Func, 0x160b6a0, "40 53 48 83 EC 20 BA 9C 00 00 00 65 48 8B 04 25 58 00 00 00 48 8B 08 8B 04 0A 39 05 ?? ?? ?? ?? 0F 8E ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 83 3D ?? ?? ?? ?? FF 75 75", nullptr, -1, 0, kAlts_kRvaErrorMgr, 5, nullptr},
     {"kRvaErrorText", resolver::Kind::Func, 0x160bbf0, nullptr, nullptr, -1, 0, kAlts_kRvaErrorText, 5, "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 57 48 83 EC 20 48 8B F2 48 8B D9 48 89 4C 24 30 33 FF BD FF FF FF FF"},
     {"kRvaCtxRelease", resolver::Kind::Func, 0x1618660, "48 89 5C 24 10 48 89 74 24 18 57 48 83 EC 20 48 8B F1 80 79 10 00", nullptr, -1, 0, kAlts_kRvaCtxRelease, 5, nullptr},
-    {"kRvaItemInfoRead", resolver::Kind::Func, 0x1719e80, nullptr, nullptr, -1, 0, nullptr, 0, "48 8B C4 48 89 58 08 48 89 68 20 56 57 41 56 48 83 EC 60"},
     {"kRvaLanternCheck", resolver::Kind::Func, 0x1838280, "48 8B C4 48 89 58 08 55 56 57 41 54 41 55 41 56 41 57 48 8D A8 68 FB FF FF", nullptr, -1, 0, nullptr, 0, nullptr},
     {"kRvaBattleCheck", resolver::Kind::Func, 0x192b460, "48 8B 81 88 00 00 00 44 0F B6 40 01 41 8D 40 FD 83 F8 06 77 16 4C 8D 0D ?? ?? ?? ?? 48 98 41 8B 94 81 ?? ?? ?? 01 49 03 D1 FF E2 41 80 F8 01 75 ?? 48 8B 49 68 48 8B 51 20", nullptr, -1, 0, kAlts_kRvaBattleCheck, 5, nullptr},
     {"kRvaDockedList", resolver::Kind::Func, 0x2281950, "48 89 5C 24 18 55 57 41 57 48 83 EC 20 8B A9 98 00 00 00", nullptr, -1, 0, kAlts_kRvaDockedList, 5, nullptr},
@@ -727,6 +729,7 @@ constexpr resolver::Recipe kRecipes[] = {
     {"kRvaModelSwap", resolver::Kind::Func, 0x2f29720, "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 30 48 8B 7C 24 60", nullptr, -1, 0, nullptr, 0, nullptr},
     {"kRvaMeshCollectNamed", resolver::Kind::Func, 0x2fbdd30, "4C 89 44 24 18 48 89 54 24 10 48 89 4C 24 08 55 53 56 57 41 54 41 55 41 56 41 57 48 8B EC 48 83 EC 78 4D 8B E9", nullptr, -1, 0, kAlts_kRvaMeshCollectNamed, 2, nullptr},
     {"kRvaMeshCollect", resolver::Kind::Func, 0x2fbdfa0, "48 89 5C 24 10 48 89 6C 24 20 56 57 41 54 41 56 41 57 48 83 EC 20 41 0F B6 F1", nullptr, -1, 0, kAlts_kRvaMeshCollect, 3, nullptr},
+    {"kRvaCollideSound", resolver::Kind::Func, 0x34e64f0, "48 8B C4 48 89 58 10 4C 89 48 20 48 89 48 08 55 56 57 41 54 41 55 41 56 41 57 48 8D A8 08 FF FF FF 48 81 EC C0 01 00 00 C5 F8 29 70 B8 C5 F8 29 78 A8 C5 78 29 40 98 C5 78 29 48 88 C5 78 29 90 78 FF FF FF C5 78 29 98 68 FF FF FF 49 8B D9", nullptr, -1, 0, kAlts_kRvaCollideSound, 1, nullptr},
     {"kRvaRestyle", resolver::Kind::Func, 0x3899ab0, "48 89 5C 24 18 55 56 57 48 83 EC 20 48 8B D9 48 8B 09", nullptr, -1, 0, kAlts_kRvaRestyle, 5, nullptr},
     {"kRvaClassVecAdd", resolver::Kind::Func, 0x389d160, "48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 41 56 48 83 EC 20 44 8B 41 08", nullptr, -1, 0, kAlts_kRvaClassVecAdd, 5, nullptr},
     {"kRvaClassVecRemove", resolver::Kind::Func, 0x389d200, "4C 8B D1 33 C0 8B 49 08 85 C9 74 12", nullptr, -1, 0, kAlts_kRvaClassVecRemove, 5, nullptr},
@@ -847,8 +850,8 @@ constexpr resolver::OffAnchor kAnchors_kOffRootBodyCount[] = {
 constexpr resolver::OffAnchor kAnchors_kOffRootSlotVecs[] = {
     {60, "48 8D 8B ?? ?? ?? ?? E8 ?? ?? ?? ??", 1, 3, 4},
     {62, "48 8B 87 ?? ?? ?? ?? 48 8B 0C F0", 0, 3, 4},
-    {91, "41 83 BE ?? ?? ?? ?? 00 75 0A", 0, 3, 4},
-    {92, "41 83 BF ?? ?? ?? ?? 00 75 0A", 0, 3, 4},
+    {90, "41 83 BE ?? ?? ?? ?? 00 75 0A", 0, 3, 4},
+    {91, "41 83 BF ?? ?? ?? ?? 00 75 0A", 0, 3, 4},
 };
 constexpr resolver::OffAnchor kAnchors_kOffRootSlotVecCount[] = {
     {67, "41 8B 8E ?? ?? ?? ?? 48 C1 E1 04", 0, 3, 4},
@@ -970,17 +973,17 @@ constexpr resolver::OffAnchor kAnchors_kOffActorKind[] = {
 };
 constexpr resolver::OffAnchor kAnchors_kOffInvEquipList[] = {
     {22, "48 8B 81 ?? ?? ?? ?? 4C 8B 50 08", 0, 3, 4},
-    {86, "48 8B 87 ?? ?? ?? ?? 48 8B 50 08", 0, 3, 4},
+    {85, "48 8B 87 ?? ?? ?? ?? 48 8B 50 08", 0, 3, 4},
     {49, "48 8B 81 ?? ?? ?? ?? 48 8B 48 08", 0, 3, 4},
 };
 constexpr resolver::OffAnchor kAnchors_kOffMgrBags[] = {
     {10, "48 8D 5F ?? 48 89 5D 30 48 8B 03", 0, 3, 1},
     {10, "48 8D 5F ?? 48 89 5D 30 48 8B 03", 1, 3, 1},
-    {86, "49 8B 73 ?? 49 8B 7B 20 4D 8B 73 28", 0, 3, 1},
-    {88, "4C 8B 49 ?? 8B 41 20 4D 0F BF D0", 0, 3, 1},
+    {85, "49 8B 73 ?? 49 8B 7B 20 4D 8B 73 28", 0, 3, 1},
+    {87, "4C 8B 49 ?? 8B 41 20 4D 0F BF D0", 0, 3, 1},
 };
 constexpr resolver::OffAnchor kAnchors_kOffEntrySlot[] = {
-    {86, "66 39 9A ?? ?? ?? ?? 74 13 48 81 C2 D0 00 00 00", 0, 3, 4},
+    {85, "66 39 9A ?? ?? ?? ?? 74 13 48 81 C2 D0 00 00 00", 0, 3, 4},
     {22, "66 41 39 BB ?? ?? ?? ?? 74 30", 0, 4, 4},
     {23, "44 0F B7 B1 ?? ?? ?? ?? 45 0F B7 C6", 0, 4, 4},
     {32, "48 8B 81 ?? ?? ?? ?? C3 CC CC", 0, 3, 4},
@@ -1060,8 +1063,8 @@ constexpr resolver::OffAnchor kAnchors_kOffModelRoot[] = {
     {16, "48 8D 88 ?? ?? ?? ?? BA D8 00 00 00", 0, 3, 4},
 };
 constexpr resolver::OffAnchor kAnchors_kOffBagCount[] = {
-    {88, "66 45 39 50 ?? 7E 76 49 69 DA C8 00 00 00", 0, 4, 1},
-    {88, "44 0F B7 5B ?? B8 FF FF 00 00", 0, 4, 1},
+    {87, "66 45 39 50 ?? 7E 76 49 69 DA C8 00 00 00", 0, 4, 1},
+    {87, "44 0F B7 5B ?? B8 FF FF 00 00", 0, 4, 1},
 };
 constexpr resolver::OffAnchor kAnchors_kOffUiTextures[] = {
     {30, "48 8B 88 ?? ?? ?? ?? E8 ?? ?? ?? ??", 0, 3, 4},
@@ -1071,14 +1074,14 @@ constexpr resolver::OffAnchor kAnchors_kOffUiTextures[] = {
 constexpr resolver::OffAnchor kAnchors_kOffCompLantern[] = {
     {12, "48 8B 48 ?? FF 81 8C 01 00 00", 0, 3, 1},
     {13, "48 8B 48 ?? 8B 81 8C 01 00 00", 0, 3, 1},
-    {83, "48 8B 49 ?? E8 ?? ?? ?? ?? 90", 0, 3, 1},
-    {83, "48 8B 48 ?? 83 B9 8C 01 00 00 00", 0, 3, 1},
+    {82, "48 8B 49 ?? E8 ?? ?? ?? ?? 90", 0, 3, 1},
+    {82, "48 8B 48 ?? 83 B9 8C 01 00 00 00", 0, 3, 1},
 };
 constexpr resolver::OffAnchor kAnchors_kOffLanternLit[] = {
     {12, "FF 81 ?? ?? ?? ?? 48 8B 7C 24 20", 0, 2, 4},
     {13, "8B 81 ?? ?? ?? ?? 85 C0 74 08", 0, 2, 4},
     {13, "89 81 ?? ?? ?? ?? 48 8B 7C 24 20", 0, 2, 4},
-    {83, "83 B9 ?? ?? ?? ?? 00 41 0F 97 C7", 0, 2, 4},
+    {82, "83 B9 ?? ?? ?? ?? 00 41 0F 97 C7", 0, 2, 4},
 };
 constexpr resolver::OffAnchor kAnchors_kOffCompEffects[] = {
     {19, "49 8B 41 ?? 48 89 44 24 40 48 8D 4C 24 70", 0, 3, 1},
@@ -1094,9 +1097,6 @@ constexpr resolver::OffAnchor kAnchors_kOffSoundHandle[] = {
 constexpr resolver::OffAnchor kAnchors_kOffHandleObject[] = {
     {26, "45 8B 65 ?? 45 85 E4 74 24 45 85 FF", 0, 3, 1},
     {26, "45 8B 67 ?? 45 85 E4 74 23 85 F6", 0, 3, 1},
-};
-constexpr resolver::OffAnchor kAnchors_kOffItemMaterial[] = {
-    {82, "48 8D 56 ?? 48 8B CF E8 ?? ?? ?? ??", 7, 3, 1},
 };
 constexpr resolver::Offset kOffsets[] = {
     {"kOffSelectorPage", 0xf4, kAnchors_kOffSelectorPage, 1},
@@ -1162,7 +1162,8 @@ constexpr resolver::Offset kOffsets[] = {
     {"kOffEffectsSound", 0x18, kAnchors_kOffEffectsSound, 1},
     {"kOffSoundHandle", 0x70, kAnchors_kOffSoundHandle, 2},
     {"kOffHandleObject", 0x18, kAnchors_kOffHandleObject, 2},
-    {"kOffItemMaterial", 0x4c, kAnchors_kOffItemMaterial, 1},
+    {"kOffContactBody", 0x60, nullptr, 0},
+    {"kOffCompBody", 0x298, nullptr, 0},
 };
 
 #ifndef OM_SIGS_NO_VARS // (the offline resolver test has no variables)
@@ -1249,7 +1250,6 @@ U64* const kRecipeVars[] = {
     &kRvaErrorMgr,
     &kRvaErrorText,
     &kRvaCtxRelease,
-    &kRvaItemInfoRead,
     &kRvaLanternCheck,
     &kRvaBattleCheck,
     &kRvaDockedList,
@@ -1263,6 +1263,7 @@ U64* const kRecipeVars[] = {
     &kRvaModelSwap,
     &kRvaMeshCollectNamed,
     &kRvaMeshCollect,
+    &kRvaCollideSound,
     &kRvaRestyle,
     &kRvaClassVecAdd,
     &kRvaClassVecRemove,
@@ -1385,7 +1386,8 @@ U64* const kOffsetVars[] = {
     &kOffEffectsSound,
     &kOffSoundHandle,
     &kOffHandleObject,
-    &kOffItemMaterial,
+    &kOffContactBody,
+    &kOffCompBody,
 };
 static_assert(std::size(kOffsets) == std::size(kOffsetVars));
 #endif
