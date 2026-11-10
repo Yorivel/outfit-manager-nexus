@@ -164,6 +164,7 @@ constexpr U16 kBackShieldSlot = 23;
 // weapon on the body, mirroring a weapon slot - Kliff 22 sword, 23 shield, 24 bow; Damiane 22 rapier, 23 right-hand
 // shield, 24 pistol; Oongka 22 two-hand axe, 23 cannon. 23 has its look in Outfit::back_look, 22 / 24 as slot looks.
 constexpr U16 kCarriedSlotA = 22, kCarriedSlotB = 24;
+constexpr U16 kLanternSlot = 15;
 inline bool is_display_slot(U16 slot) { return slot >= kCarriedSlotA && slot <= kCarriedSlotB; }
 constexpr U32 kMaxWeaponSlots = 16;
 constexpr U32 kWornMax = kOutfitSlots + kMaxWeaponSlots; // worn entries: armour, then weapons

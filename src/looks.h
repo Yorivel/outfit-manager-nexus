@@ -44,6 +44,8 @@ void mark_worn(int index);
 extern std::atomic<U32> g_player_hidden_slots; // (bit per equip slot the played character's looks hide)
 U32 look_hidden_slots();
 U64 player_inventory();
+extern std::atomic<U64> g_player_inv, g_lantern_drawn_at; // (the played inventory; its lantern last seen in the hand)
+bool lantern_lit(); // (sound.cpp: the played character's lantern burns)
 void anchor_recheck();
 extern FrameFn g_hud_frame_orig;
 float __fastcall hud_frame_hook(U64 self);
