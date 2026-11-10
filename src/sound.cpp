@@ -70,10 +70,7 @@ constexpr U32 kSwShoe = 0xB25BD7C3 /* material_game */, kSwLeather = 0xD80FFE88,
 constexpr U32 kSwCollideType = 0x29235BB9, kSwFootstep = 0x6F394B77;
 constexpr U16 kShieldSlot = 13, kBootsSlot = 6;
 constexpr U16 kArmourSlots[] = {3, kChestSlot, 5, kBootsSlot, 16}; // helm, chest, gloves, boots, cloak
-constexpr U32 kOffItemMaterial = 0x4C;                             // (ItemInfo: its MaterialMatchInfo key, u16)
-constexpr U32 kOffCompEffects = 0x60, kOffEffectsSound = 0x18, kOffSoundHandle = 0x70, kOffHandleObject = 0x18; // (player_object)
 constexpr double kOwnReach = 1.5; // (m: his own gear's collisions were 0.3 - 1.1 from his object)
-constexpr U32 kOffCompLantern = 0x50, kOffLanternLit = 0x18C; // (the actor's component -> ... -> lit: 1 / out: 0)
 constexpr U32 kOffLanternNear = 0x19C; // (... -> 1 while a memory fragment is in range, +0x190 the fragment; +0x198 blinks
                                        //  with its alert every ~15-20 s - TO CONFIRM that it clears when leaving)
 
@@ -194,7 +191,7 @@ U16 worn_material(U64 list, U16 slot)
 {
     U64 e = list ? equipped_item(list, slot) : 0;
     U16 key = 0xFFFF, material = 0xFFFF;
-    if (!e || !rd(e + 8, key) || key == 0xFFFF || !g_item_info) return 0xFFFF;
+    if (!e || !rd(e + 8, key) || key == 0xFFFF || !g_item_info || !kOffItemMaterial) return 0xFFFF;
     U64 info = g_item_info(0, key);
     if (!info || !rd(info + kOffItemMaterial, material) || material > 4096) return 0xFFFF; // (keys are small numbers)
     return material;
@@ -208,7 +205,8 @@ U64 player_object()
     U64 ctx[4] = {};
     U64 actor = acquire_player(ctx);
     U64 comp = actor ? rp(actor + kOffActorComp) : 0;
-    U64 fx = comp ? rp(comp + kOffCompEffects) : 0;
+    const bool known = kOffCompEffects && kOffEffectsSound && kOffSoundHandle && kOffHandleObject; // (the resolver: 0 = unsure)
+    U64 fx = comp && known ? rp(comp + kOffCompEffects) : 0;
     U64 snd = fx ? rp(fx + kOffEffectsSound) : 0;
     U64 handle = snd ? rp(snd + kOffSoundHandle) : 0;
     U32 id = 0;
@@ -270,9 +268,9 @@ void sound_tick()
         U64 ctx[4] = {};
         U64 actor = acquire_player(ctx);
         U64 comp = actor ? rp(actor + kOffActorComp) : 0;
-        U64 holder = comp ? rp(comp + kOffCompLantern) : 0;
+        U64 holder = comp && kOffCompLantern ? rp(comp + kOffCompLantern) : 0;
         U32 v = 0;
-        const bool burns = holder && rd(holder + kOffLanternLit, v) && v == 1;
+        const bool burns = kOffLanternLit && holder && rd(holder + kOffLanternLit, v) && v > 0 && v < 64; // (the game: > 0)
         U32 nv = 0;
         const bool near_fragment = holder && rd(holder + kOffLanternNear, nv) && nv == 1;
         const bool lit = burns; // (near a memory fragment: not known yet - +0x19C stays set after leaving, +0x198 only blinks)

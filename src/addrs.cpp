@@ -361,7 +361,10 @@ void resolve_addresses()
     // the new one isn't certain, that one feature goes off (offset 0) rather than writing into the wrong field.
     // (kOffViewFlags: read, but only to decide those writes.) No witness found at all counts too: the code changed there.
     const U64* writes[] = {&kOffCursorSectors, &kOffModalOwner, &kOffModalD0, &kOffPanelFlags, &kOffPanelHoldClose,
-                           &kOffPanelElem, &kOffEventType, &kOffBindingPressed, &kOffViewFlags};
+                           &kOffPanelElem, &kOffEventType, &kOffBindingPressed, &kOffViewFlags,
+                           // (not written, but what the game plays and shows follows them: off rather than wrong)
+                           &kOffCompLantern, &kOffLanternLit, &kOffCompEffects, &kOffEffectsSound, &kOffSoundHandle,
+                           &kOffHandleObject, &kOffItemMaterial};
     for (std::size_t i = 0; i < kOffsetCount; ++i) {
         *kOffsetVars[i] = values[i];
         bool unsure = status[i] == resolver::OffsetStatus::Doubtful ||
@@ -374,6 +377,21 @@ void resolve_addresses()
     }
 }
 
+
+// Sounds and the lantern (sound.cpp; game build of 2026-11-06). Witnesses: the game functions that use the offsets below.
+U64 kRvaLanternLight = 0x5ebae0;     // (lights the character's lantern: +0x68 -> +0x50 -> +0x18C counter += 1)
+U64 kRvaLanternDim = 0x5ebc80;       // (puts it out: the counter -= 1)
+U64 kRvaLanternCheck = 0x1838280;    // (the game's "is it lit": counter > 0)
+U64 kRvaGearSounds = 0xb8a1d0;       // (sets the character's armorkey / material_game: its sound handle +0x70, number +0x18)
+U64 kRvaGearSoundsFrom = 0xa8a4b0;   // (calls it with the character's sound component: +0x68 -> +0x60 -> +0x18)
+U64 kRvaItemInfoRead = 0x1719e80;    // (the item table's loader: _materialMatchInfo at +0x4C)
+U64 kOffCompLantern = 0x50;          // character component -> its lantern state
+U64 kOffLanternLit = 0x18c;          // lantern state -> u32 lit counter (> 0: lit)
+U64 kOffCompEffects = 0x60;          // character component -> its effects (also transition.cpp's effect component)
+U64 kOffEffectsSound = 0x18;         // effects -> the character's sound component
+U64 kOffSoundHandle = 0x70;          // sound component -> its sound handle
+U64 kOffHandleObject = 0x18;         // sound handle -> u32 its Wwise game object
+U64 kOffItemMaterial = 0x4c;         // item info -> u16 its MaterialMatchInfo key (the sound material)
 
 // The outfit transition and the hidden weapons' effects (transition.cpp; build 26480954, 2976 addresses in brackets).
 U64 kRvaMatUpdate = 0x586760;        // (effect component): the player's material update - hooked, the values go out here [0x4d30f0]
