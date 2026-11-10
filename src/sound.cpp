@@ -10,6 +10,9 @@
 // - material_game: a switch on the character, the footsteps' shoe material, from his BOOTS alone (no boots: leather,
 //   cloth boots: cloth, plate boots: metal). Hidden boots: kept at leather;
 // - sfx_move_shield: with every step, the shield on the back. Hidden shield: not played;
+// - sfx_move_plateshoe: a light metal tick with every step, asked for by the game's code with the cloth boots worn
+//   (material 6: ~1.2 per step) and never barefoot or with plate boots (material 20), whatever the chest - counted
+//   per worn set, 2026-11-10. So it is the boots': hidden boots, not played (the switches don't silence it);
 // - sfx_collide_metal: physics - metal parts knocking together when he starts / stops. Collision sounds play on a pool
 //   of emitters (objects 400001...), each placed where the collision is; the switch collidetype tells a footstep from
 //   gear (defaultcollide). His own are within ~1.1 m of his object. Whose part it was isn't told, so: not played once
@@ -37,7 +40,7 @@ namespace {
 
 constexpr U64 kPlayerObj = 0x186A1, kUiObj = 2, kPoolFirst = 0x61A80;
 constexpr U32 kPoolSize = 256;
-constexpr U32 kEvArmorLoop = 0x34F371D9, kEvShield = 0x74C41A56, kEvCollideMetal = 0x0D27F39D, kEvEquipA = 0x2361D7A5,
+constexpr U32 kEvArmorLoop = 0x34F371D9, kEvShield = 0x74C41A56, kEvPlateShoe = 0x554A8706, kEvCollideMetal = 0x0D27F39D, kEvEquipA = 0x2361D7A5,
               kEvEquipB = 0xB074E90E;
 constexpr U32 kSwArmorKey = 0x3921C2FF, kSwSkin = 0x310330D2, kSwPlate = 0x0C4744E0, kSwChainmail = 0x6DCCAB69;
 constexpr U32 kSwShoe = 0xB25BD7C3 /* material_game */, kSwLeather = 0xD80FFE88, kSwMetal = 0x9375C65E;
@@ -96,6 +99,7 @@ bool muted(U32 id, U64 go)
 {
     if (go == kPlayerObj) {
         if (id == kEvShield) return g_shield_hidden.load();
+        if (id == kEvPlateShoe) return g_boots_hidden.load();
     } else if (go == kUiObj) {
         if (id == kEvEquipA || id == kEvEquipB) return g_async.active || GetTickCount64() - g_async.started < 500;
     } else if (id == kEvCollideMetal && go - kPoolFirst < kPoolSize) {
