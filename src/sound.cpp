@@ -1,24 +1,29 @@
-// Sounds (2026-11-10): the played character's gear sounds follow his looks, and an outfit change doesn't play the
-// game's equip sounds.
+// Sounds (2026-11-10): the played character's gear sounds follow his looks - a piece hidden by its look sounds as if it
+// weren't worn, by the game's own rules - and an outfit change doesn't play the game's equip sounds.
 //
 // The game's audio is Wwise, and its exe exports the Wwise API by name (AK::SoundEngine::PostEvent, SetSwitch, ...):
 // those exports are hooked. Wwise ids are FNV-1 (32 bit) of the lowercase names; the names come from the game's
-// soundbanksinfo (CDInventory/tools/wwnames.py). Found with a recording build (game 2.04.08):
-// - armorkey: a switch the game sets on the character from what he wears (skin / cloth / leatherarmor / platearmor);
-//   his armour loop (sfx_move_armor_lp, started by the game after each change of gear) and other gear sounds follow it;
-// - sfx_move_plateshoe: with every step (the game plays it in cloth outfits too: left alone while the armour shows);
-// - sfx_move_shield: with every step, the shield on the back;
+// soundbanksinfo (CDInventory/tools/wwnames.py). The game's rules, found with recording builds (game 2.04.08):
+// - armorkey: a switch on the character, set from his CHEST piece's material alone (no chest: skin, cloth chest: cloth,
+//   plate chest: platearmor; helm, gloves, boots and cloak change nothing - cycled on the wheel, 2026-11-10). His armour loop (sfx_move_armor_lp, started by the game after each change
+//   of gear) and his other gear sounds follow it. Hidden chest: kept at skin, the loop started again so it takes it;
+// - material_game: a switch on the character, the footsteps' shoe material, from his BOOTS alone (no boots: leather,
+//   cloth boots: cloth, plate boots: metal). Hidden boots: kept at leather;
+// - sfx_move_shield: with every step, the shield on the back. Hidden shield: not played;
 // - sfx_collide_metal: physics - metal parts knocking together when he starts / stops. Collision sounds play on a pool
 //   of emitters (objects 400001...), each placed where the collision is; the switch collidetype tells a footstep from
-//   gear (defaultcollide). His own are within ~1.1 m of his object;
-// - two unnamed events on object 2: the equip sounds, one pair per change of gear.
-// The lantern only sounds while held (shown then): nothing to do.
-//
-// While no worn body armour piece shows (helm, chest, gloves, boots: hidden by their looks), armorkey is kept at skin
-// (the armour loop started again so it takes it), and the plate steps and the metal collisions next to him aren't
-// played; the shield's rattle goes with a hidden shield. With Unequip Outfit (no looks) nothing is changed.
+//   gear (defaultcollide). His own are within ~1.1 m of his object. Whose part it was isn't told, so: not played once
+//   a metal (or unknown) piece is hidden and every armour piece still showing is known not to be metal;
+// - an item's material: ItemInfo +0x4C, its MaterialMatchInfo key (read as _materialMatchInfo by the item table's
+//   loader; e.g. 73 plate, 6 cloth, 20 plate boots). What a key sounds as is learned from the game itself, each time
+//   it sets armorkey with a chest on or material_game with boots on;
+// - two unnamed events on object 2: the equip sounds, one pair per change of gear. Not played during an outfit load.
+// The lantern only sounds while held (shown then): nothing to do. With Unequip Outfit (no looks) nothing is changed.
 // The played character's object is 100001 (seen so for Kliff; the other characters are untested).
 #include "om.h"
+#include "addrs.h"
+#include "gear.h"
+#include "items.h"
 #include "load.h"
 #include "looks.h"
 #include "log.h"
@@ -32,10 +37,14 @@ namespace {
 
 constexpr U64 kPlayerObj = 0x186A1, kUiObj = 2, kPoolFirst = 0x61A80;
 constexpr U32 kPoolSize = 256;
-constexpr U32 kEvArmorLoop = 0x34F371D9, kEvPlateShoe = 0x554A8706, kEvShield = 0x74C41A56, kEvCollideMetal = 0x0D27F39D,
-              kEvEquipA = 0x2361D7A5, kEvEquipB = 0xB074E90E;
-constexpr U32 kSwArmorKey = 0x3921C2FF, kSwSkin = 0x310330D2, kSwCollideType = 0x29235BB9, kSwFootstep = 0x6F394B77;
-constexpr U16 kShieldSlot = 13;
+constexpr U32 kEvArmorLoop = 0x34F371D9, kEvShield = 0x74C41A56, kEvCollideMetal = 0x0D27F39D, kEvEquipA = 0x2361D7A5,
+              kEvEquipB = 0xB074E90E;
+constexpr U32 kSwArmorKey = 0x3921C2FF, kSwSkin = 0x310330D2, kSwPlate = 0x0C4744E0, kSwChainmail = 0x6DCCAB69;
+constexpr U32 kSwShoe = 0xB25BD7C3 /* material_game */, kSwLeather = 0xD80FFE88, kSwMetal = 0x9375C65E;
+constexpr U32 kSwCollideType = 0x29235BB9, kSwFootstep = 0x6F394B77;
+constexpr U16 kShieldSlot = 13, kBootsSlot = 6;
+constexpr U16 kArmourSlots[] = {3, kChestSlot, 5, kBootsSlot, 16}; // helm, chest, gloves, boots, cloak
+constexpr U32 kOffItemMaterial = 0x4C;                             // (ItemInfo: its MaterialMatchInfo key, u16)
 constexpr double kOwnReach = 1.5; // (m: his own gear's collisions were 0.3 - 1.1 from his object)
 
 using PostFn = U32(__fastcall*)(U32 id, U64 go, U32 flags, void* cb, void* cookie, U32 n, void* ext, U32 playing);
@@ -49,12 +58,31 @@ ActionFn g_action = nullptr;
 
 double g_pool_pos[kPoolSize][3], g_player_pos[3]; // (written on the game's threads, read on them: plain values)
 bool g_pool_gear[kPoolSize];                      // (the emitter's last collidetype wasn't footstep)
-std::atomic<U32> g_game_armor{0}, g_armor_applied{0}; // (armorkey: the game's last value, and what is set)
+// what the game last set, and what is set now
+std::atomic<U32> g_game_armor{0}, g_armor_applied{0}, g_game_shoe{0}, g_shoe_applied{0};
+// from the HUD frame (sound_tick), for the hooks
+std::atomic<bool> g_chest_hidden{false}, g_boots_hidden{false}, g_shield_hidden{false}, g_metal_hidden{false};
 
-bool armour_hidden() // (some armour look hides a piece, and no worn body armour piece shows: looks.cpp, bit 31)
+// (UI thread) a material key -> the switch value the game gave a chest (armorkey) or boots (material_game) of it
+struct Learned { U16 material; U32 sound; };
+Learned g_learned[64];
+int g_learned_n = 0;
+
+U32 learned_sound(U16 material)
 {
-    const U32 h = look_hidden_slots();
-    return (h & ((1u << 3) | (1u << kChestSlot) | (1u << 5) | (1u << 6))) && !(h & (1u << 31));
+    for (int i = 0; i < g_learned_n; ++i)
+        if (g_learned[i].material == material) return g_learned[i].sound;
+    return 0;
+}
+
+void learn(U16 material, U32 sound, const char* piece)
+{
+    if (material == 0xFFFF || !sound || learned_sound(material) == sound) return;
+    bool known = false;
+    for (int i = 0; i < g_learned_n; ++i)
+        if (g_learned[i].material == material) g_learned[i].sound = sound, known = true;
+    if (!known && g_learned_n < int(std::size(g_learned))) g_learned[g_learned_n++] = {material, sound};
+    LOG("sounds: %s of material %u sound as %08X", piece, material, sound);
 }
 
 // (every playing instance of an event on an object: the armour loop is started again by the game after each change
@@ -67,13 +95,12 @@ void stop_event(U32 event, U64 go)
 bool muted(U32 id, U64 go)
 {
     if (go == kPlayerObj) {
-        if (id == kEvPlateShoe) return armour_hidden();
-        if (id == kEvShield) return (look_hidden_slots() & ((1u << kShieldSlot) | (1u << kBackShieldSlot))) != 0;
+        if (id == kEvShield) return g_shield_hidden.load();
     } else if (go == kUiObj) {
         if (id == kEvEquipA || id == kEvEquipB) return g_async.active || GetTickCount64() - g_async.started < 500;
     } else if (id == kEvCollideMetal && go - kPoolFirst < kPoolSize) {
         const U32 i = U32(go - kPoolFirst);
-        if (!g_pool_gear[i] || !armour_hidden()) return false;
+        if (!g_pool_gear[i] || !g_metal_hidden.load()) return false;
         double d2 = 0;
         for (int k = 0; k < 3; ++k) d2 += (g_pool_pos[i][k] - g_player_pos[k]) * (g_pool_pos[i][k] - g_player_pos[k]);
         return d2 < kOwnReach * kOwnReach;
@@ -91,10 +118,16 @@ U32 __fastcall post_hook(U32 id, U64 go, U32 flags, void* cb, void* cookie, U32 
 U32 __fastcall switch_hook(U32 group, U32 state, U64 go)
 {
     if (group == kSwCollideType && go - kPoolFirst < kPoolSize) g_pool_gear[go - kPoolFirst] = state != kSwFootstep;
-    if (group == kSwArmorKey && go == kPlayerObj) {
-        g_game_armor = state;
-        if (armour_hidden()) state = kSwSkin;
-        g_armor_applied = state;
+    if (go == kPlayerObj) {
+        if (group == kSwArmorKey) {
+            g_game_armor = state;
+            if (g_chest_hidden.load()) state = kSwSkin;
+            g_armor_applied = state;
+        } else if (group == kSwShoe) {
+            g_game_shoe = state;
+            if (g_boots_hidden.load()) state = kSwLeather;
+            g_shoe_applied = state;
+        }
     }
     return g_switch(group, state, go);
 }
@@ -112,6 +145,17 @@ bool hook_export(const char* mangled, void* hook, F* orig)
 {
     void* t = reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(nullptr), mangled));
     return t && MH_CreateHook(t, hook, reinterpret_cast<void**>(orig)) == MH_OK && MH_EnableHook(t) == MH_OK;
+}
+
+// (UI thread) the worn piece's material key in a slot: 0xFFFF none / unreadable
+U16 worn_material(U64 list, U16 slot)
+{
+    U64 e = list ? equipped_item(list, slot) : 0;
+    U16 key = 0xFFFF, material = 0xFFFF;
+    if (!e || !rd(e + 8, key) || key == 0xFFFF || !g_item_info) return 0xFFFF;
+    U64 info = g_item_info(0, key);
+    if (!info || !rd(info + kOffItemMaterial, material) || material > 4096) return 0xFFFF; // (keys are small numbers)
+    return material;
 }
 
 } // namespace
@@ -135,23 +179,75 @@ void sound_install()
         post && sw && pos && g_action ? "" : " (hidden gear may still sound, or outfit changes play the equip sounds)");
 }
 
-// The HUD frame: the armour was hidden / shown since - the switch, and the armour loop again so it takes it.
+// The HUD frame: what is worn and hidden now (for the hooks), what the game's armorkey says about the chest's
+// material, and the switches again when a look changed.
 void sound_tick()
 {
-    const U32 game = g_game_armor.load();
-    if (!game || !g_switch || !g_post) return;
-    const U32 want = armour_hidden() ? kSwSkin : game;
-    // (settled for 300 ms, and no outfit change running: the looks flicker while an outfit changes)
-    static U32 pending = 0;
-    static U64 since = 0;
+    if (!g_switch || !g_post) return;
+    const U64 inv = player_inventory();
+    const U64 list = inv ? rp(inv + kOffInvEquipList) : 0;
+    const U32 hidden = look_hidden_slots();
+    U16 material[std::size(kArmourSlots)];
+    for (size_t i = 0; i < std::size(kArmourSlots); ++i) material[i] = worn_material(list, kArmourSlots[i]);
+    const bool busy = g_async.active || look_changing() || fx_transition_busy(); // (an outfit change: looks and gear in flux)
+
+    { // (what is worn and what the game set, whenever either changes: the record of the game's rule)
+        static U16 was[std::size(kArmourSlots)];
+        static U32 was_armor = 0, was_shoe = 0;
+        if (std::memcmp(was, material, sizeof was) != 0 || was_armor != g_game_armor.load() || was_shoe != g_game_shoe.load()) {
+            std::memcpy(was, material, sizeof was), was_armor = g_game_armor.load(), was_shoe = g_game_shoe.load();
+            LOG("sounds: materials helm %d, chest %d, gloves %d, boots %d, cloak %d; the game's armorkey %08X, shoe material %08X",
+                int(std::int16_t(material[0])), int(std::int16_t(material[1])), int(std::int16_t(material[2])),
+                int(std::int16_t(material[3])), int(std::int16_t(material[4])), was_armor, was_shoe);
+        }
+    }
+    // the chest's material -> the armorkey the game gave it, the boots' -> the shoe material (settled for 300 ms: the
+    // game sets them as the gear changes)
+    static U32 seen_armor = 0, seen_shoe = 0;
+    static U16 seen_chest = 0xFFFF, seen_boots = 0xFFFF;
+    static U64 seen_at = 0;
     const U64 now = GetTickCount64();
-    if (want != pending) pending = want, since = now;
-    if (want == g_armor_applied.load() || now - since < 300 || g_async.active || look_changing() || fx_transition_busy()) return;
-    g_armor_applied = want;
-    g_switch(kSwArmorKey, want, kPlayerObj);
-    stop_event(kEvArmorLoop, kPlayerObj);
-    g_post(kEvArmorLoop, kPlayerObj, 0, nullptr, nullptr, 0, nullptr, 0);
-    LOG("sounds: the armour sounds %s", want == kSwSkin ? "off (no armour piece shows)" : "as the game has them");
+    const U32 game_armor = g_game_armor.load(), game_shoe = g_game_shoe.load();
+    if (game_armor != seen_armor || game_shoe != seen_shoe || material[1] != seen_chest || material[3] != seen_boots)
+        seen_armor = game_armor, seen_shoe = game_shoe, seen_chest = material[1], seen_boots = material[3], seen_at = now;
+    if (!busy && now - seen_at > 300) learn(material[1], game_armor, "chests"), learn(material[3], game_shoe, "boots");
+
+    // hidden pieces
+    auto worn_hidden = [&](size_t i) { return material[i] != 0xFFFF && ((hidden >> kArmourSlots[i]) & 1); };
+    g_chest_hidden = worn_hidden(1);
+    g_boots_hidden = worn_hidden(3);
+    g_shield_hidden = (hidden & ((1u << kShieldSlot) | (1u << kBackShieldSlot))) != 0;
+    // metal knocks: a metal (or unknown) piece is hidden, and every piece that shows is known not to be metal
+    bool hidden_metal = false, shown_metal = false;
+    for (size_t i = 0; i < std::size(kArmourSlots); ++i) {
+        if (material[i] == 0xFFFF) continue;
+        const U32 snd = learned_sound(material[i]);
+        const bool maybe_metal = !snd || snd == kSwPlate || snd == kSwChainmail || snd == kSwMetal; // (not learned yet: maybe)
+        if (!maybe_metal) continue;
+        if ((hidden >> kArmourSlots[i]) & 1) hidden_metal = true;
+        else shown_metal = true;
+    }
+    g_metal_hidden = hidden_metal && !shown_metal;
+
+    // a look changed: the switches again (settled for 300 ms, and no outfit change running)
+    const U32 want_armor = g_chest_hidden.load() ? kSwSkin : game_armor;
+    const U32 want_shoe = g_boots_hidden.load() ? kSwLeather : game_shoe;
+    static U32 pending_armor = 0, pending_shoe = 0;
+    static U64 since = 0;
+    if (want_armor != pending_armor || want_shoe != pending_shoe) pending_armor = want_armor, pending_shoe = want_shoe, since = now;
+    if (busy || now - since < 300) return;
+    if (game_armor && want_armor != g_armor_applied.load()) {
+        g_armor_applied = want_armor;
+        g_switch(kSwArmorKey, want_armor, kPlayerObj);
+        stop_event(kEvArmorLoop, kPlayerObj);
+        g_post(kEvArmorLoop, kPlayerObj, 0, nullptr, nullptr, 0, nullptr, 0);
+        LOG("sounds: the armour sounds %s", want_armor == kSwSkin && game_armor != kSwSkin ? "as with no chest (it is hidden)" : "as the game has them");
+    }
+    if (game_shoe && want_shoe != g_shoe_applied.load()) {
+        g_shoe_applied = want_shoe;
+        g_switch(kSwShoe, want_shoe, kPlayerObj);
+        LOG("sounds: the footsteps %s", want_shoe == kSwLeather && game_shoe != kSwLeather ? "as with no boots (they are hidden)" : "as the game has them");
+    }
 }
 
 } // namespace om

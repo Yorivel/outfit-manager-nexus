@@ -581,15 +581,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
             else look_call(model, h, 2);
         }
     applied = std::move(now);
-    if (inv == player_inventory()) {
-        // (bit 31: a worn body armour piece - helm, chest, gloves, boots - still shows; sound.cpp: the armour's sounds)
-        for (U16 slot : {U16(3), kChestSlot, U16(5), U16(6)}) {
-            U64 e = list ? equipped_item(list, slot) : 0;
-            U16 key = 0xFFFF;
-            if (e && rd(e + 8, key) && key != 0xFFFF && !(hidden_mask & (1u << slot))) hidden_mask |= 1u << 31;
-        }
-        g_player_hidden_slots = hidden_mask;
-    }
+    if (inv == player_inventory()) g_player_hidden_slots = hidden_mask; // (sound.cpp: hidden gear's sounds)
     g_look_wanted[inv] = std::move(wanted);
     g_look_forced[inv] = std::move(forced);
     if (in_battle) state += " (in battle)";

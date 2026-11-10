@@ -43,6 +43,7 @@ extern U64 g_case_wait_since; // (GetTickCount64: until then, weapons about to b
 void mark_worn(int index);
 extern std::atomic<U32> g_player_hidden_slots; // (bit per equip slot the played character's looks hide)
 U32 look_hidden_slots();
+U64 player_inventory();
 void anchor_recheck();
 extern FrameFn g_hud_frame_orig;
 float __fastcall hud_frame_hook(U64 self);
