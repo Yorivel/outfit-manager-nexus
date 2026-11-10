@@ -301,7 +301,6 @@ void log_model_parts(U64 model, U16 ch)
 }
 
 std::atomic<U32> g_player_hidden_slots{0};
-std::atomic<U64> g_player_inv{0}, g_lantern_drawn_at{0};
 std::map<U64, std::string> g_look_state; // inventory -> the last logged state (logged when it changes)
 
 // A part of the model still loading (its swap is to come; a look set now is queued and lands with it).
@@ -584,7 +583,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
             else look_call(model, h, 2);
         }
     applied = std::move(now);
-    if (inv == player_inventory()) g_player_hidden_slots = hidden_mask, g_player_inv = inv; // (sound.cpp: hidden gear's sounds)
+    if (inv == player_inventory()) g_player_hidden_slots = hidden_mask; // (sound.cpp: hidden gear's sounds)
     g_look_wanted[inv] = std::move(wanted);
     g_look_forced[inv] = std::move(forced);
     if (in_battle) state += " (in battle)";
@@ -722,11 +721,7 @@ float __fastcall equip_vis_check_hook(U64 vc, const U32* part, std::uint8_t* rec
     }
     auto it = g_weapon_parts.find({vc, name});
     std::pair<U64, U16> owner;
-    if (it != g_weapon_parts.end()) {
-        owner = it->second, g_part_drawn[{vc, name}] = drawn == 1;
-        // (the played character's lantern in the hand, now: sound.cpp tells its being lit / put out by it)
-        if (drawn == 1 && owner.second == kLanternSlot && owner.first == g_player_inv.load()) g_lantern_drawn_at = GetTickCount64();
-    }
+    if (it != g_weapon_parts.end()) owner = it->second, g_part_drawn[{vc, name}] = drawn == 1;
     else if (auto b = g_bag_weapon.find(vc); b != g_bag_weapon.end() && g_bag_tool_names.count(name)) {
         owner = b->second;
         g_bag_part_drawn[{vc, name}] = drawn == 1;

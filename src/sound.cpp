@@ -24,9 +24,10 @@
 //   loader; e.g. 73 plate, 6 cloth, 20 plate boots). What a key sounds as is learned from the game itself, each time
 //   it sets armorkey with a chest on or material_game with boots on;
 // - two unnamed events on object 2: the equip sounds, one pair per change of gear. Not played during an outfit load;
-// - the lantern: lit, the character takes it in the hand and sfx_move_lantern_fire_engage plays on the lantern's own
-//   object; put out, sfx_lantern_off plays there (again with the lantern in the hand). Put back on the hip while lit,
-//   only sfx_lantern_in plays (on the character): it keeps burning. Its rattle only sounds while it is held.
+// - the lantern: lit, sfx_move_lantern_fire_engage plays on the lantern's own object (an object of its own, near the
+//   character); put out, sfx_lantern_off. The same from its wheel (On / Off) and in the world (2026-11-10). Put back
+//   on the hip while lit, only sfx_lantern_in plays (on the character): it keeps burning. Its rattle only sounds while
+//   it is held. Not known: whether it burns when a save is loaded (until it is lit or put out once).
 // With Unequip Outfit (no looks) nothing is changed.
 //
 // Whose sounds: every character has a sound object of its own, numbered from 100001 in the order they came (Kliff
@@ -36,6 +37,7 @@
 // Damiane and Oongka. The objects' positions come from Wwise's SetPosition (doubles, metres).
 #include "om.h"
 #include "addrs.h"
+#include "game.h"
 #include "gear.h"
 #include "items.h"
 #include "load.h"
@@ -46,6 +48,9 @@
 #include <atomic>
 #include <cmath>
 #include <cstring>
+#include <utility>
+#include <vector>
+#include <string>
 
 namespace om {
 
@@ -53,6 +58,7 @@ namespace {
 
 constexpr U64 kUiObj = 2, kPoolFirst = 0x61A80, kPartyFirst = 100001;
 constexpr U32 kPoolSize = 256, kPartySize = 32; // (the characters' objects: the first numbers)
+constexpr U32 kNearSize = 1024; // (objects from 100001 whose positions are kept: the characters', their lanterns')
 constexpr U32 kEvArmorLoop = 0x34F371D9, kEvShield = 0x74C41A56, kEvPlateShoe = 0x554A8706, kEvCollideMetal = 0x0D27F39D,
               kEvEquipA = 0x2361D7A5, kEvEquipB = 0xB074E90E;
 constexpr U32 kEvLanternLit = 0x3A0056B4 /* sfx_move_lantern_fire_engage */, kEvLanternLit2 = 0xC4286E38 /* sfx_lantern_fire_engage */,
@@ -65,7 +71,7 @@ constexpr U16 kArmourSlots[] = {3, kChestSlot, 5, kBootsSlot, 16}; // helm, ches
 constexpr U32 kOffItemMaterial = 0x4C;                             // (ItemInfo: its MaterialMatchInfo key, u16)
 constexpr U32 kOffCompNode = 0x40, kOffNodePos = 0x168;            // (the actor's component -> node -> position, 3 floats)
 constexpr double kOwnReach = 1.5; // (m: his own gear's collisions were 0.3 - 1.1 from his object)
-constexpr U64 kLanternInHandMs = 600; // (lit / put out: the lantern was in the played character's hand this lately)
+constexpr double kLanternReach = 2.5; // (m: the played character's lantern - on the hip or in the hand - from his object)
 
 using PostFn = U32(__fastcall*)(U32 id, U64 go, U32 flags, void* cb, void* cookie, U32 n, void* ext, U32 playing);
 using SwitchFn = U32(__fastcall*)(U32 group, U32 state, U64 go);
@@ -78,7 +84,7 @@ ActionFn g_action = nullptr;
 
 std::atomic<U64> g_player_obj{0};                 // (the played character's sound object; 0: not known)
 double g_pool_pos[kPoolSize][3];                  // (written on the game's threads, read on them: plain values)
-double g_party_pos[kPartySize][3];
+double g_party_pos[kNearSize][3];
 bool g_pool_gear[kPoolSize];                      // (the emitter's last collidetype wasn't footstep)
 // each character object: what the game last set, and what is set now
 struct Party { std::atomic<U32> armor{0}, shoe{0}, armor_applied{0}, shoe_applied{0}; };
@@ -118,14 +124,23 @@ void stop_event(U32 event, U64 go)
     if (g_action) g_action(event, 0 /* stop */, go, 100, 4 /* linear */, 0);
 }
 
-// (the lantern's sounds: lit / put out while the played character holds it, or on the object it was lit on)
+// (the lantern's sounds, on the lantern's own object - lit / put out, from its wheel or in the world alike: the played
+// character's when that object is at his)
 void lantern_event(U32 id, U64 go)
 {
     const bool lit = id == kEvLanternLit || id == kEvLanternLit2, out = id == kEvLanternOff || id == kEvLanternBlow;
     if (!lit && !out) return;
-    const bool in_hand = GetTickCount64() - g_lantern_drawn_at.load() < kLanternInHandMs;
-    if (lit && in_hand) g_lantern_obj = go, g_lantern_lit = true;
-    else if (out && (in_hand || (go && go == g_lantern_obj.load()))) g_lantern_lit = false;
+    const U64 player = g_player_obj.load();
+    if (go != g_lantern_obj.load()) {
+        if (!player || go - kPartyFirst >= kNearSize) return;
+        const double* a = g_party_pos[go - kPartyFirst];
+        const double* b = g_party_pos[player - kPartyFirst];
+        double d2 = 0;
+        for (int k = 0; k < 3; ++k) d2 += (a[k] - b[k]) * (a[k] - b[k]);
+        if ((a[0] == 0 && a[1] == 0 && a[2] == 0) || d2 > kLanternReach * kLanternReach) return; // (another's)
+        g_lantern_obj = go;
+    }
+    g_lantern_lit = lit;
 }
 
 bool muted(U32 id, U64 go)
@@ -179,7 +194,7 @@ U32 __fastcall setpos_hook(U64 go, const void* xform, U32 flags)
 {
     if (xform) {
         if (go - kPoolFirst < kPoolSize) std::memcpy(g_pool_pos[go - kPoolFirst], static_cast<const char*>(xform) + 24, 24);
-        else if (go - kPartyFirst < kPartySize) std::memcpy(g_party_pos[go - kPartyFirst], static_cast<const char*>(xform) + 24, 24);
+        else if (go - kPartyFirst < kNearSize) std::memcpy(g_party_pos[go - kPartyFirst], static_cast<const char*>(xform) + 24, 24);
     }
     return g_setpos(go, xform, flags);
 }
@@ -250,6 +265,8 @@ void give_back(U64 obj)
 } // namespace
 
 bool lantern_lit() { return g_lantern_lit.load(); }
+
+
 
 void sound_install()
 {

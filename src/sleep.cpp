@@ -42,6 +42,7 @@
 
 namespace om {
 
+
 #include "sleep_states.inc"
 
 extern std::atomic<HWND> g_game_hwnd; // (input.cpp)
