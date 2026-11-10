@@ -242,7 +242,7 @@ const char* icon_name_of(U64 item)
 // A piece's icon texture: from its copy (worn or in a bag), else from a bare item with its key (not in the inventory).
 std::string piece_icon(const OutfitItem& it)
 {
-    U64 copy = it.slot == kBackShieldSlot ? back_shield_item() : find_copy(it.uid, it.key);
+    U64 copy = is_display_slot(it.slot) ? display_item(it.slot) : find_copy(it.uid, it.key);
     if (!copy && it.key == 0xFFFF) return {}; // (nothing saved there)
     alignas(16) unsigned char bare[200] = {};
     std::memcpy(bare, &it.uid, 8);

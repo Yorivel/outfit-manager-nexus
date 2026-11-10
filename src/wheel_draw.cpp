@@ -330,7 +330,7 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
     if (icon && is_element(icon)) {
         ok &= set_class(icon, "quickslot-item-image-none", false);
         const bool sword = false, necklace = false; // (the page slot: its label now, no silhouette)
-        bool holder = piece && !under && pic.empty() && it->slot != kBackShieldSlot; // (an empty slot: the game's placeholder)
+        bool holder = piece && !under && pic.empty() && !is_display_slot(it->slot); // (an empty slot: the game's placeholder)
         bool armor = piece && pic.empty() && !holder;
         ok &= set_class(icon, "om-empty-armor", armor);
         ok &= set_class(icon, "om-empty-sword", sword);

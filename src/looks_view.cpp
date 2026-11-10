@@ -37,7 +37,11 @@ std::vector<size_t> eye_pieces()
             if (is_accessory_slot(g_armor_slots[i]) == (g_eye_step != 0)) v.push_back(g_armor_slots[i]);
     }
     std::sort(v.begin(), v.end());
-    if (g_eye_step == 1) v.push_back(kBackPiece);
+    if (g_eye_step == 1) { // (the display slots, after the wheel's: the carried weapon, the back shield, the carried ranged one)
+        if (display_item(kCarriedSlotA)) v.push_back(kCarriedSlotA);
+        v.push_back(kBackPiece);
+        if (display_item(kCarriedSlotB)) v.push_back(kCarriedSlotB);
+    }
     if (g_eye_step == 0) v.push_back(kUnderwearPiece); // (the Armour page: the underwear last)
     return v;
 }
@@ -71,6 +75,13 @@ const OutfitItem* eye_item(size_t idx, OutfitItem& tmp)
     if (idx != kBackPiece) {
         for (const OutfitItem& it : o.items)
             if (it.slot == idx) return &it;
+        if (idx == kCarriedSlotA || idx == kCarriedSlotB) { // (what the slot holds now, with the slot's look)
+            U16 key = 0xFFFF;
+            U64 uid = 0;
+            if (U64 e = display_item(static_cast<U16>(idx))) rd(e + 8, key), rd(e, uid);
+            tmp = {static_cast<U16>(idx), key, uid, slot_look(o, static_cast<U16>(idx))};
+            return &tmp;
+        }
         tmp = {static_cast<U16>(idx), 0xFFFF, 0, slot_look(o, static_cast<U16>(idx))};
         return &tmp;
     }

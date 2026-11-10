@@ -189,7 +189,11 @@ void center_for_focus(U64 self, U64 script, bool hide_otherwise)
             const OutfitItem& it = *eye_item(pieces[k], tmp);
             std::string nm = it.key != 0xFFFF ? item_name(it.key) : std::string();
             if (pieces[k] == kUnderwearPiece) nm = lang::t("piece.underwear");
-            if (pieces[k] == kBackPiece)
+            // (Oongka's slot 23 carries his cannon, not a shield: named like the other carried weapons)
+            const bool carried = pieces[k] == kCarriedSlotA || pieces[k] == kCarriedSlotB || (pieces[k] == kBackPiece && g_character == 5);
+            if (carried)
+                nm = nm.empty() ? std::string(lang::t("piece.carried")) : lang::f("piece.carried_item", {{"item", nm}});
+            else if (pieces[k] == kBackPiece)
                 nm = nm.empty() ? std::string(lang::t("piece.back_shield")) : lang::f("piece.back_shield_item", {{"item", nm}});
             g_center_name = nm.empty() ? std::string(lang::t("piece.empty")) : nm;
             g_center_desc = lang::t(kLookText[it.look < kLookCount ? it.look : 0]);

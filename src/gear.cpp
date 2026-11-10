@@ -292,13 +292,14 @@ int read_worn(U64 self, WornRaw* out, int max)
     return n;
 }
 
-U64 back_shield_item()
+U64 display_item(U16 slot)
 {
     U64 list = equipment_list();
-    U64 e = list ? equipped_item(list, kBackShieldSlot) : 0;
+    U64 e = list ? equipped_item(list, slot) : 0;
     U16 key = 0xFFFF;
     return e && rd(e + 8, key) && key != 0xFFFF ? e : 0;
 }
+U64 back_shield_item() { return display_item(kBackShieldSlot); }
 
 int anchor_outfit()
 {
@@ -313,7 +314,7 @@ bool left_anchor(const Outfit& o, const WornRaw* w, int n)
 {
     int total = 0, kept = 0;
     for (const OutfitItem& it : o.items) {
-        if (is_weapon_slot(it.slot) || is_accessory_slot(it.slot) || it.slot == kBackShieldSlot) continue;
+        if (is_weapon_slot(it.slot) || is_accessory_slot(it.slot) || is_display_slot(it.slot)) continue;
         ++total;
         for (int k = 0; k < n; ++k)
             if (w[k].slot == it.slot && w[k].uid == it.uid && w[k].key == it.key) ++kept;

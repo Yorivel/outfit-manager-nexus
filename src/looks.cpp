@@ -404,7 +404,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
         bool drawn = false;
         int ch_case = 0;
         std::vector<int> extras;
-        if (is_weapon_slot(p.slot) || p.slot == kBackShieldSlot) { // (drawn: always shown; its parts are watched)
+        if (is_weapon_slot(p.slot) || is_display_slot(p.slot)) { // (drawn: always shown; its parts are watched)
             if (U64 part = look_part(model, h); part && vc) {
                 PartInfo& pi = g_part_info[{model, h}];
                 U64 tab = rp(model + 0x58);
@@ -510,7 +510,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
             // (an outfit change and its transition change looks too: only noted then, no effect of its own)
             const bool quiet = hold || hide_wait || fx_transition_busy() || !transition_on();
             auto was = g_fx_was_shown.find(key);
-            const bool weapon = is_weapon_slot(p.slot) || p.slot == kBackShieldSlot; // (weapons only - user, 2026-11-07)
+            const bool weapon = is_weapon_slot(p.slot) || is_display_slot(p.slot); // (weapons only - user, 2026-11-07)
             if (weapon && !quiet && was != g_fx_was_shown.end() && was->second != vis) {
                 std::vector<U32> holo;
                 std::vector<U32> names;
@@ -543,7 +543,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
         }
         // (a weapon going from shown to hidden during the transition: left as it is until the glow's peak ends -
         // hidden at once, it cut the glow short)
-        if (hide_wait && !(shown || drawn) && (is_weapon_slot(p.slot) || p.slot == kBackShieldSlot)) {
+        if (hide_wait && !(shown || drawn) && (is_weapon_slot(p.slot) || is_display_slot(p.slot))) {
             auto ai = applied.find(p.slot);
             bool hidden_now = ai != applied.end() && ai->second == h && !was_forced.count(h);
             if (!hidden_now) {

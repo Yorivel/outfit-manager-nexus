@@ -96,6 +96,8 @@
 {"look.shown", "Visibility: always shown"},
 {"piece.back_shield", "Back shield"},
 {"piece.back_shield_item", "Back shield ({item})"},
+{"piece.carried", "Carried weapon"},
+{"piece.carried_item", "Carried ({item})"},
 {"piece.empty", "Empty slot"},
 {"piece.underwear", "Underwear"},
 {"slot.helmet", "Helmet"},

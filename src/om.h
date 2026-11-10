@@ -160,6 +160,11 @@ struct Outfit {
 };
 constexpr std::uint8_t kActivityNone = 0, kActivitySleep = 1, kActivityCount = 2;
 constexpr U16 kBackShieldSlot = 23;
+// The display slots (the game's equip slot table, CDInventory/tools/equipslots.py): on no wheel, each shows a carried
+// weapon on the body, mirroring a weapon slot - Kliff 22 sword, 23 shield, 24 bow; Damiane 22 rapier, 23 right-hand
+// shield, 24 pistol; Oongka 22 two-hand axe, 23 cannon. 23 has its look in Outfit::back_look, 22 / 24 as slot looks.
+constexpr U16 kCarriedSlotA = 22, kCarriedSlotB = 24;
+inline bool is_display_slot(U16 slot) { return slot >= kCarriedSlotA && slot <= kCarriedSlotB; }
 constexpr U32 kMaxWeaponSlots = 16;
 constexpr U32 kWornMax = kOutfitSlots + kMaxWeaponSlots; // worn entries: armour, then weapons
 
