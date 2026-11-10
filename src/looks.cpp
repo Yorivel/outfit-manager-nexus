@@ -300,6 +300,7 @@ void log_model_parts(U64 model, U16 ch)
     LOG("appearance: character %u model parts (%u):%s", ch, n, s.c_str());
 }
 
+std::atomic<U32> g_player_hidden_slots{0};
 std::map<U64, std::string> g_look_state; // inventory -> the last logged state (logged when it changes)
 
 // A part of the model still loading (its swap is to come; a look set now is queued and lands with it).
@@ -382,6 +383,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
     std::set<int> wanted, forced;
     std::string state; // per piece: what it is now and why (the log line)
     std::set<U16> deferred; // (weapon slots whose hiding waits for the transition's glow)
+    U32 hidden_mask = 0;    // (the slots hidden by their look: sound.cpp mutes their movement sounds)
     const bool hide_wait = GetTickCount64() < g_weapon_hide_after;
     const std::set<int>& was_forced = g_look_forced[inv];
     for (const LookPiece& p : pieces) {
@@ -559,6 +561,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
         if (!(hold && (shown || drawn)) && look_call(model, h, shown || drawn ? 1 : 0)) now[p.slot] = h;
         if (shown || drawn) forced.insert(h);
         state += shown || drawn ? hold ? " shown once on" : " shown" : " hidden";
+        if (!(shown || drawn) && p.slot < 32) hidden_mask |= 1u << p.slot;
         if (drawn && !shown) state += " (drawn)";
         if (ch_case && !(hold && case_shown) && look_call(model, ch_case, case_shown ? 1 : 0)) {
             now[static_cast<U16>(p.slot | 0x100)] = ch_case;
@@ -578,6 +581,15 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
             else look_call(model, h, 2);
         }
     applied = std::move(now);
+    if (inv == player_inventory()) {
+        // (bit 31: a worn body armour piece - helm, chest, gloves, boots - still shows; sound.cpp: the armour's sounds)
+        for (U16 slot : {U16(3), kChestSlot, U16(5), U16(6)}) {
+            U64 e = list ? equipped_item(list, slot) : 0;
+            U16 key = 0xFFFF;
+            if (e && rd(e + 8, key) && key != 0xFFFF && !(hidden_mask & (1u << slot))) hidden_mask |= 1u << 31;
+        }
+        g_player_hidden_slots = hidden_mask;
+    }
     g_look_wanted[inv] = std::move(wanted);
     g_look_forced[inv] = std::move(forced);
     if (in_battle) state += " (in battle)";
@@ -588,6 +600,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
         LOG("appearance: character %u:%s", ch, state.empty() ? " nothing to do" : state.c_str());
     }
 }
+U32 look_hidden_slots() { return g_player_hidden_slots.load(); }
 BattleCheckFn g_battle_check = nullptr;
 int in_battle_of(U64 inv)
 {

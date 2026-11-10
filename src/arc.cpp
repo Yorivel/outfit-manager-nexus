@@ -522,10 +522,12 @@ void peek_ride_place()
 }
 
 void sleep_tick(U64 self); // (sleep.cpp)
+void sound_tick();         // (sound.cpp)
 
 void peek_frame(U64 self)
 {
     sleep_tick(self); // (a sleep begun or ended: the sleepwear goes on / what was worn comes back)
+    sound_tick();     // (the armour's sounds follow its looks)
     U64 root = rp(self + 8);
     if (root != g_peek_root) { // (first frame, or the screen was made again: a load)
         g_peek_root = root, g_peek = Peek{};

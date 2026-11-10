@@ -20,6 +20,7 @@
 namespace om {
 
 void sleep_install(); // (sleep.cpp)
+void sound_install(); // (sound.cpp)
 
 std::wstring g_log_path;
 bool g_features_toast_done = false;
@@ -168,6 +169,7 @@ bool install()
         g_open_orig, g_tab_orig, g_select_orig, g_close_orig, g_frame_orig, g_focus_orig, g_base);
     install_rename_prompt();
     sleep_install(); // sleepwear: the sleep seen in the action charts (sleep.cpp)
+    sound_install(); // hidden gear's sounds, the equip sounds of an outfit change (sound.cpp)
     install_ask_dialog();
     if (g_equip_request && have({kRvaCompanionEquip})) { // companions' pieces from storage / the wardrobe
         void* t = reinterpret_cast<void*>(g_base + kRvaCompanionEquip);
