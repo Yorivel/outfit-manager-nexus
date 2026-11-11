@@ -15,11 +15,15 @@
 //   with plate boots (counted per worn set, 2026-11-10): the boots'. Hidden boots: not played (the switches don't
 //   silence it);
 // - sfx_move_shield: with every step, the shield on the back. Hidden shield: not played;
-// - sfx_collide_metal: physics - metal knocking when he starts / stops. Played by the game's collision-sound function
-//   (kRvaCollideSound) for a contact record whose +0x60 is the colliding body; the played character's own clinks all
-//   come from ONE body (his component +0x298), and only with a metal chest (none with a cloth chest and a plate cloak,
-//   plate gloves / boots add none - 2026-11-11): the chest's, like armorkey. Hidden chest: his body's clinks not
-//   played; everyone else's (an NPC he bumps into) play;
+// - sfx_collide_metal (and its thick / thin variants): physics - metal knocking when he starts / stops, only with a
+//   metal chest (none with a cloth chest and a plate cloak; plate gloves / boots add none - 2026-11-11): the chest's,
+//   like armorkey. The game's collision-sound function (kRvaCollideSound) sounds a contact record; its play requests
+//   (kRvaPlayRequest) post at once, or queue for the audio thread when the pooled sound object is new (his first
+//   clink after a load). The contact's body handle (+kOffContactBody) is, for his own, the handle of one of HIS scene
+//   objects: the second in the model component's list the headgear switch takes his model from (the same for Kliff,
+//   Damiane and Oongka; a SceneObjectClient, checked by its class). Hidden chest: his requests whose event (read from
+//   the game's own event record, as its post does) is a metal clink are not passed on - nothing posted or queued;
+//   everyone else's (an NPC he bumps into) and his other collisions (a puddle) play;
 // - two unnamed events on object 2: the equip sounds, one pair per change of gear. Not played during an outfit load.
 // The lantern only sounds while held (shown then): nothing to do. With Unequip Outfit (no looks) nothing is changed.
 //
@@ -27,8 +31,9 @@
 // differ per session and per save load). The played one's is read the way the game finds it when it sets the
 // character's armorkey: actor -> component -> its effects -> its sound component -> sound handle -> number
 // (player_object; found by following the game's call chain from the switch back to the gear change, 2026-11-11).
-// The offsets are checked by the resolver against the game functions that use them (addrs.cpp, strict: unsure = off);
-// the clink's two offsets have no witness, but wrong they only make no clink match his body (nothing muted).
+// The offsets are checked by the resolver against the game functions that use them (addrs.cpp, strict: unsure = off).
+// The one without a witness, his scene list's +kOffScenesBody, can only ever name one of his own objects (or none):
+// wrong, no clink matches (they all play), never another actor's.
 #include "om.h"
 #include "addrs.h"
 #include "gear.h"
@@ -39,6 +44,7 @@
 #include <atomic>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace om {
 
@@ -47,6 +53,7 @@ namespace {
 constexpr U64 kUiObj = 2, kPartyFirst = 100001;
 constexpr U32 kPartySize = 1u << 14; // (objects from 100001: the characters' - numbered on as they spawn, across loads)
 constexpr U32 kEvArmorLoop = 0x34F371D9, kEvShield = 0x74C41A56, kEvPlateShoe = 0x554A8706, kEvCollideMetal = 0x0D27F39D,
+              kEvCollideMetalThick = 0xC967993C, kEvCollideMetalThin = 0xEA78F3A0,
               kEvEquipA = 0x2361D7A5, kEvEquipB = 0xB074E90E;
 constexpr U32 kSwArmorKey = 0x3921C2FF, kSwSkin = 0x310330D2, kSwShoe = 0xB25BD7C3 /* material_game */, kSwLeather = 0xD80FFE88;
 constexpr U16 kShieldSlot = 13, kBootsSlot = 6;
@@ -61,14 +68,14 @@ ActionFn g_action = nullptr;
 CollideFn g_collide_orig = nullptr;
 
 std::atomic<U64> g_player_obj{0};  // (the played character's sound object; 0: not known)
-std::atomic<U64> g_player_body{0}; // (his physics body: his own collisions)
+std::atomic<U64> g_player_body{0}; // (his body's handle: his own collisions' contacts carry it)
 // each character object: what the game last set, and what is set now
 struct Party { std::atomic<U32> armor{0}, shoe{0}, armor_applied{0}, shoe_applied{0}; };
 Party g_party[kPartySize];
 // from the HUD frame (sound_tick), for the hooks
 std::atomic<bool> g_chest_hidden{false}, g_boots_hidden{false}, g_shield_hidden{false};
 std::atomic<bool> g_lantern_lit{false}; // (the played character's lantern burns)
-thread_local U64 t_contact = 0;         // (the contact being sounded by the collision-sound function, on this thread)
+thread_local U64 t_contact = 0;        // (the contact being sounded by the collision-sound function, on this thread)
 
 // (every playing instance of an event on an object: the armour loop is started again by the game after each change
 // of gear and by sound_tick - one at a time, or they pile up)
@@ -76,6 +83,8 @@ void stop_event(U32 event, U64 go)
 {
     if (g_action) g_action(event, 0 /* stop */, go, 100, 4 /* linear */, 0);
 }
+
+bool is_metal_clink(U32 id) { return id == kEvCollideMetal || id == kEvCollideMetalThick || id == kEvCollideMetalThin; }
 
 bool muted(U32 id, U64 go)
 {
@@ -86,17 +95,13 @@ bool muted(U32 id, U64 go)
     } else if (go == kUiObj) {
         if (id == kEvEquipA || id == kEvEquipB) return g_async.active || GetTickCount64() - g_async.started < 500;
     }
-    if (id == kEvCollideMetal && t_contact && g_chest_hidden.load()) { // (his own body's metal knocking: the chest's)
-        U64 body = 0;
-        const U64 mine = g_player_body.load();
-        return mine && kOffContactBody && rd(t_contact + kOffContactBody, body) && body == mine;
-    }
     return false;
 }
 
 U32 __fastcall post_hook(U32 id, U64 go, U32 flags, void* cb, void* cookie, U32 n, void* ext, U32 playing)
 {
-    if (muted(id, go)) return 0; // (AK_INVALID_PLAYING_ID: not played)
+    const bool mute = muted(id, go);
+    if (mute) return 0; // (AK_INVALID_PLAYING_ID: not played)
     if (id == kEvArmorLoop && go && go == g_player_obj.load()) stop_event(id, go); // (ours, or an older one of the game's)
     return g_post(id, go, flags, cb, cookie, n, ext, playing);
 }
@@ -130,6 +135,36 @@ U64 __fastcall collide_hook(U64 a1, U64 a2, U64 a3, U64 a4, U64 a5, U64 a6, U64 
     return r;
 }
 
+// The game's play request (kRvaPlayRequest: audio manager, sound object, position, event key, ...): it posts the event
+// at once, or queues it for the audio thread when the sound object is new. Inside the collision-sound function
+// (t_contact set) it is that contact's; the contact's body handle says whose. His metal knocking while his chest is
+// hidden is not asked for at all - the event read from the game's own record, the one the post would use
+// (kRvaEventLookup, as kRvaEventPost does), and its alternative for afar.
+using PlayReqFn = U32(__fastcall*)(U64, U32, U64, U64, U64, U64, U64, U64);
+using LookupFn = U64(__fastcall*)(U64 key);
+PlayReqFn g_playreq_orig = nullptr;
+LookupFn g_lookup = nullptr;
+bool metal_event(U64 key)
+{
+    const U64 rec = key ? g_lookup(key) : 0;
+    U32 id = 0;
+    return rec && rd(rec + kOffEventId, id) && is_metal_clink(id);
+}
+U32 __fastcall playreq_hook(U64 a1, U32 go, U64 a3, U64 a4, U64 a5, U64 a6, U64 a7, U64 a8)
+{
+    if (t_contact && g_chest_hidden.load()) {
+        U64 h = 0;
+        const U64 mine = g_player_body.load();
+        if (mine && rd(t_contact + kOffContactBody, h) && h == mine) {
+            const U64 rec = a4 ? g_lookup(a4) : 0;
+            U32 id = 0;
+            const bool metal = rec && rd(rec + kOffEventId, id) && (is_metal_clink(id) || metal_event(rec + kOffEventAlt));
+            if (metal) return 0; // (no playing id: as when nothing could play)
+        }
+    }
+    return g_playreq_orig(a1, go, a3, a4, a5, a6, a7, a8);
+}
+
 template <typename F>
 bool hook_export(const char* mangled, void* hook, F* orig)
 {
@@ -151,7 +186,13 @@ U64 player_object(U64* body)
     U64 handle = snd ? rp(snd + kOffSoundHandle) : 0;
     U32 id = 0;
     const bool ok = handle && rd(handle + kOffHandleObject, id);
-    *body = comp && kOffCompBody ? rp(comp + kOffCompBody) : 0;
+    // (his body handle: the one of his scene objects his own collisions come from - in the model component's list the
+    // headgear switch takes his model from; it holds a SceneObjectClient, checked by its class)
+    const bool scenes = kOffCompModel && kOffModelScenes && kOffScenesBody && kRvaSceneObjVt;
+    const U64 list = comp && scenes ? rp(rp(comp + kOffCompModel) + kOffModelScenes) : 0;
+    U64 h = list ? rp(list + kOffScenesBody) : 0;
+    if (h && rp(rp(h + 8)) != g_base + kRvaSceneObjVt) h = 0;
+    *body = h;
     if (ctx[0]) release_player(ctx);
     return ok && id - kPartyFirst < kPartySize ? id : 0;
 }
@@ -197,8 +238,16 @@ void sound_install()
         collide = MH_CreateHook(t, reinterpret_cast<void*>(&collide_hook), reinterpret_cast<void**>(&g_collide_orig)) == MH_OK &&
                   MH_EnableHook(t) == MH_OK;
     }
+    bool clinks = false; // (his knocking: the collision function's contact, the play request, the event lookup)
+    if (collide && have({kRvaPlayRequest, kRvaEventLookup, kRvaSceneObjVt}) && kOffContactBody && kOffEventId &&
+        kOffEventAlt && kOffCompModel && kOffModelScenes && kOffScenesBody) {
+        g_lookup = reinterpret_cast<LookupFn>(g_base + kRvaEventLookup);
+        void* t = reinterpret_cast<void*>(g_base + kRvaPlayRequest);
+        clinks = MH_CreateHook(t, reinterpret_cast<void*>(&playreq_hook), reinterpret_cast<void**>(&g_playreq_orig)) == MH_OK &&
+                 MH_EnableHook(t) == MH_OK;
+    }
     LOG("sounds: play %s, switches %s, stop %s, collisions %s", post ? "watched" : "NOT found", sw ? "watched" : "NOT found",
-        g_action ? "found" : "NOT found", collide ? "watched" : "NOT found (a hidden chest's metal knocking still sounds)");
+        g_action ? "found" : "NOT found", clinks ? "watched" : "NOT found (a hidden chest's metal knocking still sounds)");
 }
 
 // The HUD frame: whose sounds, what is worn and hidden now (for the hooks), the lantern, and the switches again when a
@@ -238,7 +287,8 @@ void sound_tick()
                 g_player_obj = obj;
                 give_back(before);
             }
-            LOG("sounds: character %u played: sound object %llu%s", ch, obj, obj ? "" : " (not found: its sounds are left alone)");
+            LOG("sounds: character %u played: sound object %llu%s; his body %s", ch, obj, obj ? "" : " (not found: its sounds are left alone)",
+                body ? "found" : "NOT found (his metal knocking is left alone)");
             was_ch = ch;
         }
     }

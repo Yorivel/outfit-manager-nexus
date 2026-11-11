@@ -125,7 +125,11 @@ void publish_looks(const Store& s)
 }
 
 // The character model: the path the headgear switch takes from the inventory's actor.
-U64 look_model(U64 actor) { return rp(rp(rp(rp(rp(rp(actor + kOffActorComp) + 0x40) + 0x130)) + 8) + kOffModelRoot); }
+U64 look_model(U64 actor)
+{
+    if (!kOffCompModel || !kOffModelScenes) return 0; // (the resolver unsure: no model rather than a wrong one)
+    return rp(rp(rp(rp(rp(rp(actor + kOffActorComp) + kOffCompModel) + kOffModelScenes)) + 8) + kOffModelRoot);
+}
 
 bool look_call(U64 model, int handle, int op) // op: 0 hide, 1 show, 2 release
 {

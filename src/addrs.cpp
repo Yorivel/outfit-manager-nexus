@@ -364,7 +364,7 @@ void resolve_addresses()
                            &kOffPanelElem, &kOffEventType, &kOffBindingPressed, &kOffViewFlags,
                            // (not written, but what the game plays and shows follows them: off rather than wrong)
                            &kOffCompLantern, &kOffLanternLit, &kOffCompEffects, &kOffEffectsSound, &kOffSoundHandle,
-                           &kOffHandleObject};
+                           &kOffHandleObject, &kOffContactBody, &kOffEventId, &kOffEventAlt, &kOffCompModel, &kOffModelScenes};
     for (std::size_t i = 0; i < kOffsetCount; ++i) {
         *kOffsetVars[i] = values[i];
         bool unsure = status[i] == resolver::OffsetStatus::Doubtful ||
@@ -385,14 +385,25 @@ U64 kRvaLanternCheck = 0x1838280;    // (the game's "is it lit": counter > 0)
 U64 kRvaGearSounds = 0xb8a1d0;       // (sets the character's armorkey / material_game: its sound handle +0x70, number +0x18)
 U64 kRvaGearSoundsFrom = 0xa8a4b0;   // (calls it with the character's sound component: +0x68 -> +0x60 -> +0x18)
 U64 kRvaCollideSound = 0x34e64f0;    // (manager, contact record, ?, sound info, ...): sounds a collision - hooked
+U64 kRvaPlayRequest = 0x3b577d0;     // (audio manager, u32 sound object, position*, event key*, ...): the game's play request
+                                     // (posts at once, or queues for the audio thread) - hooked
+U64 kRvaEventLookup = 0x2812a80;     // (event key*): -> the event's record (its Wwise id at +kOffEventId) - called
+U64 kRvaEventPost = 0x3b56af0;       // (the audio thread's post of a queued request: reads the record's id and alternative)
+U64 kRvaContactCopy = 0x58e170;      // (copies a collision contact record: its body handle at +kOffContactBody, ref-counted)
+U64 kRvaSceneObjVt = 0x590d1a8;      // SceneObjectClient (what a contact's body handle holds)
 U64 kOffCompLantern = 0x50;          // character component -> its lantern state
 U64 kOffLanternLit = 0x18c;          // lantern state -> u32 lit counter (> 0: lit)
 U64 kOffCompEffects = 0x60;          // character component -> its effects (also transition.cpp's effect component)
 U64 kOffEffectsSound = 0x18;         // effects -> the character's sound component
 U64 kOffSoundHandle = 0x70;          // sound component -> its sound handle
 U64 kOffHandleObject = 0x18;         // sound handle -> u32 its Wwise game object
-U64 kOffContactBody = 0x60;          // collision contact record -> the colliding body (no witness: wrong = nothing matches)
-U64 kOffCompBody = 0x298;            // character component -> its physics body (the same)
+U64 kOffContactBody = 0x88;          // collision contact record -> the body handle it came from
+U64 kOffEventId = 0x4;               // event record -> u32 its Wwise event id
+U64 kOffEventAlt = 0x68;             // event record -> the key of its alternative (played instead from afar)
+U64 kOffCompModel = 0x40;            // character component -> its model component (the headgear switch's path)
+U64 kOffModelScenes = 0x130;         // model component -> his scene objects: +0 the main one's handle (-> the model)
+U64 kOffScenesBody = 0x8;            // his scene objects -> the handle of the one his own collisions come from (a
+                                     // contact's +kOffContactBody for his clinks; only his own handles are in there)
 
 // The outfit transition and the hidden weapons' effects (transition.cpp; build 26480954, 2976 addresses in brackets).
 U64 kRvaMatUpdate = 0x586760;        // (effect component): the player's material update - hooked, the values go out here [0x4d30f0]
