@@ -409,6 +409,9 @@ U64 kOffScenesBody = 0x8;            // his scene objects -> the handle of the o
 U64 kRvaMatUpdate = 0x586760;        // (effect component): the player's material update - hooked, the values go out here [0x4d30f0]
 U64 kRvaMatSend = 0x5866a0;          // (effect component, u8 0, message*, 0): a material value to the character [0x4d3030]
 U64 kRvaMatChange = 0x5a1230;        // (actor, time*, f32, u32* id, f32* values, u32 count, u8 mode 2, u32, parts*) [0x4ecc80]
+U64 kRvaMatApply = 0x55af70;         // (value table = effect component +0x400, f32 time step, scene list, owner object): the
+                                     // game's apply pass - what was sent for single parts reaches the meshes
+U64 kRvaMatApplyOwner = 0x5b6590;    // (the component's owner = component +8) -> the owner object the pass is given
 U64 kRvaPermSet = 0x587910;          // (effect component, u32* permutation id, message*, u8 all): UseMaterialEffect counter [0x4d4270]
 U64 kRvaMsgInit = 0x3ca0f20;         // (message*, key*): a material value message [0x39c3ee0]
 U64 kRvaMsgFloatVtable = 0x60d3888;  // float message's vtable (value at +0x30) [0x145d0feb0]

@@ -204,6 +204,7 @@ void feature_off(const char* name);
 extern U64 kRvaMatUpdate;
 extern U64 kRvaMatSend;
 extern U64 kRvaMatChange;
+extern U64 kRvaMatApply, kRvaMatApplyOwner;
 extern U64 kRvaPermSet;
 extern U64 kRvaMsgInit;
 extern U64 kRvaMsgFloatVtable;

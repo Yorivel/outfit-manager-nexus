@@ -16,6 +16,17 @@
 //    the part table, and again when every new piece has loaded (no part with a pending load at +0x78).
 //  - The weapons' glow particles pushed the world's falling leaves out of the particle budget in busy spots: the
 //    global gv_effect_totalParticleCountRatio (found at install: find_budget) is doubled while any glow plays.
+//  - Values sent for single parts (kRvaMatChange with a part list) are only STORED in the character's value table
+//    (effect component +0x400); they reach the meshes when the game runs its apply pass over the table
+//    (kRvaMatApply), which it does when it sends a value to the whole character or in its own update - not every
+//    frame. A transition sends whole-character values each frame, so it never noticed; the part hologram's values
+//    arrived whenever the game happened to send something (the effect played on some draws and not on others). The
+//    part hologram now runs the pass itself, right after its values (2026-11-12).
+//  - While UseMaterialEffect is on for a part, bare skin (and what is fitted to it) shows the hologram whatever
+//    values it is sent: with the permutation on for the whole character, all of him lit up with a drawn tool ("the
+//    ghost"). So the part hologram switches it on for ITS parts only: the switch's last argument 0 skips the parts
+//    flagged at +0x89, and for the call every other part is flagged (perm_parts; 2026-11-12, tested with the bow,
+//    the swords, the sprayer, the fishing rod, on a bare and a dressed torso).
 //  - A piece's glow colour is piece +0x98 (ARGB) / +0x94 (alpha / 255): the game copies the settings' colour only when
 //    a piece is made, so it is written every time.
 #include "om.h"
@@ -341,16 +352,85 @@ bool g_perm_on = false;                  // (game thread)
 using MatUpdFn = void(__fastcall*)(U64);
 MatUpdFn g_mat_upd_orig = nullptr;
 
+// UseMaterialEffect for chosen parts only (model part handles): the game's switch, with its last argument 0, skips the
+// parts whose byte +0x89 is set. For the call every other part is flagged and the chosen ones are not; the bytes are
+// put back right after (same thread, nothing of the game runs in between). The flag's reader is in the game's
+// protected code, so its offset has no witness: the bytes are checked first as the game leaves them (0 / 1 only, the
+// head unflagged, a weapon flagged where there is one) - anything else, and the switch is made for the whole
+// character as before (false).
+bool perm_parts(const Player& p, U64 comp, bool on, const std::vector<U32>& parts)
+{
+    const U64 model = look_model(p.actor), tab = model ? rp(model + 0x58) : 0;
+    const U32 n = model ? r32(model + 0x60) : 0;
+    std::vector<std::pair<U64, U8>> saved;
+    bool sane = tab && n, weapon = false, weapon_flagged = false;
+    for (U32 i = 0; sane && i < n && i < 1024; ++i) {
+        const U64 q = rp(tab + i * 16ull + 8);
+        U8 old = 0;
+        if (!q) continue;
+        if (!rd(q + 0x89, old) || old > 1) { sane = false; break; }
+        const std::string nm = part_name(r32(q + 0x48));
+        if (nm == "Head" && old) sane = false;
+        if (nm.rfind("MainWeapon_", 0) == 0 || nm.rfind("TwoHandWeapon_", 0) == 0) weapon = true, weapon_flagged |= old == 1;
+        saved.push_back({q, old});
+    }
+    if (!sane || (weapon && !weapon_flagged)) {
+        static bool told = false;
+        if (!told) told = true, LOG("transition: the parts' effect flags are not as known; the part hologram's mode is set for the whole character");
+        return false;
+    }
+    for (const auto& [q, old] : saved)
+        wr<U8>(q + 0x89, std::find(parts.begin(), parts.end(), r32(q + 0x48)) != parts.end() ? 0 : 1);
+    perm(comp, on, 0);
+    for (const auto& [q, old] : saved) wr<U8>(q + 0x89, old);
+    return true;
+}
+// The game's apply pass over the character's value table, as its own update runs it (kRvaMatApply: the table, a time
+// step, the character's scene list, kRvaMatApplyOwner of the component's owner): what was sent for single parts
+// reaches the meshes now.
+void apply_table(U64 comp)
+{
+    if (!kRvaMatApply || !kRvaMatApplyOwner || !kOffCompModel || !kOffModelScenes) return;
+    const U64 owner = rp(comp + 8);
+    const U64 scenes = owner ? rp(rp(rp(owner + kOffActorComp) + kOffCompModel) + kOffModelScenes) : 0;
+    if (!owner || !scenes) return;
+    __try {
+        const U64 obj = reinterpret_cast<U64(__fastcall*)(U64)>(g_base + kRvaMatApplyOwner)(owner);
+        reinterpret_cast<void(__fastcall*)(U64, float, U64, U64)>(g_base + kRvaMatApply)(comp + 0x400, 0.0f, scenes, obj);
+    } __except (fault_filter()) {
+    }
+}
+std::vector<U32> g_holo_mode_parts; // (game thread: the parts the mode is on for; empty: for the whole character)
+
 void holo_tick(const Player& p, U64 comp)
 {
     std::vector<HoloRun> runs;
     {
         std::lock_guard<std::mutex> lock(g_mu);
         if (g_holo.empty() && !g_holo_perm) return;
-        if (g_k.load() > 0.0f) { g_holo.clear(), g_holo_perm = false; return; } // (a transition has the effect now)
+        if (g_k.load() > 0.0f) { // (a transition has the effect now)
+            g_holo.clear(), g_holo_perm = false;
+            if (!g_holo_mode_parts.empty()) { // (ours was for some parts: off, the transition switches its own on)
+                if (!perm_parts(p, comp, false, g_holo_mode_parts)) perm(comp, false, 1);
+                g_holo_mode_parts.clear(), g_perm_on = false;
+            }
+            return;
+        }
         runs = g_holo;
     }
-    if (!g_perm_on) perm(comp, true, 1), g_perm_on = true, g_holo_perm = true;
+    std::vector<U32> want; // (every part of the runs)
+    for (const HoloRun& r : runs)
+        for (U32 h : r.handles)
+            if (std::find(want.begin(), want.end(), h) == want.end()) want.push_back(h);
+    if (!g_perm_on) {
+        if (perm_parts(p, comp, true, want)) g_holo_mode_parts = want;
+        else perm(comp, true, 1);
+        g_perm_on = true, g_holo_perm = true;
+    } else if (!g_holo_mode_parts.empty() && want.size() > g_holo_mode_parts.size()) { // (a part joined the run)
+        if (!perm_parts(p, comp, false, g_holo_mode_parts)) perm(comp, false, 1);
+        if (perm_parts(p, comp, true, want)) g_holo_mode_parts = want;
+        else perm(comp, true, 1), g_holo_mode_parts.clear();
+    }
     const U64 now = GetTickCount64();
     bool over = false;
     for (const HoloRun& r : runs) {
@@ -364,10 +444,15 @@ void holo_tick(const Player& p, U64 comp)
         mat_float(p.actor, id_of("_particleInjectRatio"), x, r.handles);
         over |= t >= 2500;
     }
+    apply_table(comp); // (this frame's values reach the meshes now, not when the game next applies its table)
     g_holo_sent_at = now;
     std::lock_guard<std::mutex> lock(g_mu);
     if (over && !g_holo.empty() && now - g_holo.front().t0 >= 2500) g_holo.clear();
-    if (g_holo.empty() && g_holo_perm) perm(comp, false, 1), g_perm_on = false, g_holo_perm = false;
+    if (g_holo.empty() && g_holo_perm) {
+        if (g_holo_mode_parts.empty() || !perm_parts(p, comp, false, g_holo_mode_parts)) perm(comp, false, 1);
+        g_holo_mode_parts.clear();
+        g_perm_on = false, g_holo_perm = false;
+    }
 }
 
 std::atomic<bool> g_glow_all_req{false}; // (a weapon set's change, #27: glow the worn weapons, no body effect)

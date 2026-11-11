@@ -67,6 +67,7 @@ std::set<U64> g_look_swap_seen; // ... that have swapped since (the rebuild come
 std::map<std::pair<U64, U32>, std::pair<U64, U16>> g_weapon_parts;
 std::pair<U64, U16> g_bag_in_use{}; // (inventory, slot) of the backpack in use (its own: the draw check rewrites g_drawn)
 std::map<std::pair<U64, U16>, bool> g_drawn;
+std::map<std::pair<U64, U16>, U64> g_undraw_pending; // (inventory, slot) reported not drawn -> its vis ctrl: settled next frame
 // Bag-mounted tools (the fertilizer sprayer): the item's model is only the tank (Bag); what comes out when it is used
 // (Tool_Sprayer, TwoHandWeapon_Thrower) is attached to the bag's socket and is no part of that item. A drawn part
 // we don't watch counts for the character's bag item with a look: vis ctrl -> (inventory, its slot).
@@ -737,10 +738,19 @@ float __fastcall equip_vis_check_hook(U64 vc, const U32* part, std::uint8_t* rec
         if (key.first == vc && own == owner) now |= g_part_drawn[key];
     if (auto b = g_bag_weapon.find(vc); b != g_bag_weapon.end() && b->second == owner)
         for (U32 n : g_bag_tool_names) now |= g_bag_part_drawn[{vc, n}];
+    // "Not drawn" is settled on the next frame (look_pending), "drawn" at once. While a two-hand sword or a spear is
+    // held, the game resets the part and shows it again within one update, every animation loop: one routine reports
+    // it not drawn, the frame event's reports it drawn in the same instant (2026-11-12, both on the frame's thread).
+    // Taken one by one that was "sheathed, drawn again": its effects started over and over.
     bool& d = g_drawn[owner];
+    if (now) g_undraw_pending.erase(owner);
     if (d == now) return r;
-    d = now;
-    if (now && transition_on()) // (a hidden weapon drawn: its effects start on this frame - from the looks a frame
+    if (!now) {
+        g_undraw_pending[owner] = vc;
+        return r;
+    }
+    d = true;
+    if (transition_on()) // (a hidden weapon drawn: its effects start on this frame - from the looks a frame
                                 // later, its scabbard showed plain first)
         if (auto tg = g_fx_targets.find(owner); tg != g_fx_targets.end()) {
             fx_weapon_glow(tg->second.names, false);
@@ -781,6 +791,19 @@ void look_pending()
     std::vector<Todo> todo;
     {
         std::lock_guard<std::mutex> lock(g_appear_mu);
+        // (weapons reported not drawn since the last frame and not drawn again meanwhile: sheathed)
+        for (const auto& [owner, vc] : g_undraw_pending) {
+            bool now = false;
+            for (const auto& [key, own] : g_weapon_parts)
+                if (key.first == vc && own == owner) now |= g_part_drawn[key];
+            if (auto b = g_bag_weapon.find(vc); b != g_bag_weapon.end() && b->second == owner)
+                for (U32 n : g_bag_tool_names) now |= g_bag_part_drawn[{vc, n}];
+            if (now || !g_drawn[owner]) continue;
+            g_drawn[owner] = false;
+            if (std::find(g_look_pending.begin(), g_look_pending.end(), owner.first) == g_look_pending.end())
+                g_look_pending.push_back(owner.first);
+        }
+        g_undraw_pending.clear();
         if (g_look_pending.empty()) return;
         for (U64 inv : g_look_pending) todo.push_back({inv, g_in_battle[inv], g_look_swapped.count(inv) != 0});
         g_look_pending.clear();
