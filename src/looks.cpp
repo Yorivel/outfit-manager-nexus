@@ -258,8 +258,12 @@ std::vector<int> extra_case_handles(U64 model, const std::string& weapon)
                                                   "MainWeapon_Quiver_Arw_03", "MainWeapon_Arw_IN", "MainWeapon_Arw"};
     static const std::vector<const char*> kBag = {"Bag_Belt", "Tool_Sprayer"}; // (a bag tool's straps, its hand part)
     static const std::vector<const char*> kLantern = {"Lantern_Ring"}; // (the ring some lanterns hang from)
+    // (the Electromagnetic Boltspitter is the other way round from the sprayer: the item's own part is the launcher,
+    // which sits in the pack's socket - the pack and its straps come with it and are no part of the item)
+    static const std::vector<const char*> kThrower = {"Bag", "Bag_Belt"};
     std::vector<int> v;
-    const std::vector<const char*>* group = weapon == "MainWeapon_Bow" ? &kBow : weapon == "Bag" ? &kBag : weapon == "Lantern" ? &kLantern : nullptr;
+    const std::vector<const char*>* group = weapon == "MainWeapon_Bow" ? &kBow : weapon == "Bag" ? &kBag : weapon == "Lantern" ? &kLantern
+                                             : weapon == "TwoHandWeapon_Thrower" ? &kThrower : nullptr;
     if (!group) return v;
     U64 tab = rp(model + 0x58);
     U32 n = r32(model + 0x60);
