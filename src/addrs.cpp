@@ -259,8 +259,9 @@ alignas(16) std::uint8_t g_fake_slots[kOutfitSlots * kSlotSize];
 
 // Where an item's info keeps its stat lists (the 20261104 patch moved both by 8: 0x118 -> 0x120, 0x188 -> 0x190):
 // found again at the first menu open from items whose values are known (calibrate_resist_ids).
-U64 kOffItemPassives = 0x118; // -> {entries*, count} (null when none: the game's helper +2603A00)
-U64 kOffItemStats = 0x188;    // -> {rows*, count}; a row's base stats at +0x58 / +0x60
+U64 kOffItemPassives = 0x120; // -> {entries*, count} (null when none: the game's helper +2603A00); 0x118 before the
+                               // 2026-11-06 build - the self-test finds it from items with known resistances (items.cpp)
+U64 kOffItemStats = 0x190;    // -> {rows*, count}; a row's base stats at +0x58 / +0x60 (0x188 before 2026-11-06)
 
 // --- Item names: the game's item info table (as its own item-name text does) ---
 U64 kRvaItemInfo = 0x3dd8a0;        // (unused, u32 key) -> item info; unknown keys -> the default info
