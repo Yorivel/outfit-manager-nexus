@@ -442,6 +442,10 @@ void holo_tick(const Player& p, U64 comp)
         mat_float(p.actor, id_of("_holo_SphereMask_Radius"), kRadius * x, r.handles);
         mat_float(p.actor, id_of("_holo_Noise_Spread"), kSpread, r.handles);
         mat_float(p.actor, id_of("_particleInjectRatio"), x, r.handles);
+        // (a weapon's material shows the hologram only with this at 1. A transition sets it for everyone and leaves
+        // it at 0, and nothing here set it: a weapon that was there at a transition's end - the bow an outfit brings -
+        // showed no hologram until it was equipped anew; 2026-11-12)
+        mat_float(p.actor, id_of("_holo_Weapon_Effect"), x > 0.0f ? 1.0f : 0.0f, r.handles);
         over |= t >= 2500;
     }
     apply_table(comp); // (this frame's values reach the meshes now, not when the game next applies its table)
