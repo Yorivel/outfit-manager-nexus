@@ -391,6 +391,9 @@ void resolve_addresses()
 U64 kRvaLanternLight = 0x5ebae0;     // (lights the character's lantern: +0x68 -> +0x50 -> +0x18C counter += 1)
 U64 kRvaLanternDim = 0x5ebc80;       // (puts it out: the counter -= 1)
 U64 kRvaLanternCheck = 0x1838280;    // (the game's "is it lit": counter > 0)
+U64 kRvaEffectSwitchVt = 0x5d38390;  // GimmickEventHandlerData_EffectSwitch (anchor for its slot)
+U64 kRvaEffectSwitchRun = 0x25e8670; // its slot 4: runs a gimmick chart's EffectSwitch (data, result*, ?, gimmick actor) -
+                                     // hooked (sound.cpp: the lantern's pulse near a memory fragment)
 U64 kRvaGearSounds = 0xb8a1d0;       // (sets the character's armorkey / material_game: its sound handle +0x70, number +0x18)
 U64 kRvaGearSoundsFrom = 0xa8a4b0;   // (calls it with the character's sound component: +0x68 -> +0x60 -> +0x18)
 U64 kRvaCollideSound = 0x34e64f0;    // (manager, contact record, ?, sound info, ...): sounds a collision - hooked

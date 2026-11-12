@@ -75,6 +75,7 @@ Party g_party[kPartySize];
 // from the HUD frame (sound_tick), for the hooks
 std::atomic<bool> g_chest_hidden{false}, g_boots_hidden{false}, g_shield_hidden{false};
 std::atomic<bool> g_lantern_lit{false}; // (the played character's lantern burns)
+std::atomic<U64> g_near_comp{0};        // (sound_install: his lantern while it reports a memory fragment near, else 0)
 thread_local U64 t_contact = 0;        // (the contact being sounded by the collision-sound function, on this thread)
 
 // (every playing instance of an event on an object: the armour loop is started again by the game after each change
@@ -219,10 +220,46 @@ bool worn(U64 list, U16 slot)
 
 } // namespace
 
-bool lantern_lit() { return g_lantern_lit.load(); }
+// (lit, or near a memory fragment: the game pulses it then, lit or not - a hidden lantern shows for it)
+bool lantern_lit() { return g_lantern_lit.load() || g_near_comp.load(); }
+
+// The lantern near a memory fragment (2026-11-12). The lantern's chart (game data: gimmick_equip_lantern_01, _02_bright,
+// firefly) searches for level gimmicks nearby (SearchNearLevelGimmick, 5 m) and, on OnLevelGimmickDetected, switches an
+// effect on at its lamp (EffectSwitch) - the pulse; on OnLevelGimmickAllExit it switches it off. Both go through the
+// EffectSwitch handler (kRvaEffectSwitchRun), the triggering event's name hash at +0x44 of its data. While the played
+// character's lantern is in "detected", it shows like a lit one; at "all exit" the look decides again. Logged in play
+// 2026-11-12: four in/out walks, four detected/all-exit pairs, nothing else.
+// If an offset moves with a game update the checks below fail and the lantern simply follows its look as before.
+constexpr U32 kEvNearDetected = 0x9B28835C; // hashlittle("onlevelgimmickdetected", 0xC5EDE) - chart event names
+constexpr U32 kEvNearAllExit = 0xCC908146;  // hashlittle("onlevelgimmickallexit", 0xC5EDE)
+constexpr U64 kOffSwitchEvent = 0x44;       // EffectSwitch handler data -> u32 the event that runs it
+constexpr U64 kOffHolderGimmick = 0x30;     // actor component -> the gimmick component (as the handlers read it)
+constexpr U64 kOffGimmickParent = 0x288;    // gimmick component -> u32 its docking parent's actor id (actor +0x60)
+std::atomic<U32> g_player_id{0};            // (actor +0x60 of the played character)
+std::atomic<bool> g_near_changed{false};
+using EffSwFn = U64(__fastcall*)(U64, U64, U64, U64, U64, U64);
+EffSwFn g_effsw_orig = nullptr;
+U64 __fastcall effsw_hook(U64 data, U64 res, U64 a3, U64 actor, U64 a5, U64 a6)
+{
+    U32 ev = 0, parent = 0;
+    if (data && rd(data + kOffSwitchEvent, ev) && (ev == kEvNearDetected || ev == kEvNearAllExit)) {
+        const U64 comp = actor ? rp(rp(actor + kOffActorComp) + kOffHolderGimmick) : 0;
+        const U32 me = g_player_id.load();
+        if (comp && me && rd(comp + kOffGimmickParent, parent) && parent == me) {
+            const U64 now = ev == kEvNearDetected ? comp : 0;
+            if (g_near_comp.exchange(now) != now) g_near_changed = true;
+        }
+    }
+    return g_effsw_orig(data, res, a3, actor, a5, a6);
+}
 
 void sound_install()
 {
+    if (have({kRvaEffectSwitchRun})) { // (the lantern's pulse near a memory fragment)
+        void* t = reinterpret_cast<void*>(g_base + kRvaEffectSwitchRun);
+        if (MH_CreateHook(t, reinterpret_cast<void*>(&effsw_hook), reinterpret_cast<void**>(&g_effsw_orig)) != MH_OK || MH_EnableHook(t) != MH_OK)
+            LOG("sounds: the lantern's fragment pulse could not be watched (a hidden lantern stays hidden near fragments)");
+    }
     const bool post = hook_export(
         "?PostEvent@SoundEngine@AK@@YAII_KIP6AXW4AkCallbackType@@PEAUAkCallbackInfo@@@ZPEAXIPEAUAkExternalSourceInfo@@I@Z",
         reinterpret_cast<void*>(&post_hook), &g_post);
@@ -267,6 +304,19 @@ void sound_tick()
         U64 holder = comp && kOffCompLantern ? rp(comp + kOffCompLantern) : 0;
         U32 v = 0;
         const bool lit = kOffLanternLit && holder && rd(holder + kOffLanternLit, v) && v > 0 && v < 64;
+        { // the fragment pulse: whose lantern counts (a new character drops it), still docked to him (else it is over)
+            const U32 id = actor ? r32(actor + 0x60) : 0;
+            if (g_player_id.exchange(id) != id && g_near_comp.exchange(0)) g_near_changed = true;
+            if (const U64 nc = g_near_comp.load()) {
+                U32 parent = 0;
+                if ((!rd(nc + kOffGimmickParent, parent) || parent != id) && g_near_comp.exchange(0)) g_near_changed = true;
+            }
+            if (g_near_changed.exchange(false)) {
+                const bool found = g_near_comp.load() != 0;
+                LOG("sounds: the lantern %s a memory fragment: %s", found ? "found" : "left", found ? "it shows" : "its look decides again");
+                look_refresh();
+            }
+        }
         if (ctx[0]) release_player(ctx);
         g_lantern_lit = lit;
         if (lit != was_lit) {
