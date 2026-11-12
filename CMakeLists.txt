@@ -13,7 +13,7 @@ FetchContent_Declare(minhook
 FetchContent_MakeAvailable(minhook)
 
 # The plugin: OutfitManager.asi
-add_library(OutfitManager SHARED src/outfit_manager.cpp src/actions.cpp src/addrs.cpp src/arc.cpp src/core.cpp src/gear.cpp src/input.cpp src/items.cpp src/load.cpp src/looks.cpp src/looks_view.cpp src/pads.cpp src/prompts.cpp src/saves.cpp src/selftest.cpp src/settings.cpp src/setup.cpp src/stash.cpp src/store.cpp src/ui.cpp src/ui_hook.cpp src/wheel_draw.cpp src/wheel_hooks.cpp src/uibin_patch.cpp src/lang.cpp src/resolver.cpp src/log.cpp src/game.cpp src/transition.cpp src/sleep.cpp src/sound.cpp src/present.cpp src/outfit_manager.rc)
+add_library(OutfitManager SHARED src/outfit_manager.cpp src/actions.cpp src/addrs.cpp src/arc.cpp src/core.cpp src/gear.cpp src/input.cpp src/items.cpp src/load.cpp src/looks.cpp src/looks_view.cpp src/pads.cpp src/prompts.cpp src/saves.cpp src/savekey.cpp src/selftest.cpp src/settings.cpp src/setup.cpp src/stash.cpp src/store.cpp src/ui.cpp src/ui_hook.cpp src/wheel_draw.cpp src/wheel_hooks.cpp src/uibin_patch.cpp src/lang.cpp src/resolver.cpp src/log.cpp src/game.cpp src/transition.cpp src/sleep.cpp src/sound.cpp src/present.cpp src/outfit_manager.rc)
 target_include_directories(OutfitManager PRIVATE src)
 target_compile_definitions(OutfitManager PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
 target_compile_options(OutfitManager PRIVATE /W4 /permissive- /utf-8)
@@ -22,7 +22,7 @@ target_link_libraries(OutfitManager PRIVATE minhook version hid setupapi)
 
 # Resolver test build: ignores the cache and the known addresses, so every address must be found by search alone
 # (log lines "resolver: ..."). Deploy it as OutfitManager.asi for one launch, then put the normal build back.
-add_library(OutfitManagerResolveTest SHARED src/outfit_manager.cpp src/actions.cpp src/addrs.cpp src/arc.cpp src/core.cpp src/gear.cpp src/input.cpp src/items.cpp src/load.cpp src/looks.cpp src/looks_view.cpp src/pads.cpp src/prompts.cpp src/saves.cpp src/selftest.cpp src/settings.cpp src/setup.cpp src/stash.cpp src/store.cpp src/ui.cpp src/ui_hook.cpp src/wheel_draw.cpp src/wheel_hooks.cpp src/uibin_patch.cpp src/lang.cpp src/resolver.cpp src/log.cpp src/game.cpp src/sleep.cpp)
+add_library(OutfitManagerResolveTest SHARED src/outfit_manager.cpp src/actions.cpp src/addrs.cpp src/arc.cpp src/core.cpp src/gear.cpp src/input.cpp src/items.cpp src/load.cpp src/looks.cpp src/looks_view.cpp src/pads.cpp src/prompts.cpp src/saves.cpp src/savekey.cpp src/selftest.cpp src/settings.cpp src/setup.cpp src/stash.cpp src/store.cpp src/ui.cpp src/ui_hook.cpp src/wheel_draw.cpp src/wheel_hooks.cpp src/uibin_patch.cpp src/lang.cpp src/resolver.cpp src/log.cpp src/game.cpp src/sleep.cpp)
 target_include_directories(OutfitManagerResolveTest PRIVATE src)
 target_compile_definitions(OutfitManagerResolveTest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE OM_RESOLVE_TEST)
 target_compile_options(OutfitManagerResolveTest PRIVATE /W4 /permissive- /utf-8)

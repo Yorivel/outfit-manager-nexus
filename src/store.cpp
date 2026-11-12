@@ -157,7 +157,10 @@ bool write_store_file()
     if (g_peek_pad) put(out, "setting\tpeekpad\t1\n");
     write_lists(out, g_published);
     for (const auto& [slot, b] : g_bound) {
-        put(out, "save\t%u\t%llu\t%llX\t%llX\n", slot, b.id.size, b.id.time, b.id.hash);
+        if (b.id.clock) // (+ its world clock and place, savekey.cpp; older builds read the first fields only)
+            put(out, "save\t%u\t%llu\t%llX\t%llX\t%llX\t%X\n", slot, b.id.size, b.id.time, b.id.hash, b.id.clock, b.id.place);
+        else
+            put(out, "save\t%u\t%llu\t%llX\t%llX\n", slot, b.id.size, b.id.time, b.id.hash);
         write_lists(out, b.store);
     }
     for (const auto* list : {&g_pending_writes, &g_unfinished})
@@ -306,6 +309,9 @@ void load_outfits()
                     BoundSet& b = g_bound[slot];
                     b.id = {std::strtoull(v[2].c_str(), nullptr, 10), std::strtoull(v[3].c_str(), nullptr, 16),
                             std::strtoull(v[4].c_str(), nullptr, 16)};
+                    if (v.size() >= 7)
+                        b.id.clock = std::strtoull(v[5].c_str(), nullptr, 16),
+                        b.id.place = static_cast<U32>(std::strtoul(v[6].c_str(), nullptr, 16));
                     store = &b.store;
                 } else {
                     store = &legacy[slot];

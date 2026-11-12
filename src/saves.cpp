@@ -58,6 +58,15 @@ U64 hash_file(const std::wstring& path)
     return v ? v : 1;
 }
 
+// The save's clock and place (savekey.cpp), our own read of the file like the hash.
+void fill_key(SaveId& id, const std::wstring& path)
+{
+    bool nested = t_in_file_hook;
+    t_in_file_hook = true;
+    if (!read_save_key(path, id.clock, id.place)) id.clock = 0, id.place = 0;
+    t_in_file_hook = nested;
+}
+
 // "...\save\<digits>\slot<N>\<file>" -> N, else -1. `dir` gets the path up to and including the last separator.
 int save_slot(const wchar_t* path, std::wstring* file, std::wstring* dir)
 {
@@ -102,13 +111,20 @@ void apply_load(const char* why)
     U32 slot = static_cast<U32>(l.slot);
     SaveId id = l.id;
     SaveId now = quick_id(l.path);
-    if (now.size == id.size && now.time == id.time) id.hash = hash_file(l.path); // else rewritten since: size + time
+    if (now.size == id.size && now.time == id.time) id.hash = hash_file(l.path), fill_key(id, l.path); // else rewritten
+                                                                                                      // since: size + time
     const char* how;
     auto pw = std::find_if(g_pending_writes.begin(), g_pending_writes.end(),
                            [&](const PendingWrite& p) { return p.slot == slot; });
     int from = -1;
     for (const auto& [s, b] : g_bound)
         if (b.id.same(id) && (from < 0 || s == slot)) from = static_cast<int>(s);
+    // Not the same bytes, but the same moment: the save the mod bound, changed since by something else (a save editor,
+    // 2026-11-12 report) - same world clock and place, so its outfits (an older save of the playthrough has another clock).
+    bool edited = false;
+    if (from < 0 && id.clock)
+        for (const auto& [s, b] : g_bound)
+            if (b.id.same_moment(id) && (from < 0 || s == slot)) from = static_cast<int>(s), edited = true;
     // A new game: the game writes a fresh starting save (about 5 KB; a played save is hundreds of KB and more) and loads
     // it at once - no save of the player's is read. Without this it took the outfits of the save played before, and
     // the new game's first autosave kept them (2026-11-06).
@@ -127,7 +143,8 @@ void apply_load(const char* why)
     } else if (from >= 0) {
         g_published = g_bound[U32(from)].store;
         g_bound[slot] = {id, g_published};
-        how = U32(from) == slot ? "restored" : "restored (same save as another slot)";
+        how = edited ? "restored (the same save, changed outside the game: its world clock and place match)"
+                     : U32(from) == slot ? "restored" : "restored (same save as another slot)";
     } else {
         g_published.clear();
         how = "the mod never saw this save written: no outfits";
@@ -200,6 +217,7 @@ void bind_unfinished()
         SaveId id = quick_id(path);
         if (id.size && id.time + kSlack >= p.started) {
             id.hash = hash_file(path);
+            fill_key(id, path);
             g_bound[p.slot] = {id, p.store};
             LOG("save slot %u, written as the game closed: %zu outfits bound (size %llu, hash %llX)", p.slot,
                 outfit_total(p.store), id.size, id.hash);
@@ -211,10 +229,29 @@ void bind_unfinished()
     write_store_file();
 }
 
+// Saves bound before the save key existed (or unreadable then): their key, from the file if it is still the bound one.
+void key_bound_saves()
+{
+    std::lock_guard<std::mutex> lock(g_store_mu);
+    int keyed = 0;
+    for (auto& [slot, b] : g_bound) {
+        if (b.id.clock || !b.id.hash) continue;
+        const std::wstring path = slot_save_path(slot);
+        if (hash_file(path) != b.id.hash) continue; // (changed since: it gets a key when next written)
+        fill_key(b.id, path);
+        keyed += b.id.clock != 0;
+    }
+    if (keyed) {
+        LOG("save keys: %d bound save(s) got their world clock and place", keyed);
+        write_store_file();
+    }
+}
+
 DWORD WINAPI save_watch_thread(LPVOID)
 {
     t_in_file_hook = true;
     bind_unfinished();
+    key_bound_saves();
     HANDLE dir = CreateFileW(g_save_root.c_str(), FILE_LIST_DIRECTORY,
                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
                              FILE_FLAG_BACKUP_SEMANTICS, nullptr);
@@ -265,6 +302,7 @@ void poll_saves()
             if (g_bound.erase(it->slot)) LOG("save slot %u is gone: its outfits are dropped", it->slot);
         } else {
             q.hash = hash_file(it->path);
+            fill_key(q, it->path);
             LOG("save slot %u written: %zu outfits bound (size %llu, hash %llX)", it->slot, outfit_total(it->store),
                 q.size, q.hash);
             g_bound[it->slot] = {q, std::move(it->store)};

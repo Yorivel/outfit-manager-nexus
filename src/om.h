@@ -250,14 +250,18 @@ using SlotRefreshFn = void(__fastcall*)(U64);
 // Save binding. The game's save writes / loads are seen on its own threads (file hook, folder watch), so they work
 // on g_published, a copy of the active set the UI thread publishes after each change (all under g_store_mu).
 // A load replaces g_published and bumps g_generation; the UI thread then takes it over (pull_active).
-// A save is recognised by its save.save content (hash), with size + write time as the quick check.
+// A save is recognised by its save.save content (hash), with size + write time as the quick check. A save whose bytes
+// changed (a save editor) is still the same save if its world clock and place match (savekey.cpp).
 struct SaveId {
     U64 size = 0, time = 0, hash = 0; // 0 = not known
+    U64 clock = 0;                    // the save's world clock (_fieldTimeRaw), 0 = not known
+    U32 place = 0;                    // a hash of the position it was made at
     bool same(const SaveId& o) const
     {
         if (hash && o.hash) return hash == o.hash;
         return size && size == o.size && time == o.time;
     }
+    bool same_moment(const SaveId& o) const { return clock && clock == o.clock && place && place == o.place; }
 };
 struct BoundSet {
     SaveId id;
