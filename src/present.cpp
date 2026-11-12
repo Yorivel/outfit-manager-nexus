@@ -33,6 +33,7 @@
 #include <MinHook.h>
 #include <atomic>
 #include <cstring>
+#include <map>
 #include <mutex>
 #include <vector>
 
@@ -146,9 +147,29 @@ void present_install()
     if (!ok) LOG("presentation: the footwear sound lookup could not be watched (hidden boots keep their collision sound)");
 }
 
+// A piece something keeps presenting again (2026-11-13: Damiane's Visione after a helmet animation, ~25 times a second
+// for seconds - its hair flickered): more than kFightMax take-offs of a slot within kFightMs and its take-offs pause
+// for kFightPauseMs; the look still hides it on our layer meanwhile.
+constexpr int kFightMax = 6;
+constexpr U64 kFightMs = 2000, kFightPauseMs = 10000;
+struct Fight { U64 since = 0, paused_until = 0; int count = 0; };
+std::map<std::pair<U64, U16>, Fight> g_fights;
+
 void present_request(U64 inv, U16 slot, bool take_off)
 {
     std::lock_guard<std::mutex> lock(g_mu);
+    if (take_off) {
+        const U64 now = GetTickCount64();
+        Fight& f = g_fights[{inv, slot}];
+        if (now < f.paused_until) return;
+        if (now - f.since > kFightMs) f.since = now, f.count = 0;
+        if (++f.count > kFightMax) {
+            f.paused_until = now + kFightPauseMs, f.count = 0;
+            LOG("presentation: equipment-%u keeps coming back; not taken off for %llu s (hidden on the look layer)", slot,
+                kFightPauseMs / 1000);
+            return;
+        }
+    }
     for (Req& r : g_reqs)
         if (r.inv == inv && r.slot == slot) { r.take_off = take_off; return; }
     g_reqs.push_back({inv, slot, take_off});

@@ -11,6 +11,7 @@ Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods
 - New: sounds follow what you see. Hidden armour and shields make no sound (no clinks, no metal knocking), hidden boots step like what's left on, and outfit changes don't play the game's equip sounds.
 - New: a hidden lantern shows while it burns, and while it pulses near a memory fragment.
 - New: visibility rows for the weapons carried on the body (display slots 22 and 24).
+- Fix: a hidden piece the game keeps putting back (Damiane's Visione after the helmet animation) made the hair flicker while Outfit Manager took it off again and again; it now stays hidden quietly instead.
 - Fix: hidden weapons' glow stays on the weapon itself, on every draw.
 - Fix: a pack-mounted launcher (the Boltspitter and its kin) brings its pack and straps with it.
 - Fix: expansion pieces (the diving suit) could go missing from outfits when the game renumbered its items; they now follow their item. Thanks for the report!
