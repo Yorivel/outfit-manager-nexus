@@ -2,6 +2,20 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
+## Unreleased
+
+- New: the helmet key. A hotkey (on the gear wheel's + settings page) that hides or shows your helmet whatever your outfit says; press it again, or change outfit, and the outfit decides again. On foot your character takes the helmet off or puts it on with the game's own animation, holding the helmet you wear, and it goes or comes the moment the hand reaches it. Works for Kliff, Damiane and Oongka and every helmet; on a mount it changes at once. It's saved with your game like your outfits: loading an older save brings back that save's helmet.
+- New: sleepwear. An outfit's new Activity setting (Off / Sleeping): an outfit set to Sleeping goes on when your character gets into bed, and what you wore (or No Outfit) comes back when you wake.
+- New: hidden armour is really off. A hidden piece is taken off the game's presentation while it stays equipped (stats unchanged), so the body under a hidden chest, the chest's physics and the straps a pack drops over heavy armour all behave as if it wasn't worn.
+- New: sounds follow what you see. Hidden armour and shields make no sound (no clinks, no metal knocking), hidden boots step like what's left on, and outfit changes don't play the game's equip sounds.
+- New: a hidden lantern shows while it burns, and while it pulses near a memory fragment.
+- New: visibility rows for the weapons carried on the body (display slots 22 and 24).
+- Fix: hidden weapons' glow stays on the weapon itself, on every draw.
+- Fix: a pack-mounted launcher (the Boltspitter and its kin) brings its pack and straps with it.
+- Fix: expansion pieces (the diving suit) could go missing from outfits when the game renumbered its items; they now follow their item. Thanks for the report!
+- Fix: a save changed outside the game (a save editor) lost its outfits. Saves are now also recognised by the world time and place they were made. Thanks for the report!
+- Technical: the helmet animations play the chart states the way a chart branch does (anim.cpp); the helmet pin is saved per character as "helmetpin". Item stat lists at +0x120 / +0x190 for the 2026-11-06 build; resolver recipes for the new addresses.
+
 ## 0.6.0 (2026-11-08)
 
 - New: weapon sets. An outfit's Weapons setting has a third value, Weapons Only. A slot set to it is a weapon set: clicking it (or its hotkey) changes only your weapons; your armour, your outfit and its visibility settings stay. Keep your outfits on Leave and switch weapons with weapon sets on top of whatever you wear, without saving every combination.
