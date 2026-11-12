@@ -176,6 +176,7 @@ constexpr U16 kNoCharacter = 0xFFFF;
 struct CharacterOutfits {
     U16 character;
     std::vector<Outfit> outfits;
+    std::uint8_t helmet_pin = 0; // the helmet key's pin (#34: 0 none, 1 hidden, 2 shown): bound to saves with the outfits
 };
 using Store = std::deque<CharacterOutfits>; // deque: references stay valid when a character is added
 constexpr std::uint8_t kEyeSteps = 3;

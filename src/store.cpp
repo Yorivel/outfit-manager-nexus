@@ -77,8 +77,9 @@ void write_lists(std::string& out, const Store& s)
 {
     for (int pass = 0; pass < 2; ++pass) // the character-less list first (it has no header)
         for (const CharacterOutfits& c : s) {
-            if ((c.character == kNoCharacter) != (pass == 0) || c.outfits.empty()) continue;
+            if ((c.character == kNoCharacter) != (pass == 0) || (c.outfits.empty() && !c.helmet_pin)) continue;
             if (pass) put(out, "character\t%u\n", c.character);
+            if (pass && c.helmet_pin) put(out, "helmetpin\t%u\n", c.helmet_pin);
             for (const Outfit& o : c.outfits) {
                 put(out, "outfit\t%s\n", o.name.c_str());
                 if (!o.chest_icon.empty()) put(out, "chest\t%s\n", o.chest_icon.c_str());
@@ -156,7 +157,6 @@ bool write_store_file()
     if (const char* id = peek_key_id()) put(out, "setting\tpeekkey\t%s\n", id);
     if (g_peek_pad) put(out, "setting\tpeekpad\t1\n");
     if (U32 hv = g_helmet_vk.load()) put(out, "setting\thelmetkey\t%u\t%u\n", hv, unsigned(g_helmet_mods.load()));
-    if (std::string pins = helmet_pins_text(); !pins.empty()) put(out, "setting\thelmet\t%s\n", pins.c_str());
     write_lists(out, g_published);
     for (const auto& [slot, b] : g_bound) {
         if (b.id.clock) // (+ its world clock and place, savekey.cpp; older builds read the first fields only)
@@ -366,10 +366,13 @@ void load_outfits()
                 else if (v[1] == "helmetkey") {
                     g_helmet_vk = x > 0 && x < 256 ? U32(x) : 0;
                     g_helmet_mods = static_cast<std::uint8_t>(v.size() >= 4 ? std::strtoul(v[3].c_str(), nullptr, 10) & 15 : 0);
-                } else if (v[1] == "helmet") helmet_pins_load(v[2]);
+                }
                 // (other names: settings of another build, e.g. the dropped "hotkey": ignored)
             } else if (v[0] == "character" && v.size() >= 2) {
                 cur = &list_for(*store, static_cast<U16>(std::strtoul(v[1].c_str(), nullptr, 10)));
+            } else if (v[0] == "helmetpin" && v.size() >= 2) {
+                const unsigned long p = std::strtoul(v[1].c_str(), nullptr, 10);
+                cur->helmet_pin = p == 1 || p == 2 ? static_cast<std::uint8_t>(p) : 0;
             } else if (v[0] == "outfit" && v.size() >= 2) {
                 list.push_back({v[1], {}, {}});
             } else if (!list.empty() && v[0] == "chest" && v.size() >= 2) {

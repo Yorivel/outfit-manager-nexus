@@ -15,6 +15,7 @@
 #include "pads.h"
 
 #include "looks.h"
+#include "anim.h"
 #include "store.h"
 
 namespace om {
@@ -389,17 +390,47 @@ void peek_close(bool choose)
 // changes). The filters (name_wndproc, raw_input_hook) keep the key from the game while its modifiers match.
 void peek_hotkeys(U64 self, bool free)
 {
-    { // the helmet key (#34): exactly its modifiers
+    { // the helmet key (#34): exactly its modifiers. A press that shows or hides the worn helmet plays the character's
+      // take-off / take-on animation (on foot) and the change comes when the hand is at the helmet (or when the
+      // animation ends before that; anim.cpp); otherwise at once.
         static bool was_helmet = false;
+        static U16 pend_char = kNoCharacter;
+        static std::uint8_t pend_pin = 0;
+        auto apply = [](U16 c, std::uint8_t pin, const char* how) {
+            prepare_outfits(); // (a save loaded since: taken over first, else the change is dropped and not saved)
+            helmet_set(c, pin);
+            LOG("helmet key: character %u: %s%s", c,
+                pin == 1 ? "helmet hidden" : pin == 2 ? "helmet shown" : "the outfit decides again", how);
+            save_outfits();
+            look_refresh();
+        };
+        static bool pend_done = false; // (applied at the animation's moment, before its end)
+        anim_tick();
+        if (pend_char != kNoCharacter) {
+            if (!pend_done && anim_cue()) apply(pend_char, pend_pin, " (the hand is at it)"), pend_done = true;
+            const AnimOutcome o = anim_outcome();
+            if (o != AnimOutcome::Running) {
+                if (!pend_done)
+                    apply(pend_char, pend_pin, o == AnimOutcome::Played ? " (its animation is over)" : " (no animation)");
+                pend_char = kNoCharacter;
+                pend_done = false;
+            }
+        }
         const U32 hv = g_helmet_vk.load();
         const bool down = hv && (GetAsyncKeyState(int(hv)) & 0x8000) && mods_now() == g_helmet_mods.load();
-        if (down && !was_helmet && free) {
+        if (down && !was_helmet && free && pend_char == kNoCharacter) {
             const U16 ch = current_character();
             if (ch != kNoCharacter) {
-                const std::uint8_t pin = helmet_toggle(ch);
-                LOG("helmet key: character %u: %s", ch, pin == 1 ? "helmet hidden" : pin == 2 ? "helmet shown" : "the outfit decides again");
-                save_outfits();
-                look_refresh();
+                prepare_outfits(); // (as the outfit hotkeys: a save just loaded is taken over, its pin decides)
+                const HelmetPress plan = helmet_press_plan(ch);
+                U16 key = 0xFFFF;
+                if (const U64 e = display_item(kHelmetSlot)) rd(e + 8, key);
+                // (mounted: none - the animation is on foot only, the game would get him off the horse for it)
+                if (plan.shown_before != plan.shown_after && key != 0xFFFF && !riding_mount() &&
+                    anim_helmet_start(!plan.shown_after, key))
+                    pend_char = ch, pend_pin = plan.pin;
+                else
+                    apply(ch, plan.pin, "");
             }
         }
         was_helmet = down;

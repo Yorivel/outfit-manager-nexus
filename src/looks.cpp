@@ -109,6 +109,9 @@ struct PartInfo {
 };
 std::map<std::pair<U64, int>, PartInfo> g_part_info; // (model, handle) -> what was found
 
+std::mutex g_helmet_mu;
+std::map<U16, std::uint8_t> g_helmet_pins; // character -> 1 hidden, 2 shown
+
 // Copies the anchor outfits' looks for the sync, by slot (g_store_mu held: after every change to the store).
 void publish_looks(const Store& s)
 {
@@ -123,8 +126,14 @@ void publish_looks(const Store& s)
                 if (o.back_look != kLookDefault) m[c.character].push_back({kBackShieldSlot, 0xFFFF, 0, o.back_look});
                 if (o.underwear_look != kLookDefault) m[c.character].push_back({kUnderwearSlot, 0xFFFF, 0, o.underwear_look});
             }
-    std::lock_guard<std::mutex> lock(g_looks_mu);
-    g_looks = std::move(m);
+    {
+        std::lock_guard<std::mutex> lock(g_looks_mu);
+        g_looks = std::move(m);
+    }
+    std::lock_guard<std::mutex> lock(g_helmet_mu); // (the helmet key's pins: the store's, so a load brings its save's)
+    g_helmet_pins.clear();
+    for (const CharacterOutfits& c : s)
+        if (c.helmet_pin) g_helmet_pins[c.character] = c.helmet_pin;
 }
 
 // The character model: the path the headgear switch takes from the inventory's actor.
@@ -354,8 +363,6 @@ void forget_inventory(U64 inv)
 // saves, loads and sessions (the outfit file).
 std::atomic<U32> g_helmet_vk{0};
 std::atomic<std::uint8_t> g_helmet_mods{0};
-std::mutex g_helmet_mu;
-std::map<U16, std::uint8_t> g_helmet_pins; // character -> 1 hidden, 2 shown
 
 std::uint8_t helmet_pin(U16 character)
 {
@@ -364,7 +371,7 @@ std::uint8_t helmet_pin(U16 character)
     return f != g_helmet_pins.end() ? f->second : 0;
 }
 
-std::uint8_t helmet_toggle(U16 character)
+HelmetPress helmet_press_plan(U16 character)
 {
     std::uint8_t look = kLookDefault;
     {
@@ -380,36 +387,23 @@ std::uint8_t helmet_toggle(U16 character)
     }
     const bool shown = look == kLookDefault || look == kLookShown || (look == kLookCombat && battle) ||
                        (look == kLookPeace && !battle);
-    std::lock_guard<std::mutex> lock(g_helmet_mu);
-    std::uint8_t& pin = g_helmet_pins[character];
-    pin = pin ? 0 : shown ? 1 : 2;
-    const std::uint8_t now = pin;
-    if (!pin) g_helmet_pins.erase(character);
-    return now;
+    const std::uint8_t pin = helmet_pin(character);
+    HelmetPress p;
+    p.pin = pin ? 0 : shown ? 1 : 2;
+    p.shown_before = pin ? pin == 2 : shown;
+    p.shown_after = p.pin ? p.pin == 2 : shown;
+    return p;
 }
 
-std::string helmet_pins_text()
+void helmet_set(U16 character, std::uint8_t pin) // (then save_outfits: it binds it to the next save, publishes it)
 {
-    std::lock_guard<std::mutex> lock(g_helmet_mu);
-    std::string t;
-    for (const auto& [c, p] : g_helmet_pins) t += (t.empty() ? "" : " ") + std::to_string(c) + ":" + std::to_string(p);
-    return t;
-}
-
-void helmet_pins_load(const std::string& text) // ("<character>:<pin> ...")
-{
-    std::lock_guard<std::mutex> lock(g_helmet_mu);
-    g_helmet_pins.clear();
-    const char* q = text.c_str();
-    for (;;) {
-        char* end = nullptr;
-        const unsigned long c = std::strtoul(q, &end, 10);
-        if (end == q || *end != ':') break;
-        const unsigned long p = std::strtoul(end + 1, &end, 10);
-        if (p == 1 || p == 2) g_helmet_pins[static_cast<U16>(c)] = static_cast<std::uint8_t>(p);
-        q = end;
-        while (*q == ' ') ++q;
+    {
+        std::lock_guard<std::mutex> lock(g_store_mu);
+        store_for(character).helmet_pin = pin;
     }
+    std::lock_guard<std::mutex> lock(g_helmet_mu);
+    if (pin) g_helmet_pins[character] = pin;
+    else g_helmet_pins.erase(character);
 }
 
 void look_sync(U64 inv, bool in_battle, bool swapped = false)
@@ -993,8 +987,11 @@ void mark_worn(int index)
     if (!changed) return;
     LOG("appearance: last loaded outfit is now %d", index);
     { // (another outfit, or none: the helmet follows it again - the helmet key is for the outfit worn now, #34)
-        std::lock_guard<std::mutex> lock(g_helmet_mu);
-        if (g_helmet_pins.erase(g_character)) LOG("helmet key: character %u: the outfit changed, its own helmet look again", g_character);
+        std::lock_guard<std::mutex> lock(g_store_mu);
+        if (std::uint8_t& pin = store_for(g_character).helmet_pin; pin) {
+            pin = 0;
+            LOG("helmet key: character %u: the outfit changed, its own helmet look again", g_character);
+        }
     }
     save_outfits(); // (publishes the looks)
     look_refresh();

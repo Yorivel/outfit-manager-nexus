@@ -177,6 +177,15 @@ U64 kRvaCursorSlot51 = 0x11d1080;    // RadialCursor slots 51, 199, 215
 U64 kRvaCursorSlot199 = 0x11d1d10;
 U64 kRvaCursorSlot215 = 0x11d1020;
 U64 kRvaSlotScript164 = 0x10b74b0;    // EquipmentItemQuickSlot slots 164, 166, 178, 185, 35
+U64 kRvaBranchTry = 0x251e5a0;        // the branch walker's try of one candidate (comp, u8 layer, cur*, {branch*, link*,
+                                      // owner, chart}*, ...): evaluates it (kRvaBranchEval), looks its target up, takes
+                                      // it; 0 = taken (anim.cpp)
+U64 kRvaSetVisualEquipVt = 0x5912c08; // ClientFrameEventSetVisualEquipItem
+U64 kRvaSetVisualEquipEv = 0x7a91e0;  // its slot 1: the frame event run (this, int* out, data, x, ctx*): a visual item
+                                      // put on / taken off an equip slot mid-animation (anim.cpp)
+U64 kRvaCharCtrlVt = 0x59459f0;       // ClientCharacterControlActorComponent
+U64 kRvaCtrlAck = 0x948d30;           // ClientCharacterControlActorComponent slot 43: the server's start-action
+                                      // acknowledgement applied (comp, ctx*, records[2]*, x) -> int* (anim.cpp)
 U64 kRvaBranchEval = 0x251fbe0;       // action chart branch evaluator: (ctx, out result, ..., link) - sleep (sleep.cpp)
 U64 kRvaSlotScript166 = 0x10b9f50;
 U64 kRvaSlotScript178 = 0x10b95c0;

@@ -31,6 +31,7 @@
 #include "log.h"
 #include "game.h"
 #include "wheel_hooks.h"
+#include "anim.h"
 #include <MinHook.h>
 #include <algorithm>
 #include <atomic>
@@ -94,6 +95,10 @@ void into_bed(U64 ctx0, U64 ctx1, const char* why)
 
 U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64 a7, const U64* link, U64 a9, U64 a10)
 {
+    if (anim_branch_passes(link)) { // (the helmet animations' own branch: it holds; anim.cpp)
+        *out = 0;
+        return out;
+    }
     U32* r = g_eval_orig(ctx, out, a3, a4, a5, a6, a7, link, a9, a10);
     __try {
         if (!r || *r != 0 || !link || !link[0]) return r;
@@ -322,6 +327,8 @@ void drop_temp()
 }
 
 } // namespace
+
+bool sleep_evaluator_hooked() { return g_eval_orig != nullptr; }
 
 void sleep_install()
 {

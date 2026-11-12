@@ -49,9 +49,13 @@ constexpr U16 kHelmetSlot = 3; // (equipment-3: the helmet, for Kliff, Damiane a
 extern std::atomic<U32> g_helmet_vk;
 extern std::atomic<std::uint8_t> g_helmet_mods;
 std::uint8_t helmet_pin(U16 character);
-std::uint8_t helmet_toggle(U16 character);
-std::string helmet_pins_text();
-void helmet_pins_load(const std::string& text);
+// What a press would do, not applied: the pin it sets, the helmet shown before and after
+struct HelmetPress {
+    std::uint8_t pin = 0;
+    bool shown_before = true, shown_after = true;
+};
+HelmetPress helmet_press_plan(U16 character);
+void helmet_set(U16 character, std::uint8_t pin);
 bool lantern_lit(); // (sound.cpp: the played character's lantern burns)
 // present.cpp: a slot's piece taken off the game's presentation (model, physics, part rules) while it stays equipped
 bool present_on();
