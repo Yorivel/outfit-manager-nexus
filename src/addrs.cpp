@@ -264,6 +264,15 @@ U64 kOffItemStats = 0x188;    // -> {rows*, count}; a row's base stats at +0x58 
 
 // --- Item names: the game's item info table (as its own item-name text does) ---
 U64 kRvaItemInfo = 0x3dd8a0;        // (unused, u32 key) -> item info; unknown keys -> the default info
+// The presentation (present.cpp): what the game builds and shows for a slot, apart from what is equipped.
+U64 kRvaPresentChange = 0xa846a0;   // (equip slot component, int* err, {put-on list*, 0}*, u8 0, take-off list*): the
+                                    // central change of what a character presents - called
+U64 kRvaPresentRefresh = 0xa9a380;  // (component, u16 slot, u16 shown item key, item*): a slot's presentation again
+                                    // after a visual item left it (none on it: the keyed item comes off) - called
+U64 kRvaItemInit = 0x25fecb0;       // (item object*, 0xD0 bytes): an empty item - called
+U64 kRvaItemFree = 0x2600340;       // (item object*): lets go of what it holds - called
+U64 kRvaItemCopy = 0x2600420;       // (item object* to, item* from) - called
+U64 kRvaFootwearSound = 0x192fbf0;  // (actor, ?, u16 slot or 0xFFFF) -> the footwear's sound material, 0: none - hooked
 U64 kRvaDefaultItemInfo = 0x7151fc8; // pointer to that default info
 
 // --- Setup --------------------------------------------------------------------------------------

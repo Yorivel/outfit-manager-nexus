@@ -485,6 +485,7 @@ void transition_tick(const Player& p, U64 comp)
 void __fastcall mat_upd_hook(U64 comp)
 {
     g_mat_upd_orig(comp);
+    present_game_thread(); // (present.cpp: the presentation changes the looks asked for, on the game thread)
     bool glows = false, holo = false;
     {
         std::lock_guard<std::mutex> lock(g_mu);

@@ -45,6 +45,12 @@ extern std::atomic<U32> g_player_hidden_slots; // (bit per equip slot the played
 U32 look_hidden_slots();
 U64 player_inventory();
 bool lantern_lit(); // (sound.cpp: the played character's lantern burns)
+// present.cpp: a slot's piece taken off the game's presentation (model, physics, part rules) while it stays equipped
+bool present_on();
+void present_request(U64 inv, U16 slot, bool take_off);
+void present_game_thread();
+void present_seen(U64 inv, U16 slot);
+void present_install();
 void anchor_recheck();
 extern FrameFn g_hud_frame_orig;
 float __fastcall hud_frame_hook(U64 self);

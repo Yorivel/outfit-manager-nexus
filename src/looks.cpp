@@ -1,6 +1,7 @@
 // Looks: how each piece shows (the visibility engine).
 #include "om.h"
 #include "looks.h"
+#include <intrin.h>
 #include "ui.h"
 #include "addrs.h"
 #include "gear.h"
@@ -67,6 +68,7 @@ std::set<U64> g_look_swap_seen; // ... that have swapped since (the rebuild come
 std::map<std::pair<U64, U32>, std::pair<U64, U16>> g_weapon_parts;
 std::pair<U64, U16> g_bag_in_use{}; // (inventory, slot) of the backpack in use (its own: the draw check rewrites g_drawn)
 std::map<std::pair<U64, U16>, bool> g_drawn;
+std::map<std::pair<U64, U16>, U64> g_present_asked; // (inventory, slot) -> the part asked to be taken off the presentation (1: asked back)
 std::map<std::pair<U64, U16>, U64> g_undraw_pending; // (inventory, slot) reported not drawn -> its vis ctrl: settled next frame
 // Bag-mounted tools (the fertilizer sprayer): the item's model is only the tank (Bag); what comes out when it is used
 // (Tool_Sprayer, TwoHandWeapon_Thrower) is attached to the bag's socket and is no part of that item. A drawn part
@@ -371,6 +373,9 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
     bool hold = g_look_hold.count(inv) != 0;
     // (a character without looks - every NPC the headgear switch runs for - is not kept at all)
     auto ap = g_look_applied.find(inv);
+    if (pieces.empty()) // (nothing has a look - No outfit: whatever was taken off the presentation comes back)
+        for (auto& [key, asked] : g_present_asked)
+            if (key.first == inv && asked != 0 && asked != 1) asked = 1, present_request(inv, key.second, false);
     if (pieces.empty() && (ap == g_look_applied.end() || ap->second.empty())) {
         if (ap != g_look_applied.end() && !hold) forget_inventory(inv);
         return;
@@ -563,6 +568,25 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
                 continue;
             }
         }
+        // An armour or accessory piece hidden by its look is also taken off the game's PRESENTATION (present.cpp): the
+        // game builds the character as with that slot empty - the bare body, no physics part of the piece, its own
+        // part rules (a pack's straps show over a hidden heavy chest) - while the item stays equipped. Shown again,
+        // or left to the game (flight, sleep), it is presented again. Asked once per state, by what the model holds:
+        // the part there and not yet asked for -> off; the part gone and the piece to be seen -> back. A piece the
+        // game presents anew (a load, a rebuild) is a new part: taken off again. Our layer's hiding stays underneath,
+        // so nothing shows in between.
+        // Weapons, tools and the display slots are NOT taken off: presenting a weapon again plays its equip animation
+        // on top of the draw (tried 2026-11-12).
+        if (!underwear && !is_weapon_slot(p.slot) && !is_display_slot(p.slot)) {
+            const U64 part = look_part(model, h);
+            const bool off = present_on() && !shown && !flying && sleep != 2;
+            U64& asked = g_present_asked[{inv, p.slot}];
+            if (off && part && asked != part) asked = part, present_request(inv, p.slot, true), state += " (taking it off)";
+            else if (!off && !part && asked != 1 && !hold) asked = 1, present_request(inv, p.slot, false), state += " (presenting it again)";
+            else if (!off && part) asked = 0;
+            if (part && asked != part) present_seen(inv, p.slot); // (there, and not on its way off: sounds as worn)
+            if (off && !part) state += " (off the presentation)";
+        }
         int by = flying || sleep == 2 ? -1 : game_hides(model, h, look_part(model, h));
         if ((shown || drawn) && (flying || by >= 0)) { // (the game's mechanics win; released below)
             state += flying ? " left to the game (flight)" : " left to the game (its layer " + std::to_string(by) + " hides it)";
@@ -586,6 +610,17 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
             if (x == 0) state += case_shown ? ", its parts left to the game" : ", its parts hidden";
         }
     }
+    // (a slot taken off the presentation whose look is gone - an outfit without it - comes back: the loop above only
+    // sees the slots that have a look now)
+    if (!hold)
+        for (auto& [key, asked] : g_present_asked) {
+            if (key.first != inv || asked == 0 || asked == 1) continue;
+            bool has_look = false;
+            for (const LookPiece& p : pieces) has_look |= p.slot == key.second;
+            if (has_look) continue;
+            asked = 1, present_request(inv, key.second, false);
+            state += " equipment-" + std::to_string(key.second) + " (no look any more: presenting it again)";
+        }
     for (const auto& [slot, h] : applied) // (handles let go of since: the flight's too; mid change: kept till the swap)
         if (auto it = now.find(slot); it == now.end() || it->second != h) {
             if (hold || deferred.count(static_cast<U16>(slot & 0xFF))) now.emplace(slot, h);
