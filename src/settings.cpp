@@ -105,6 +105,7 @@ bool g_overwrite_reset = false; // the settings view's Overwrite: false keeps th
 // wheel are kept from the game (raw_input_hook, name_wndproc).
 std::atomic<bool> g_peek_capture{false}; // the setting waits for a key
 int g_capture_outfit = -1;               // ... for that outfit's Hotkey (-1: for the Outfit Arc's key)
+constexpr int kCaptureHelmet = -2;       // (... for the helmet key, #34)
 U32 g_peek_capture_slot = 0;             // its slot (refreshed when the key comes)
 bool g_peek_capture_held[256] = {};      // keys already down when it started waiting (not taken as the answer)
 
@@ -119,7 +120,7 @@ std::vector<std::uint8_t> cfg_entries()
     }
     // (the Outfit Arc's binding for the input in use: the key, or the pad's; pump re-shows the page when it changes)
     return {kCfgGStash, kCfgParty, kCfgMessages, kCfgEffects, kCfgLanguage, g_pad_in_use ? kCfgPeekPad : kCfgPeekKey,
-            kCfgClear, kCfgUninstall, kCfgBack};
+            kCfgHelmetKey, kCfgClear, kCfgUninstall, kCfgBack};
 }
 
 const char* cfg_name(std::uint8_t k)
@@ -129,8 +130,8 @@ const char* cfg_name(std::uint8_t k)
                                     "setting.stash",      "setting.party",   "setting.messages", "setting.clear",
                                     "setting.uninstall",  "setting.back",    "setting.language", "setting.peekkey",
                                     "setting.peekpad",    "setting.hotkey",    "setting.effects",
-                                    "setting.activity"};
-    return k <= kCfgActivity ? lang::t(n[k]) : "";
+                                    "setting.activity",   "setting.helmetkey"};
+    return k <= kCfgHelmetKey ? lang::t(n[k]) : "";
 }
 
 // A text that stays where it is (the settings' values are kept as pointers between refreshes: a reused std::string's
@@ -183,6 +184,11 @@ std::vector<const char*> cfg_values(std::uint8_t k, U32& cur)
     if (k == kCfgEffects)
         return cur = g_effects, std::vector<const char*>{"value.off", "value.performance", "value.quality"};
     if (k == kCfgPeekPad) return cur = g_peek_pad ? 1 : 0, std::vector<const char*>{"value.off", "value.peekpad"};
+    if (k == kCfgHelmetKey) { // (one value: the key, or the wait for one)
+        const U32 hv = g_helmet_vk.load();
+        return {g_peek_capture && g_capture_outfit == kCaptureHelmet ? "value.press_key"
+                : hv ? stable_text(hotkey_name(hv, g_helmet_mods.load())) : "value.no_hotkey"};
+    }
     if (k == kCfgPeekKey) // (one value: the key, or the wait for one)
         return {g_peek_capture && g_capture_outfit < 0 ? "value.press_key" : stable_text(peek_key_name(g_peek_key.load()))};
     if (k == kCfgLanguage) {
@@ -199,7 +205,7 @@ std::vector<const char*> cfg_values(std::uint8_t k, U32& cur)
 // A value as shown (the Language setting's: the language's own name; Auto: with the game's).
 std::string cfg_value_text(std::uint8_t k, const char* v)
 {
-    if (k == kCfgPeekKey || k == kCfgHotkey) // (a line key, or the key's own label)
+    if (k == kCfgPeekKey || k == kCfgHotkey || k == kCfgHelmetKey) // (a line key, or the key's own label)
         return !std::strcmp(v, "value.press_key") || !std::strcmp(v, "value.no_hotkey") ? lang::t(v) : v;
     if (k == kCfgPeekPad) return lang::f(v, {{"button", g_pad_is_ps ? "L1" : "LB"}}); // (the pad in use's own name)
     if (k != kCfgLanguage) return lang::t(v);
@@ -253,6 +259,10 @@ std::string cfg_description(std::uint8_t k)
             t.second = lang::f(g_peek_pad ? "desc.peekpad.on" : "desc.peekpad.off", {{"button", g_pad_is_ps ? "L1" : "LB"}});
         else if (k == kCfgPeekKey)
             t.second = lang::t(g_peek_capture ? "desc.peekkey.wait" : g_peek_key.load() ? "desc.peekkey.on" : "desc.peekkey.off");
+        else if (k == kCfgHelmetKey)
+            t.second = g_peek_capture && g_capture_outfit == kCaptureHelmet ? lang::t("desc.hotkey.wait")
+                       : g_helmet_vk.load() ? lang::f("desc.helmetkey.on", {{"hotkey", hotkey_name(g_helmet_vk.load(), g_helmet_mods.load())}})
+                                            : lang::t("desc.helmetkey.off");
     }
     if (k == kCfgBack) t.second = lang::t("desc.back");
     return t.second;
@@ -372,8 +382,9 @@ void cfg_press(U64 self, U32 i)
     case kCfgBack: cfg_leave(self); break;
     case kCfgPeekKey: // (waits for the key: peek_capture_frame)
     case kCfgHotkey:
+    case kCfgHelmetKey:
         for (int vk = 0; vk < 256; ++vk) g_peek_capture_held[vk] = (GetAsyncKeyState(vk) & 0x8000) != 0;
-        g_capture_outfit = e[k] == kCfgHotkey ? int(o) : -1;
+        g_capture_outfit = e[k] == kCfgHotkey ? int(o) : e[k] == kCfgHelmetKey ? kCaptureHelmet : -1;
         g_peek_capture_slot = i;
         g_peek_capture = true;
         apply_outfit_slots(self, i);
@@ -525,8 +536,37 @@ void peek_capture_frame(U64 self)
                     g_outfits[j].hk_vk = 0, g_outfits[j].hk_mods = 0;
                     notify(self, lang::f("toast.hotkey_moved", {{"hotkey", hotkey_name(U32(got), m)}, {"outfit", g_outfits[j].name}}));
                 }
+            if (g_helmet_vk.load() == U32(got) && g_helmet_mods.load() == m) { // (the helmet key had it: it moves here)
+                g_helmet_vk = 0, g_helmet_mods = 0;
+                notify(self, lang::f("toast.hotkey_moved", {{"hotkey", hotkey_name(U32(got), m)}, {"outfit", lang::t("setting.helmetkey")}}));
+            }
             g_outfits[o].hk_vk = static_cast<U16>(got), g_outfits[o].hk_mods = m;
             LOG("settings \"%s\": hotkey -> %s (%d, mods %u)", g_outfits[o].name.c_str(), hotkey_name(U32(got), m).c_str(), got, m);
+            save_outfits();
+        }
+        apply_outfit_slots(self, g_peek_capture_slot);
+        center_for_focus(self, focused_script(self), true);
+        return;
+    }
+    if (g_capture_outfit == kCaptureHelmet) { // the helmet key (with Ctrl / Alt / Shift as an outfit's hotkey)
+        g_capture_outfit = -1;
+        if (got == VK_ESCAPE) {
+            LOG("settings: helmet key: cancelled");
+        } else if (got == VK_BACK || got == VK_DELETE) {
+            g_helmet_vk = 0, g_helmet_mods = 0;
+            LOG("settings: helmet key cleared");
+            save_outfits();
+        } else if (U32(got) == g_peek_key.load()) { // (it opens the Outfit Arc: not also the helmet key)
+            notify(self, lang::f("toast.hotkey_arc", {{"hotkey", peek_key_name(U32(got))}}));
+        } else {
+            const std::uint8_t m = mods_now();
+            for (Outfit& x : g_outfits) // (one use per key: an outfit's hotkey on it moves here)
+                if (x.hk_vk == got && x.hk_mods == m) {
+                    x.hk_vk = 0, x.hk_mods = 0;
+                    notify(self, lang::f("toast.hotkey_moved", {{"hotkey", hotkey_name(U32(got), m)}, {"outfit", x.name}}));
+                }
+            g_helmet_vk = U32(got), g_helmet_mods = m;
+            LOG("settings: helmet key -> %s (%d, mods %u)", hotkey_name(U32(got), m).c_str(), got, m);
             save_outfits();
         }
         apply_outfit_slots(self, g_peek_capture_slot);

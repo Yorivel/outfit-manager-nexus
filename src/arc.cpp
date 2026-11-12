@@ -14,6 +14,9 @@
 #include "input.h"
 #include "pads.h"
 
+#include "looks.h"
+#include "store.h"
+
 namespace om {
 
 std::atomic<U32> g_peek_key{0};           // the Outfit Arc's key (a virtual-key code; 0 = Off)
@@ -386,6 +389,21 @@ void peek_close(bool choose)
 // changes). The filters (name_wndproc, raw_input_hook) keep the key from the game while its modifiers match.
 void peek_hotkeys(U64 self, bool free)
 {
+    { // the helmet key (#34): exactly its modifiers
+        static bool was_helmet = false;
+        const U32 hv = g_helmet_vk.load();
+        const bool down = hv && (GetAsyncKeyState(int(hv)) & 0x8000) && mods_now() == g_helmet_mods.load();
+        if (down && !was_helmet && free) {
+            const U16 ch = current_character();
+            if (ch != kNoCharacter) {
+                const std::uint8_t pin = helmet_toggle(ch);
+                LOG("helmet key: character %u: %s", ch, pin == 1 ? "helmet hidden" : pin == 2 ? "helmet shown" : "the outfit decides again");
+                save_outfits();
+                look_refresh();
+            }
+        }
+        was_helmet = down;
+    }
     static U16 shown_char = 0xFFFF;
     U16 ch = current_character();
     if (free && ch != kNoCharacter && ch != shown_char) { // (another character: its own outfits and hotkeys)

@@ -197,6 +197,9 @@ void center_for_focus(U64 self, U64 script, bool hide_otherwise)
                 nm = nm.empty() ? std::string(lang::t("piece.back_shield")) : lang::f("piece.back_shield_item", {{"item", nm}});
             g_center_name = nm.empty() ? std::string(lang::t("piece.empty")) : nm;
             g_center_desc = lang::t(kLookText[it.look < kLookCount ? it.look : 0]);
+            if (pieces[k] == kHelmetSlot) // (the helmet key overrides it: say so, #34)
+                if (const std::uint8_t pin = helmet_pin(g_character))
+                    g_center_desc = lang::f(pin == 1 ? "look.helmetkey.hidden" : "look.helmetkey.shown", {{"look", g_center_desc}});
         } else if (k == pieces.size()) {
             g_center_name = lang::t(kStepName[g_eye_pick]);
             g_center_desc = lang::t(g_eye_pick == g_eye_step ? "page.this" : "page.open");

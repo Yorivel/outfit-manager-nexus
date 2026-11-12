@@ -155,6 +155,8 @@ bool write_store_file()
     if (!g_language.empty()) put(out, "setting\tlanguage\t%s\n", g_language.c_str());
     if (const char* id = peek_key_id()) put(out, "setting\tpeekkey\t%s\n", id);
     if (g_peek_pad) put(out, "setting\tpeekpad\t1\n");
+    if (U32 hv = g_helmet_vk.load()) put(out, "setting\thelmetkey\t%u\t%u\n", hv, unsigned(g_helmet_mods.load()));
+    if (std::string pins = helmet_pins_text(); !pins.empty()) put(out, "setting\thelmet\t%s\n", pins.c_str());
     write_lists(out, g_published);
     for (const auto& [slot, b] : g_bound) {
         if (b.id.clock) // (+ its world clock and place, savekey.cpp; older builds read the first fields only)
@@ -361,6 +363,10 @@ void load_outfits()
                 else if (v[1] == "language") g_language = v[2];
                 else if (v[1] == "peekkey") peek_key_load(v[2]);
                 else if (v[1] == "peekpad") g_peek_pad = x != 0;
+                else if (v[1] == "helmetkey") {
+                    g_helmet_vk = x > 0 && x < 256 ? U32(x) : 0;
+                    g_helmet_mods = static_cast<std::uint8_t>(v.size() >= 4 ? std::strtoul(v[3].c_str(), nullptr, 10) & 15 : 0);
+                } else if (v[1] == "helmet") helmet_pins_load(v[2]);
                 // (other names: settings of another build, e.g. the dropped "hotkey": ignored)
             } else if (v[0] == "character" && v.size() >= 2) {
                 cur = &list_for(*store, static_cast<U16>(std::strtoul(v[1].c_str(), nullptr, 10)));

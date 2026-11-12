@@ -44,6 +44,14 @@ void mark_worn(int index);
 extern std::atomic<U32> g_player_hidden_slots; // (bit per equip slot the played character's looks hide)
 U32 look_hidden_slots();
 U64 player_inventory();
+// The helmet key (#34): per character, a pin over the helmet's look (0 none, 1 hidden, 2 shown), kept in the outfit file
+constexpr U16 kHelmetSlot = 3; // (equipment-3: the helmet, for Kliff, Damiane and Oongka)
+extern std::atomic<U32> g_helmet_vk;
+extern std::atomic<std::uint8_t> g_helmet_mods;
+std::uint8_t helmet_pin(U16 character);
+std::uint8_t helmet_toggle(U16 character);
+std::string helmet_pins_text();
+void helmet_pins_load(const std::string& text);
 bool lantern_lit(); // (sound.cpp: the played character's lantern burns)
 // present.cpp: a slot's piece taken off the game's presentation (model, physics, part rules) while it stays equipped
 bool present_on();

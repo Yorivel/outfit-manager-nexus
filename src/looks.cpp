@@ -348,6 +348,70 @@ void forget_inventory(U64 inv)
         it = it->second.first == inv ? g_bag_weapon.erase(it) : std::next(it);
 }
 
+// The helmet key (#34). A press flips the helmet against what its outfit shows now (hidden if it shows, shown if it
+// hides; with no look, the game shows it) and pins that, over the outfit's look and with no outfit too; the next press
+// lets the outfit decide again, and so does putting on another outfit or none (mark_worn). Per character, kept across
+// saves, loads and sessions (the outfit file).
+std::atomic<U32> g_helmet_vk{0};
+std::atomic<std::uint8_t> g_helmet_mods{0};
+std::mutex g_helmet_mu;
+std::map<U16, std::uint8_t> g_helmet_pins; // character -> 1 hidden, 2 shown
+
+std::uint8_t helmet_pin(U16 character)
+{
+    std::lock_guard<std::mutex> lock(g_helmet_mu);
+    auto f = g_helmet_pins.find(character);
+    return f != g_helmet_pins.end() ? f->second : 0;
+}
+
+std::uint8_t helmet_toggle(U16 character)
+{
+    std::uint8_t look = kLookDefault;
+    {
+        std::lock_guard<std::mutex> lock(g_looks_mu);
+        if (auto it = g_looks.find(character); it != g_looks.end())
+            for (const LookPiece& p : it->second)
+                if (p.slot == kHelmetSlot) look = p.look;
+    }
+    bool battle = false;
+    {
+        std::lock_guard<std::mutex> lock(g_appear_mu);
+        if (auto b = g_in_battle.find(player_inventory()); b != g_in_battle.end()) battle = b->second;
+    }
+    const bool shown = look == kLookDefault || look == kLookShown || (look == kLookCombat && battle) ||
+                       (look == kLookPeace && !battle);
+    std::lock_guard<std::mutex> lock(g_helmet_mu);
+    std::uint8_t& pin = g_helmet_pins[character];
+    pin = pin ? 0 : shown ? 1 : 2;
+    const std::uint8_t now = pin;
+    if (!pin) g_helmet_pins.erase(character);
+    return now;
+}
+
+std::string helmet_pins_text()
+{
+    std::lock_guard<std::mutex> lock(g_helmet_mu);
+    std::string t;
+    for (const auto& [c, p] : g_helmet_pins) t += (t.empty() ? "" : " ") + std::to_string(c) + ":" + std::to_string(p);
+    return t;
+}
+
+void helmet_pins_load(const std::string& text) // ("<character>:<pin> ...")
+{
+    std::lock_guard<std::mutex> lock(g_helmet_mu);
+    g_helmet_pins.clear();
+    const char* q = text.c_str();
+    for (;;) {
+        char* end = nullptr;
+        const unsigned long c = std::strtoul(q, &end, 10);
+        if (end == q || *end != ':') break;
+        const unsigned long p = std::strtoul(end + 1, &end, 10);
+        if (p == 1 || p == 2) g_helmet_pins[static_cast<U16>(c)] = static_cast<std::uint8_t>(p);
+        q = end;
+        while (*q == ' ') ++q;
+    }
+}
+
 void look_sync(U64 inv, bool in_battle, bool swapped = false)
 {
     if (!g_vis_set || !inv) return;
@@ -364,6 +428,13 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
     {
         std::lock_guard<std::mutex> lock(g_looks_mu);
         if (auto it = g_looks.find(ch); it != g_looks.end()) pieces = it->second;
+    }
+    if (const std::uint8_t pin = helmet_pin(ch)) { // (the helmet key: over the outfit's look, with no outfit too)
+        const std::uint8_t look = pin == 1 ? kLookHidden : kLookShown;
+        bool there = false;
+        for (LookPiece& p : pieces)
+            if (p.slot == kHelmetSlot) p.look = look, there = true;
+        if (!there) pieces.push_back({kHelmetSlot, 0xFFFF, 0, look});
     }
     U64 vc = rp(rp(rp(actor + kOffActorComp) + 0x40) + 0xE8); // (its in/out vis ctrl: the drawn check's first argument)
     std::lock_guard<std::mutex> lock(g_appear_mu);
@@ -921,6 +992,10 @@ void mark_worn(int index)
         if (g_outfits[i].worn != (static_cast<int>(i) == index)) g_outfits[i].worn = static_cast<int>(i) == index, changed = true;
     if (!changed) return;
     LOG("appearance: last loaded outfit is now %d", index);
+    { // (another outfit, or none: the helmet follows it again - the helmet key is for the outfit worn now, #34)
+        std::lock_guard<std::mutex> lock(g_helmet_mu);
+        if (g_helmet_pins.erase(g_character)) LOG("helmet key: character %u: the outfit changed, its own helmet look again", g_character);
+    }
     save_outfits(); // (publishes the looks)
     look_refresh();
 }
