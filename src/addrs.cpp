@@ -183,6 +183,8 @@ U64 kRvaBranchTry = 0x251e5a0;        // the branch walker's try of one candidat
 U64 kRvaSetVisualEquipVt = 0x5912c08; // ClientFrameEventSetVisualEquipItem
 U64 kRvaSetVisualEquipEv = 0x7a91e0;  // its slot 1: the frame event run (this, int* out, data, x, ctx*): a visual item
                                       // put on / taken off an equip slot mid-animation (anim.cpp)
+U64 kRvaItemCharges = 0x25fe890;      // (item data*, ...): an item's charges now, recharged over time - divides by its
+                                      // recharge time; its kRvaItemInfo call is within kItemChargesSize (anim.cpp)
 U64 kRvaCharCtrlVt = 0x59459f0;       // ClientCharacterControlActorComponent
 U64 kRvaCtrlAck = 0x948d30;           // ClientCharacterControlActorComponent slot 43: the server's start-action
                                       // acknowledgement applied (comp, ctx*, records[2]*, x) -> int* (anim.cpp)

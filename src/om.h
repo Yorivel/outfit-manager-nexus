@@ -177,6 +177,16 @@ struct CharacterOutfits {
     U16 character;
     std::vector<Outfit> outfits;
     std::uint8_t helmet_pin = 0; // the helmet key's pin (#34: 0 none, 1 hidden, 2 shown): bound to saves with the outfits
+    // #33: the looks while no outfit is applied (only its empty_looks, back_look and underwear_look are used); edited in
+    // the Appearance view from the "+" slot's settings, bound to saves with the outfits
+    Outfit no_outfit;
+    bool no_outfit_set() const
+    {
+        if (no_outfit.back_look || no_outfit.underwear_look) return true;
+        for (const auto& [slot, look] : no_outfit.empty_looks)
+            if (look) return true;
+        return false;
+    }
 };
 using Store = std::deque<CharacterOutfits>; // deque: references stay valid when a character is added
 constexpr std::uint8_t kEyeSteps = 3;

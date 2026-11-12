@@ -39,6 +39,7 @@ value.reset_all = Zresetuj wszystko
 value.auto_language = Automatycznie ({language})
 
 desc.visibility = Wybierz, jak widać każdą część tego stroju.
+desc.visibility.none = Wybierz, jak widać każdą część, gdy żaden strój nie jest założony. Każdy założony strój używa własnych ustawień.
 desc.climate.auto = Termometr od Odporności na lód / ogień poz. 10; mocniejszy od poz. 15 (odporność na zamrożenie / podpalenie). Ten strój: lód poz. {ice}, ogień poz. {fire}.
 desc.climate.cold = Oznacza ten strój na zimno (znaczek na kole).
 desc.climate.heat = Oznacza ten strój na upał (znaczek na kole).

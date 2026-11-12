@@ -61,6 +61,7 @@ value.reset_all = Reset all
 value.auto_language = Auto ({language})
 
 desc.visibility = Choose how each piece of this outfit shows.
+desc.visibility.none = Choose how each piece shows while no outfit is applied. Any outfit you put on uses its own.
 desc.climate.auto = A thermometer from Ice / Fire Resistance Lv. 10; the stronger one from Lv. 15 (immune to Freeze / Burn). This outfit: Ice Lv. {ice}, Fire Lv. {fire}.
 desc.climate.cold = Marks this outfit for cold weather (a badge on the wheel).
 desc.climate.heat = Marks this outfit for hot weather (a badge on the wheel).

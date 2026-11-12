@@ -39,6 +39,7 @@ value.reset_all = すべてリセット
 value.auto_language = 自動（{language}）
 
 desc.visibility = この衣装の各部位の表示方法を選びます。
+desc.visibility.none = 衣装を適用していない間の各部位の表示方法を選びます。衣装を着ると、その衣装の設定が使われます。
 desc.climate.auto = 氷結耐性／火炎耐性 Lv.10 から温度計、Lv.15 からより強い温度計（凍結／火傷を無効）。この衣装：氷結 Lv.{ice}、火炎 Lv.{fire}。
 desc.climate.cold = この衣装を寒冷用として印を付けます（ホイールにバッジ）。
 desc.climate.heat = この衣装を暑熱用として印を付けます（ホイールにバッジ）。

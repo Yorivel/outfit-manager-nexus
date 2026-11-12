@@ -39,6 +39,7 @@ value.reset_all = Hepsini sıfırla
 value.auto_language = Otomatik ({language})
 
 desc.visibility = Bu kıyafetin her parçasının nasıl görüneceğini seç.
+desc.visibility.none = Hiçbir kıyafet uygulanmadığında her parçanın nasıl görüneceğini seç. Giydiğin her kıyafet kendi ayarlarını kullanır.
 desc.climate.auto = Buz / Ateş Direnci Sv. 10'dan itibaren bir termometre; Sv. 15'ten itibaren daha güçlüsü (Donma / Yanmaya bağışık). Bu kıyafet: Buz Sv. {ice}, Ateş Sv. {fire}.
 desc.climate.cold = Bu kıyafeti soğuk hava için işaretler (çarkta bir rozet).
 desc.climate.heat = Bu kıyafeti sıcak hava için işaretler (çarkta bir rozet).

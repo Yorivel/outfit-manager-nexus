@@ -11,7 +11,10 @@
 //    control component's handler), which puts both layers back to idle: the server's chart never took our branch. That
 //    one answer is skipped while the upper layer plays our state, and only if it would end it.
 //  - The animation puts a fixed item in the right hand (the Visione, permanent id kPidVisionePropItem): the item info
-//    lookup (kRvaItemInfo) answers it with the worn helmet while the animation runs.
+//    lookup (kRvaItemInfo) answers it with the worn helmet while the animation runs. The animation equips it on the
+//    helmet slot as a visual item: some 30 call sites (the equipment component, a frame event, a bag scan, logged
+//    2026-11-13) all need the helmet - except the item's charges (kRvaItemCharges): the Visione's recharge, divided by
+//    a recharge time a helmet's info doesn't have (a crash with the Plate Helm of the Shadows).
 // The caller (the helmet key, arc.cpp) hides / shows the helmet when the state is left (anim_outcome).
 #include "anim.h"
 #include "addrs.h"
@@ -21,6 +24,7 @@
 #include "mem.h"
 #include <MinHook.h>
 #include <atomic>
+#include <intrin.h>
 #include <cstring>
 
 namespace om {
@@ -126,7 +130,8 @@ U64 __fastcall info_hook(U64 unused, U64 key)
     const int p = g_phase.load();
     if ((p == kRequested || p == kPlaying) && U16(key) == g_prop_from.load()) {
         const U16 to = g_prop_to.load();
-        if (to != 0xFFFF) return g_info_orig(unused, to);
+        const U64 from = reinterpret_cast<U64>(_ReturnAddress()) - g_base;
+        if (to != 0xFFFF && from - kRvaItemCharges >= kItemChargesSize) return g_info_orig(unused, to);
     }
     return g_info_orig(unused, key);
 }
@@ -171,7 +176,7 @@ bool anim_branch_passes(const U64* candidate)
 
 void anim_install()
 {
-    if (!have({kRvaBranchTry, kRvaCtrlAck, kRvaItemInfo, kRvaSetVisualEquipEv}) || !sleep_evaluator_hooked()) {
+    if (!have({kRvaBranchTry, kRvaCtrlAck, kRvaItemInfo, kRvaSetVisualEquipEv, kRvaItemCharges}) || !sleep_evaluator_hooked()) {
         LOG("helmet animations: off (the action chart's functions weren't all found)");
         return;
     }

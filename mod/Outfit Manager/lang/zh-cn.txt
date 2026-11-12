@@ -39,6 +39,7 @@ value.reset_all = 全部重置
 value.auto_language = 自动（{language}）
 
 desc.visibility = 选择此套装每个部位的显示方式。
+desc.visibility.none = 选择未应用套装时每个部位的显示方式。穿上套装后使用该套装自己的设置。
 desc.climate.auto = 冰霜抗性／火焰抗性 Lv.10 起显示温度计，Lv.15 起显示更强的温度计（免疫冰冻／燃烧）。此套装：冰霜 Lv.{ice}，火焰 Lv.{fire}。
 desc.climate.cold = 将此套装标记为寒冷天气用（轮盘上的徽章）。
 desc.climate.heat = 将此套装标记为炎热天气用（轮盘上的徽章）。

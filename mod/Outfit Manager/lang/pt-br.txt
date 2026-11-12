@@ -39,6 +39,7 @@ value.reset_all = Redefinir tudo
 value.auto_language = Automático ({language})
 
 desc.visibility = Escolha como cada peça deste traje aparece.
+desc.visibility.none = Escolha como cada peça aparece enquanto nenhum traje está aplicado. Cada traje que você vestir usa os seus.
 desc.climate.auto = Um termômetro a partir de Resistência a Gelo / a Fogo nv. 10; o mais forte a partir do nv. 15 (imune a congelamento / queimadura). Este traje: gelo nv. {ice}, fogo nv. {fire}.
 desc.climate.cold = Marca este traje para o frio (um emblema na roda).
 desc.climate.heat = Marca este traje para o calor (um emblema na roda).

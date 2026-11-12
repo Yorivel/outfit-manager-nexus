@@ -9,6 +9,8 @@ extern int g_cfg;
 extern std::uint8_t g_eye_step;
 extern std::uint8_t g_eye_pick;
 bool is_accessory_slot(U16 slot);
+bool eye_no_outfit();
+Outfit& eye_outfit();
 std::vector<size_t> eye_pieces();
 bool outfit_has_slot(const Outfit& o, U16 slot);
 std::uint8_t slot_look(const Outfit& o, U16 slot);

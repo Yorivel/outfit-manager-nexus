@@ -39,6 +39,7 @@ value.reset_all = Restablecer todo
 value.auto_language = Automático ({language})
 
 desc.visibility = Elige cómo se muestra cada pieza de este atuendo.
+desc.visibility.none = Elige cómo se muestra cada pieza mientras no hay ningún atuendo aplicado. Cada atuendo que te pongas usa los suyos.
 desc.climate.auto = Un termómetro desde Res. escarcha / Res. fuego nv. 10; el más fuerte desde nv. 15 (inmune a congelación / quemadura). Este atuendo: escarcha nv. {ice}, fuego nv. {fire}.
 desc.climate.cold = Marca este atuendo para el frío (una insignia en la rueda).
 desc.climate.heat = Marca este atuendo para el calor (una insignia en la rueda).

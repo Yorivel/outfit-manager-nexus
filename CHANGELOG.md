@@ -5,6 +5,7 @@ Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods
 ## Unreleased
 
 - New: the helmet key. A hotkey (on the gear wheel's + settings page) that hides or shows your helmet whatever your outfit says; press it again, or change outfit, and the outfit decides again. On foot your character takes the helmet off or puts it on with the game's own animation, holding the helmet you wear, and it goes or comes the moment the hand reaches it. Works for Kliff, Damiane and Oongka and every helmet; on a mount it changes at once. It's saved with your game like your outfits: loading an older save brings back that save's helmet.
+- New: visibility without an outfit. The gear wheel's + settings page has a Visibility entry: choose, per character, how each piece shows while no outfit is applied (after Unequip Outfit, or gear changed by hand), with the same choices as an outfit. The view shows what you're wearing in each slot. Any outfit you put on uses its own settings. Saved with your game like your outfits.
 - New: sleepwear. An outfit's new Activity setting (Off / Sleeping): an outfit set to Sleeping goes on when your character gets into bed, and what you wore (or No Outfit) comes back when you wake.
 - New: hidden armour is really off. A hidden piece is taken off the game's presentation while it stays equipped (stats unchanged), so the body under a hidden chest, the chest's physics and the straps a pack drops over heavy armour all behave as if it wasn't worn.
 - New: sounds follow what you see. Hidden armour and shields make no sound (no clinks, no metal knocking), hidden boots step like what's left on, and outfit changes don't play the game's equip sounds.
@@ -14,7 +15,7 @@ Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods
 - Fix: a pack-mounted launcher (the Boltspitter and its kin) brings its pack and straps with it.
 - Fix: expansion pieces (the diving suit) could go missing from outfits when the game renumbered its items; they now follow their item. Thanks for the report!
 - Fix: a save changed outside the game (a save editor) lost its outfits. Saves are now also recognised by the world time and place they were made. Thanks for the report!
-- Technical: the helmet animations play the chart states the way a chart branch does (anim.cpp); the helmet pin is saved per character as "helmetpin". Item stat lists at +0x120 / +0x190 for the 2026-11-06 build; resolver recipes for the new addresses.
+- Technical: the helmet animations play the chart states the way a chart branch does (anim.cpp); the helmet pin is saved per character as "helmetpin", the No Outfit looks as "nolook <slot> <look>" (23 the back shield, 30 the underwear). Item stat lists at +0x120 / +0x190 for the 2026-11-06 build; resolver recipes for the new addresses.
 
 ## 0.6.0 (2026-11-08)
 

@@ -39,6 +39,7 @@ value.reset_all = Alles zurücksetzen
 value.auto_language = Autom. ({language})
 
 desc.visibility = Wähle, wie jedes Teil dieses Outfits angezeigt wird.
+desc.visibility.none = Wähle, wie jedes Teil angezeigt wird, solange kein Outfit angelegt ist. Jedes angelegte Outfit nutzt seine eigenen Einstellungen.
 desc.climate.auto = Ein Thermometer ab Eis- / Feuerresistenz St. 10; das stärkere ab St. 15 (immun gegen Frost / Verbrennung). Dieses Outfit: Eis St. {ice}, Feuer St. {fire}.
 desc.climate.cold = Markiert dieses Outfit für Kälte (ein Abzeichen am Rad).
 desc.climate.heat = Markiert dieses Outfit für Hitze (ein Abzeichen am Rad).

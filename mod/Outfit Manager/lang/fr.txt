@@ -39,6 +39,7 @@ value.reset_all = Tout réinitialiser
 value.auto_language = Auto ({language})
 
 desc.visibility = Choisissez comment chaque pièce de cette tenue s'affiche.
+desc.visibility.none = Choisissez comment chaque pièce s'affiche quand aucune tenue n'est appliquée. Chaque tenue que vous mettez utilise les siens.
 desc.climate.auto = Un thermomètre dès Rés. au givre / Rés. au feu niv. 10 ; le plus fort dès le niv. 15 (immunité au gel / à la brûlure). Cette tenue : givre niv. {ice}, feu niv. {fire}.
 desc.climate.cold = Marque cette tenue pour le froid (un badge sur la roue).
 desc.climate.heat = Marque cette tenue pour la chaleur (un badge sur la roue).

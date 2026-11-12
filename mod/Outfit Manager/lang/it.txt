@@ -39,6 +39,7 @@ value.reset_all = Azzera tutto
 value.auto_language = Automatico ({language})
 
 desc.visibility = Scegli come appare ogni pezzo di questo completo.
+desc.visibility.none = Scegli come appare ogni pezzo quando nessun completo è applicato. Ogni completo che indossi usa i propri.
 desc.climate.auto = Un termometro da Resistenza al gelo / al fuoco liv. 10; quello più forte dal liv. 15 (immune a congelamento / ustione). Questo completo: gelo liv. {ice}, fuoco liv. {fire}.
 desc.climate.cold = Segna questo completo per il freddo (un simbolo sulla ruota).
 desc.climate.heat = Segna questo completo per il caldo (un simbolo sulla ruota).

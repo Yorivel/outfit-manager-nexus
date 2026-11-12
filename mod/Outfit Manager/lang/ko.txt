@@ -39,6 +39,7 @@ value.reset_all = 모두 초기화
 value.auto_language = 자동 ({language})
 
 desc.visibility = 이 의상의 각 부위가 어떻게 보일지 선택합니다.
+desc.visibility.none = 의상을 적용하지 않은 동안 각 부위가 어떻게 보일지 선택합니다. 의상을 입으면 그 의상의 설정을 따릅니다.
 desc.climate.auto = 냉기 / 화염 저항 Lv.10부터 온도계, Lv.15부터 더 강한 온도계 (빙결 / 화상 면역). 이 의상: 냉기 Lv.{ice}, 화염 Lv.{fire}.
 desc.climate.cold = 이 의상을 추운 날씨용으로 표시합니다 (휠에 배지).
 desc.climate.heat = 이 의상을 더운 날씨용으로 표시합니다 (휠에 배지).

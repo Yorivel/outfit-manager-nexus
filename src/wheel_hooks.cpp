@@ -178,7 +178,7 @@ void center_for_focus(U64 self, U64 script, bool hide_otherwise)
         center_show(self);
         return;
     }
-    if (g_eye >= 0 && size_t(g_eye) < g_outfits.size()) { // the Appearance view: the piece and its look / the page step
+    if (g_eye >= 0 && size_t(g_eye) <= g_outfits.size()) { // the Appearance view (an outfit's, or no outfit's: #33): the piece and its look / the page step
         std::vector<size_t> pieces = eye_pieces();
         U32 k = i < visible_slots() ? slot_outfit(i) : kOutfitSlots;
         static const char* const kLookText[kLookCount] = { // (by Look value)

@@ -23,12 +23,17 @@ std::uint8_t g_eye_step = 0; // 0 Armour, 1 Weapons, 2 Accessories
 std::uint8_t g_eye_pick = 0; // the page slot's dots: scrolled to choose, a click opens it (g_eye_step follows)
 bool is_accessory_slot(U16 slot) { return std::find(std::begin(kAccessorySlots), std::end(kAccessorySlots), slot) != std::end(kAccessorySlots); }
 
+// The outfit the view edits: g_outfits[g_eye], or with g_eye the saved count (the "+" slot's, as g_cfg) the character's
+// No Outfit looks (#33).
+bool eye_no_outfit() { return g_eye >= 0 && size_t(g_eye) == g_outfits.size(); }
+Outfit& eye_outfit() { return eye_no_outfit() ? store_for(g_character).no_outfit : g_outfits[size_t(g_eye)]; }
+
 // The shown page's slots: every slot of its wheel, in slot order, held by the outfit or not (the Weapons page also the
 // back shield).
 std::vector<size_t> eye_pieces()
 {
     std::vector<size_t> v;
-    if (g_eye < 0 || size_t(g_eye) >= g_outfits.size()) return v;
+    if (g_eye < 0 || size_t(g_eye) > g_outfits.size()) return v;
     if (g_eye_step == 1) {
         for (U32 i = 0; i < g_weapon_slot_count; ++i)
             if (g_weapon_slots[i] != 0xFFFF) v.push_back(g_weapon_slots[i]);
@@ -67,7 +72,7 @@ std::uint8_t slot_look(const Outfit& o, U16 slot)
 
 const OutfitItem* eye_item(size_t idx, OutfitItem& tmp)
 {
-    Outfit& o = g_outfits[size_t(g_eye)];
+    Outfit& o = eye_outfit();
     if (idx == kUnderwearPiece) {
         tmp = {kUnderwearSlot, 0xFFFF, 0, o.underwear_look};
         return &tmp;
@@ -75,7 +80,8 @@ const OutfitItem* eye_item(size_t idx, OutfitItem& tmp)
     if (idx != kBackPiece) {
         for (const OutfitItem& it : o.items)
             if (it.slot == idx) return &it;
-        if (idx == kCarriedSlotA || idx == kCarriedSlotB) { // (what the slot holds now, with the slot's look)
+        if (idx == kCarriedSlotA || idx == kCarriedSlotB || eye_no_outfit()) { // (what the slot holds now, with the
+                                                                               // slot's look: no outfit's are all so)
             U16 key = 0xFFFF;
             U64 uid = 0;
             if (U64 e = display_item(static_cast<U16>(idx))) rd(e + 8, key), rd(e, uid);
@@ -94,7 +100,7 @@ const OutfitItem* eye_item(size_t idx, OutfitItem& tmp)
 }
 std::uint8_t& eye_look(size_t idx)
 {
-    Outfit& o = g_outfits[size_t(g_eye)];
+    Outfit& o = eye_outfit();
     if (idx == kBackPiece) return o.back_look;
     if (idx == kUnderwearPiece) return o.underwear_look;
     for (OutfitItem& it : o.items)
@@ -136,7 +142,7 @@ void eye_refresh(U64 self)
 void eye_enter(U64 self, U32 o)
 {
     g_eye = static_cast<int>(o), g_eye_step = 0, g_eye_pick = 0;
-    LOG("appearance view: \"%s\"", g_outfits[o].name.c_str());
+    LOG("appearance view: %s", eye_no_outfit() ? "no outfit (#33)" : ("\"" + g_outfits[o].name + "\"").c_str());
     eye_refresh(self);
 }
 
@@ -156,7 +162,7 @@ void eye_scroll(U64 self, U32 i, int step)
     std::vector<size_t> pieces = eye_pieces();
     U32 k = i < visible_slots() ? slot_outfit(i) : kOutfitSlots;
     if (k < pieces.size()) {
-        Outfit& o = g_outfits[size_t(g_eye)];
+        Outfit& o = eye_outfit();
         std::uint8_t& look = eye_look(pieces[k]);
         look = kLookOrder[(look_pos(look) + kLookCount + step) % kLookCount];
         OutfitItem tmp{};

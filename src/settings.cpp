@@ -119,8 +119,9 @@ std::vector<std::uint8_t> cfg_entries()
                 kCfgOverwrite, kCfgDelete, kCfgBack};
     }
     // (the Outfit Arc's binding for the input in use: the key, or the pad's; pump re-shows the page when it changes)
-    return {kCfgGStash, kCfgParty, kCfgMessages, kCfgEffects, kCfgLanguage, g_pad_in_use ? kCfgPeekPad : kCfgPeekKey,
-            kCfgHelmetKey, kCfgClear, kCfgUninstall, kCfgBack};
+    // (#33: Visibility here is the looks while no outfit is applied)
+    return {kCfgVisibility, kCfgGStash, kCfgParty, kCfgMessages, kCfgEffects, kCfgLanguage,
+            g_pad_in_use ? kCfgPeekPad : kCfgPeekKey, kCfgHelmetKey, kCfgClear, kCfgUninstall, kCfgBack};
 }
 
 const char* cfg_name(std::uint8_t k)
@@ -246,7 +247,8 @@ std::string cfg_description(std::uint8_t k)
                                  : lang::t("desc.hotkey.off");
         }
     } else {
-        if (k == kCfgGStash) t = entry_text(kPageSettings, 3);
+        if (k == kCfgVisibility) t.second = lang::t("desc.visibility.none");
+        else if (k == kCfgGStash) t = entry_text(kPageSettings, 3);
         else if (k == kCfgParty) t = entry_text(kPageSettings, 0);
         else if (k == kCfgMessages) t = entry_text(kPageSettings, 1);
         else if (k == kCfgEffects)

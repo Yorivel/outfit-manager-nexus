@@ -116,16 +116,20 @@ std::map<U16, std::uint8_t> g_helmet_pins; // character -> 1 hidden, 2 shown
 void publish_looks(const Store& s)
 {
     std::map<U16, std::vector<LookPiece>> m;
-    for (const CharacterOutfits& c : s)
+    auto add = [&](U16 character, const Outfit& o) {
+        for (const OutfitItem& it : o.items)
+            if (it.look != kLookDefault) m[character].push_back({it.slot, 0xFFFF, 0, it.look});
+        for (const auto& [slot, look] : o.empty_looks)
+            if (look != kLookDefault && !outfit_has_slot(o, slot)) m[character].push_back({slot, 0xFFFF, 0, look});
+        if (o.back_look != kLookDefault) m[character].push_back({kBackShieldSlot, 0xFFFF, 0, o.back_look});
+        if (o.underwear_look != kLookDefault) m[character].push_back({kUnderwearSlot, 0xFFFF, 0, o.underwear_look});
+    };
+    for (const CharacterOutfits& c : s) {
+        bool worn = false;
         for (const Outfit& o : c.outfits)
-            if (o.worn) {
-                for (const OutfitItem& it : o.items)
-                    if (it.look != kLookDefault) m[c.character].push_back({it.slot, 0xFFFF, 0, it.look});
-                for (const auto& [slot, look] : o.empty_looks)
-                    if (look != kLookDefault && !outfit_has_slot(o, slot)) m[c.character].push_back({slot, 0xFFFF, 0, look});
-                if (o.back_look != kLookDefault) m[c.character].push_back({kBackShieldSlot, 0xFFFF, 0, o.back_look});
-                if (o.underwear_look != kLookDefault) m[c.character].push_back({kUnderwearSlot, 0xFFFF, 0, o.underwear_look});
-            }
+            if (o.worn) add(c.character, o), worn = true;
+        if (!worn && c.character != kNoCharacter) add(c.character, c.no_outfit); // (#33: no outfit applied)
+    }
     {
         std::lock_guard<std::mutex> lock(g_looks_mu);
         g_looks = std::move(m);

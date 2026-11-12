@@ -77,9 +77,17 @@ void write_lists(std::string& out, const Store& s)
 {
     for (int pass = 0; pass < 2; ++pass) // the character-less list first (it has no header)
         for (const CharacterOutfits& c : s) {
-            if ((c.character == kNoCharacter) != (pass == 0) || (c.outfits.empty() && !c.helmet_pin)) continue;
+            if ((c.character == kNoCharacter) != (pass == 0) || (c.outfits.empty() && !c.helmet_pin && !c.no_outfit_set()))
+                continue;
             if (pass) put(out, "character\t%u\n", c.character);
             if (pass && c.helmet_pin) put(out, "helmetpin\t%u\n", c.helmet_pin);
+            if (pass) { // (#33: the No Outfit looks; slot 23 the back shield, 30 the underwear, as the looks publish them)
+                const Outfit& n = c.no_outfit;
+                for (const auto& [slot, look] : n.empty_looks)
+                    if (look) put(out, "nolook\t%u\t%u\n", slot, look);
+                if (n.back_look) put(out, "nolook\t%u\t%u\n", kBackShieldSlot, n.back_look);
+                if (n.underwear_look) put(out, "nolook\t%u\t%u\n", kUnderwearSlot, n.underwear_look);
+            }
             for (const Outfit& o : c.outfits) {
                 put(out, "outfit\t%s\n", o.name.c_str());
                 if (!o.chest_icon.empty()) put(out, "chest\t%s\n", o.chest_icon.c_str());
@@ -370,6 +378,15 @@ void load_outfits()
                 // (other names: settings of another build, e.g. the dropped "hotkey": ignored)
             } else if (v[0] == "character" && v.size() >= 2) {
                 cur = &list_for(*store, static_cast<U16>(std::strtoul(v[1].c_str(), nullptr, 10)));
+            } else if (v[0] == "nolook" && v.size() >= 3) {
+                const U16 slot = static_cast<U16>(std::strtoul(v[1].c_str(), nullptr, 10));
+                const unsigned long look = std::strtoul(v[2].c_str(), nullptr, 10);
+                if (look > 0 && look < kLookCount) {
+                    Outfit& n = cur->no_outfit;
+                    if (slot == kBackShieldSlot) n.back_look = static_cast<std::uint8_t>(look);
+                    else if (slot == kUnderwearSlot) n.underwear_look = static_cast<std::uint8_t>(look);
+                    else if (slot < 32) n.empty_looks[slot] = static_cast<std::uint8_t>(look);
+                }
             } else if (v[0] == "helmetpin" && v.size() >= 2) {
                 const unsigned long p = std::strtoul(v[1].c_str(), nullptr, 10);
                 cur->helmet_pin = p == 1 || p == 2 ? static_cast<std::uint8_t>(p) : 0;
