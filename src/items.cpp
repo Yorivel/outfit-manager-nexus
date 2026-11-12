@@ -46,6 +46,15 @@ U64 item_rows(U32* count = nullptr)
     return rows;
 }
 
+// True for a key the game hands out while it runs (after the data file's rows: expansion and pre-order items). Such a
+// key can name another item next session (a newly added package lands before it: 2026-11-12, a player's log, every
+// expansion piece 6 keys up), so a saved piece of that kind is found by its uid (gear.cpp, adopt_returned).
+bool key_assigned_at_run(U16 key)
+{
+    U32 n = 0;
+    return item_rows(&n) && key >= n && key != 0xFFFF;
+}
+
 U32 pid_of(U16 key)
 {
     U32 n = 0;

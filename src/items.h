@@ -6,6 +6,7 @@ namespace om {
 
 extern RecordGetFn g_str_get;
 U32 pid_of(U16 key);
+bool key_assigned_at_run(U16 key);
 extern std::map<U64, std::pair<int, int>> g_gear_resist;
 void outfit_resistance(const Outfit& o, int& ice, int& fire);
 const char* climate_badge(const Outfit& o);
