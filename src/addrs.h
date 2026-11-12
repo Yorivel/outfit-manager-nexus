@@ -134,7 +134,9 @@ extern U64 kRvaEquipSlotVt;
 extern U64 kRvaHudVt;
 extern U64 kRvaSlotScript164;
 extern U64 kRvaBranchEval;
-extern U64 kRvaEffectSwitchVt, kRvaEffectSwitchRun;
+extern U64 kRvaEffectSwitchVt, kRvaEffectSwitchRun, kRvaEffectSwitchSlot2, kRvaHandlerRunCheck, kRvaSearchNearVt, kRvaSearchNearRun, kRvaSendGimEvVt,
+    kRvaSendGimEvRun, kRvaGimmickCompVt, kRvaGimmickCompLoad, kRvaGimmickCompSave;
+extern U64 kOffSwitchEvent, kOffHolderGimmick, kOffGimmickParent, kOffSceneObjPart, kRvaSceneObjInit;
 extern U64 kRvaLanternLight, kRvaLanternDim, kRvaLanternCheck, kRvaGearSounds, kRvaGearSoundsFrom, kRvaCollideSound;
 extern U64 kRvaPlayRequest, kRvaEventLookup, kRvaEventPost, kRvaContactCopy, kRvaSceneObjVt;
 extern U64 kOffCompLantern, kOffLanternLit, kOffCompEffects, kOffEffectsSound, kOffSoundHandle, kOffHandleObject,

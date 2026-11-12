@@ -189,10 +189,11 @@ U64 player_object(U64* body)
     const bool ok = handle && rd(handle + kOffHandleObject, id);
     // (his body handle: the one of his scene objects his own collisions come from - in the model component's list the
     // headgear switch takes his model from; it holds a SceneObjectClient, checked by its class)
-    const bool scenes = kOffCompModel && kOffModelScenes && kOffScenesBody && kRvaSceneObjVt;
+    const bool scenes = kOffCompModel && kOffModelScenes && kOffScenesBody && kRvaSceneObjVt && kOffSceneObjPart;
     const U64 list = comp && scenes ? rp(rp(comp + kOffCompModel) + kOffModelScenes) : 0;
     U64 h = list ? rp(list + kOffScenesBody) : 0;
-    if (h && rp(rp(h + 8)) != g_base + kRvaSceneObjVt) h = 0;
+    const U64 part = h ? rp(h + 8) : 0; // (the object's part at +kOffSceneObjPart: the object starts before it)
+    if (h && (!part || rp(part - kOffSceneObjPart) != g_base + kRvaSceneObjVt)) h = 0;
     *body = h;
     if (ctx[0]) release_player(ctx);
     return ok && id - kPartyFirst < kPartySize ? id : 0;
@@ -229,12 +230,10 @@ bool lantern_lit() { return g_lantern_lit.load() || g_near_comp.load(); }
 // EffectSwitch handler (kRvaEffectSwitchRun), the triggering event's name hash at +0x44 of its data. While the played
 // character's lantern is in "detected", it shows like a lit one; at "all exit" the look decides again. Logged in play
 // 2026-11-12: four in/out walks, four detected/all-exit pairs, nothing else.
-// If an offset moves with a game update the checks below fail and the lantern simply follows its look as before.
+// If an offset moves with a game update and cannot be found again, the watch stays off and the lantern follows its look.
 constexpr U32 kEvNearDetected = 0x9B28835C; // hashlittle("onlevelgimmickdetected", 0xC5EDE) - chart event names
 constexpr U32 kEvNearAllExit = 0xCC908146;  // hashlittle("onlevelgimmickallexit", 0xC5EDE)
-constexpr U64 kOffSwitchEvent = 0x44;       // EffectSwitch handler data -> u32 the event that runs it
-constexpr U64 kOffHolderGimmick = 0x30;     // actor component -> the gimmick component (as the handlers read it)
-constexpr U64 kOffGimmickParent = 0x288;    // gimmick component -> u32 its docking parent's actor id (actor +0x60)
+// (the offsets: addrs.cpp, kOffSwitchEvent / kOffHolderGimmick / kOffGimmickParent, in the resolver)
 std::atomic<U32> g_player_id{0};            // (actor +0x60 of the played character)
 std::atomic<bool> g_near_changed{false};
 using EffSwFn = U64(__fastcall*)(U64, U64, U64, U64, U64, U64);
@@ -255,7 +254,7 @@ U64 __fastcall effsw_hook(U64 data, U64 res, U64 a3, U64 actor, U64 a5, U64 a6)
 
 void sound_install()
 {
-    if (have({kRvaEffectSwitchRun})) { // (the lantern's pulse near a memory fragment)
+    if (have({kRvaEffectSwitchRun}) && kOffSwitchEvent && kOffHolderGimmick && kOffGimmickParent) { // (the lantern's pulse near a memory fragment)
         void* t = reinterpret_cast<void*>(g_base + kRvaEffectSwitchRun);
         if (MH_CreateHook(t, reinterpret_cast<void*>(&effsw_hook), reinterpret_cast<void**>(&g_effsw_orig)) != MH_OK || MH_EnableHook(t) != MH_OK)
             LOG("sounds: the lantern's fragment pulse could not be watched (a hidden lantern stays hidden near fragments)");

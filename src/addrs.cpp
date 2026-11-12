@@ -373,7 +373,8 @@ void resolve_addresses()
                            &kOffPanelElem, &kOffEventType, &kOffBindingPressed, &kOffViewFlags,
                            // (not written, but what the game plays and shows follows them: off rather than wrong)
                            &kOffCompLantern, &kOffLanternLit, &kOffCompEffects, &kOffEffectsSound, &kOffSoundHandle,
-                           &kOffHandleObject, &kOffContactBody, &kOffEventId, &kOffEventAlt, &kOffCompModel, &kOffModelScenes};
+                           &kOffHandleObject, &kOffContactBody, &kOffEventId, &kOffEventAlt, &kOffCompModel, &kOffModelScenes,
+                           &kOffSwitchEvent, &kOffHolderGimmick, &kOffGimmickParent, &kOffSceneObjPart};
     for (std::size_t i = 0; i < kOffsetCount; ++i) {
         *kOffsetVars[i] = values[i];
         bool unsure = status[i] == resolver::OffsetStatus::Doubtful ||
@@ -394,6 +395,18 @@ U64 kRvaLanternCheck = 0x1838280;    // (the game's "is it lit": counter > 0)
 U64 kRvaEffectSwitchVt = 0x5d38390;  // GimmickEventHandlerData_EffectSwitch (anchor for its slot)
 U64 kRvaEffectSwitchRun = 0x25e8670; // its slot 4: runs a gimmick chart's EffectSwitch (data, result*, ?, gimmick actor) -
                                      // hooked (sound.cpp: the lantern's pulse near a memory fragment)
+U64 kRvaEffectSwitchSlot2 = 0x25e84b0; // (its slot 2: a witness below slot 4, which is only a jump - places it)
+U64 kRvaHandlerRunCheck = 0x2500750; // (every handler's slot 7: runs it only if its event, data +kOffSwitchEvent, matches)
+U64 kRvaSearchNearVt = 0x5d37790;    // GimmickEventHandlerData_SearchNearLevelGimmick
+U64 kRvaSearchNearRun = 0x25f73c0;   // (its slot 4: actor +kOffActorComp -> +kOffHolderGimmick, the gimmick component)
+U64 kRvaSendGimEvVt = 0x5d7db70;     // GimmickEventHandlerData_SendGimmickEvent
+U64 kRvaSendGimEvRun = 0x25e6100;    // (its slot 4: the same path)
+U64 kRvaGimmickCompVt = 0x5947ae0;   // ClientGimmickActorComponent
+U64 kRvaGimmickCompLoad = 0x22c0a10; // (its slots 11 / 25: read / write its fields, +kOffGimmickParent among them)
+U64 kRvaGimmickCompSave = 0x22bfb50;
+U64 kOffSwitchEvent = 0x44;          // gimmick event handler data -> u32 the chart event that runs it (name hash)
+U64 kOffHolderGimmick = 0x30;        // actor component -> the gimmick component
+U64 kOffGimmickParent = 0x288;       // gimmick component -> u32 its docking parent's actor id (actor +0x60)
 U64 kRvaGearSounds = 0xb8a1d0;       // (sets the character's armorkey / material_game: its sound handle +0x70, number +0x18)
 U64 kRvaGearSoundsFrom = 0xa8a4b0;   // (calls it with the character's sound component: +0x68 -> +0x60 -> +0x18)
 U64 kRvaCollideSound = 0x34e64f0;    // (manager, contact record, ?, sound info, ...): sounds a collision - hooked
@@ -402,7 +415,11 @@ U64 kRvaPlayRequest = 0x3b577d0;     // (audio manager, u32 sound object, positi
 U64 kRvaEventLookup = 0x2812a80;     // (event key*): -> the event's record (its Wwise id at +kOffEventId) - called
 U64 kRvaEventPost = 0x3b56af0;       // (the audio thread's post of a queued request: reads the record's id and alternative)
 U64 kRvaContactCopy = 0x58e170;      // (copies a collision contact record: its body handle at +kOffContactBody, ref-counted)
-U64 kRvaSceneObjVt = 0x590d1a8;      // SceneObjectClient (what a contact's body handle holds)
+U64 kRvaSceneObjVt = 0x590d1b8;      // SceneObjectClient (what a contact's body handle holds): its main vtable - the handle
+                                     // points at its part at +kOffSceneObjPart (vtable +590D1A8, RTTI offset 40); the
+                                     // resolver's search finds a class's main vtable, so that one is kept here
+U64 kRvaSceneObjInit = 0x50c830;     // (SceneObjectClient's constructor: stores its vtables at +0, +kOffSceneObjPart, +0x40)
+U64 kOffSceneObjPart = 0x28;         // SceneObjectClient -> the part a body handle points at
 U64 kOffCompLantern = 0x50;          // character component -> its lantern state
 U64 kOffLanternLit = 0x18c;          // lantern state -> u32 lit counter (> 0: lit)
 U64 kOffCompEffects = 0x60;          // character component -> its effects (also transition.cpp's effect component)
