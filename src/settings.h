@@ -7,6 +7,7 @@ namespace om {
 extern bool g_stash;
 bool stash_of(const Outfit& o);
 extern bool g_take_from_companions;
+extern bool g_shared_outfits; // (Outfits: Same in every save)
 extern bool g_messages;
 extern std::uint8_t g_effects; // the outfit effects: 0 off, 1 performance (no glow particles), 2 quality (the default)
 extern std::string g_language;

@@ -62,6 +62,7 @@ std::pair<std::string, std::string> entry_text(int page, U32 index)
 bool g_stash = false;               // after a load, saved pieces left in the bag go to storage (off until turned on)
 bool stash_of(const Outfit& o) { return o.stash ? o.stash == 1 : g_stash; } // (its own, or the global)
 bool g_take_from_companions = true; // pieces another character wears: take them (asked first)
+bool g_shared_outfits = false;      // Outfits: false per save (each save its own), true the same in every save
 std::map<U16, int> g_unmanaged;    // (#21: the outfit let go, per character - see om.h)
 bool let_go(int outfit)
 {
@@ -135,7 +136,7 @@ std::vector<std::uint8_t> cfg_entries()
     }
     // (the Outfit Arc's binding for the input in use: the key, or the pad's; pump re-shows the page when it changes)
     // (#33: Visibility here is the looks while no outfit is applied)
-    return {kCfgVisibility, kCfgGStash, kCfgParty, kCfgMessages, kCfgEffects, kCfgLanguage,
+    return {kCfgVisibility, kCfgShared, kCfgGStash, kCfgParty, kCfgMessages, kCfgEffects, kCfgLanguage,
             g_pad_in_use ? kCfgPeekPad : kCfgPeekKey, kCfgHelmetKey, kCfgClear, kCfgUninstall, kCfgBack};
 }
 
@@ -147,8 +148,8 @@ const char* cfg_name(std::uint8_t k)
                                     "setting.uninstall",  "setting.back",    "setting.language", "setting.peekkey",
                                     "setting.peekpad",    "setting.hotkey",    "setting.effects",
                                     "setting.activity",   "setting.helmetkey", "setting.look",
-                                    "setting.icon"};
-    return k <= kCfgIcon ? lang::t(n[k]) : "";
+                                    "setting.icon",       "setting.shared"};
+    return k <= kCfgShared ? lang::t(n[k]) : "";
 }
 
 // A text that stays where it is (the settings' values are kept as pointers between refreshes: a reused std::string's
@@ -210,6 +211,7 @@ std::vector<const char*> cfg_values(std::uint8_t k, U32& cur)
     }
     if (k == kCfgGStash) return cur = g_stash ? 1 : 0, std::vector<const char*>{"value.off", "value.on"};
     if (k == kCfgParty) return cur = g_take_from_companions ? 1 : 0, std::vector<const char*>{"value.leave", "value.take"};
+    if (k == kCfgShared) return cur = g_shared_outfits ? 1 : 0, std::vector<const char*>{"value.per_save", "value.every_save"};
     if (k == kCfgMessages) return cur = g_messages ? 1 : 0, std::vector<const char*>{"value.off", "value.on"};
     if (k == kCfgEffects)
         return cur = g_effects, std::vector<const char*>{"value.off", "value.performance", "value.quality"};
@@ -289,6 +291,7 @@ std::string cfg_description(std::uint8_t k)
         if (k == kCfgVisibility) t.second = lang::t("desc.visibility.none");
         else if (k == kCfgGStash) t = entry_text(kPageSettings, 3);
         else if (k == kCfgParty) t = entry_text(kPageSettings, 0);
+        else if (k == kCfgShared) t.second = lang::t(g_shared_outfits ? "desc.shared.every" : "desc.shared.per");
         else if (k == kCfgMessages) t = entry_text(kPageSettings, 1);
         else if (k == kCfgEffects)
             t.second = lang::t(g_effects == 0 ? "desc.effects.off" : g_effects == 1 ? "desc.effects.performance"
@@ -400,6 +403,7 @@ void cfg_scroll(U64 self, U32 i, int step)
     } else {
         if (e[k] == kCfgGStash) g_stash = to == 1;
         else if (e[k] == kCfgParty) g_take_from_companions = to == 1;
+        else if (e[k] == kCfgShared) g_shared_outfits = to == 1;
         else if (e[k] == kCfgMessages) g_messages = to == 1;
         else if (e[k] == kCfgEffects) g_effects = static_cast<std::uint8_t>(to);
         else if (e[k] == kCfgPeekPad) g_peek_pad = to == 1;

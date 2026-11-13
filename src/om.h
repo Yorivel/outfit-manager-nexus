@@ -455,7 +455,7 @@ enum Confirm { kConfirmNone, kConfirmOverwrite, kConfirmDelete, kConfirmSwap, kC
 enum CfgKind : std::uint8_t {
     kCfgVisibility, kCfgClimate, kCfgWeapons, kCfgStash, kCfgPosition, kCfgRename, kCfgOverwrite, kCfgDelete, // a saved outfit's
     kCfgGStash, kCfgParty, kCfgMessages, kCfgClear, kCfgUninstall,                               // the "+" slot's
-    kCfgBack, kCfgLanguage, kCfgPeekKey, kCfgPeekPad, kCfgHotkey, kCfgEffects, kCfgActivity, kCfgHelmetKey, kCfgLook, kCfgIcon
+    kCfgBack, kCfgLanguage, kCfgPeekKey, kCfgPeekPad, kCfgHotkey, kCfgEffects, kCfgActivity, kCfgHelmetKey, kCfgLook, kCfgIcon, kCfgShared
 };
 
 // Every move gives the piece a new uid. The stash knows what it moved, so it follows each piece exactly: the copy of its
