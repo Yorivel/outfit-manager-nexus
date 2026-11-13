@@ -63,15 +63,21 @@ def return_arrow():
     return m
 
 
-def slashed_plate_armour():
-    """The game's plate armour icon (cd_icon_ability_PLATE_ARMOR) with the slash of its Hidden eye: the "+" slot's
-    Unequip Outfit dot (the outfit stops applying; picked by the user 2026-11-08 from tools/unequip_badges_preview.py)."""
+def plate_armour():
+    """The game's plate armour icon (cd_icon_ability_PLATE_ARMOR) as a mask: the Outfit Arc's way back from the weapon
+    sets to the outfits (#32)."""
     import os
     from PIL import ImageChops
     src = os.path.join('F:/MyProjects/CDInventory', 're', 'omring', 'badge', 'cd_icon_common_01.png')  # (the extracts)
     im = Image.open(src).convert('RGBA').crop((483, 433, 483 + 52, 433 + 52)).resize((S, S), Image.LANCZOS)
     lum = im.convert('L').point(lambda v: max(0, min(255, (v - 60) * 255 // 120)))
-    m = ImageChops.multiply(im.getchannel('A'), lum)
+    return ImageChops.multiply(im.getchannel('A'), lum)
+
+
+def slashed_plate_armour():
+    """The plate armour with the slash of the game's Hidden eye: the "+" slot's Unequip Outfit dot (the outfit stops
+    applying; picked by the user 2026-11-08 from tools/unequip_badges_preview.py), and the Outfit Arc's No Outfit."""
+    m = plate_armour()
     d = ImageDraw.Draw(m)
     d.line((40, 360, 360, 40), fill=0, width=60)
     d.line((52, 348, 348, 52), fill=255, width=26)

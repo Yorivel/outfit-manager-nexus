@@ -230,6 +230,10 @@ peek.edit = 編集
 peek.moving = 移動中
 peek.drop = 置く
 peek.unpin_move = ピン解除 · 長押しで移動
+peek.weapons_label = 武器セット
+peek.outfits = 衣装
+peek.to_weapons = 武器セット
+peek.to_outfits = 切り替え
 toast.released = 「{outfit}」を外しました：装備はそのままで、衣装を読み込むか保存するまで表示設定はオフになります
 
 # next version: weapon sets, underwear

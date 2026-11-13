@@ -247,6 +247,10 @@ peek.edit = Edytuj
 peek.moving = PRZENOSZENIE
 peek.drop = Upuść
 peek.unpin_move = Odepnij · przytrzymaj, by przenieść
+peek.weapons_label = ZESTAWY BRONI
+peek.outfits = Stroje
+peek.to_weapons = Zestawy broni
+peek.to_outfits = Przełącz
 toast.released = „{outfit}” zdjęty: twój ekwipunek zostaje, jego ustawienia widoczności są wyłączone, dopóki nie wczytasz lub nie zapiszesz stroju
 
 # next version: weapon sets, underwear

@@ -233,6 +233,10 @@ peek.edit = Editar
 peek.moving = MOVENDO
 peek.drop = Soltar
 peek.unpin_move = Desafixar · segure para mover
+peek.weapons_label = CONJUNTOS DE ARMAS
+peek.outfits = Trajes
+peek.to_weapons = Conjuntos de armas
+peek.to_outfits = Trocar
 toast.released = "{outfit}" desequipado: seu equipamento continua, as configurações de visibilidade dele ficam desligadas até você carregar ou salvar um traje
 
 # next version: weapon sets, underwear

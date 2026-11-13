@@ -233,6 +233,10 @@ peek.edit = Modifier
 peek.moving = DÉPLACEMENT
 peek.drop = Déposer
 peek.unpin_move = Désépingler · maintenir pour déplacer
+peek.weapons_label = JEUX D'ARMES
+peek.outfits = Tenues
+peek.to_weapons = Jeux d'armes
+peek.to_outfits = Changer
 toast.released = « {outfit} » retirée : votre équipement reste porté, ses réglages de visibilité sont désactivés jusqu'à ce que vous chargiez ou enregistriez une tenue
 
 # next version: weapon sets, underwear

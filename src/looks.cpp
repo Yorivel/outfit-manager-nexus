@@ -983,7 +983,13 @@ void look_refresh()
 void mark_worn(int index)
 {
     // (a weapon set is never the applied outfit: loading one leaves the applied outfit as it is, #27)
-    if (index >= 0 && size_t(index) < g_outfits.size() && is_weapon_set(g_outfits[size_t(index)])) return;
+    // (#32: it is the Outfit Arc's most recent weapon set)
+    if (index >= 0 && size_t(index) < g_outfits.size() && is_weapon_set(g_outfits[size_t(index)])) {
+        U32 top = 0;
+        for (const Outfit& o : g_outfits) top = std::max(top, o.used);
+        if (g_outfits[size_t(index)].used != top || !top) g_outfits[size_t(index)].used = top + 1, save_outfits();
+        return;
+    }
     if (index >= 0) g_unmanaged.erase(g_character); // (a load or a save: the outfit is managed again)
     bool changed = false;
     for (size_t i = 0; i < g_outfits.size(); ++i)

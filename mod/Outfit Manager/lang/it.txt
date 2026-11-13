@@ -233,6 +233,10 @@ peek.edit = Modifica
 peek.moving = SPOSTAMENTO
 peek.drop = Rilascia
 peek.unpin_move = Sblocca · tieni premuto per spostare
+peek.weapons_label = SET DI ARMI
+peek.outfits = Completi
+peek.to_weapons = Set di armi
+peek.to_outfits = Cambia
 toast.released = "{outfit}" tolto: il tuo equipaggiamento resta addosso, le sue impostazioni di visibilità sono disattivate finché non carichi o salvi un completo
 
 # next version: weapon sets, underwear

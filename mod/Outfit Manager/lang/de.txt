@@ -233,6 +233,10 @@ peek.edit = Bearbeiten
 peek.moving = VERSCHIEBEN
 peek.drop = Ablegen
 peek.unpin_move = Lösen · halten zum Verschieben
+peek.weapons_label = WAFFENSETS
+peek.outfits = Outfits
+peek.to_weapons = Waffensets
+peek.to_outfits = Wechseln
 toast.released = „{outfit}“ abgelegt: deine Ausrüstung bleibt an, seine Sichtbarkeitseinstellungen sind aus, bis du ein Outfit lädst oder speicherst
 
 # next version: weapon sets, underwear

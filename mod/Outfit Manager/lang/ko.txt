@@ -230,6 +230,10 @@ peek.edit = 편집
 peek.moving = 이동 중
 peek.drop = 놓기
 peek.unpin_move = 고정 해제 · 길게 눌러 이동
+peek.weapons_label = 무기 세트
+peek.outfits = 의상
+peek.to_weapons = 무기 세트
+peek.to_outfits = 전환
 toast.released = '{outfit}' 해제됨: 장비는 그대로이며, 의상을 불러오거나 저장할 때까지 표시 설정이 꺼집니다
 
 # next version: weapon sets, underwear

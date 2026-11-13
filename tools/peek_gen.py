@@ -204,26 +204,43 @@ def frame(selected):
     return im
 
 
-NONE_PX = 254          # the "No outfit" icon: as the item icons (256px, drawn in the same icon box)
-NONE_FILL = 0.8        # its glyph's extent in that box
+BADGE_PX = 252  # the Arc's own badges (Edit Pins, Back, No Outfit, Outfits): drawn at ~4x their 46px box (crisp)
 
 
-def no_outfit_icon():
-    """The Outfit Arc's "No outfit" entry: glyphs.no_outfit() off-white with a soft dark edge, in a box the size of the
-    item icons the other entries show, so the Arc draws it at their scale."""
-    import glyphs
-    m = glyphs.no_outfit()
-    m = m.crop(m.getbbox())
-    k = NONE_PX * NONE_FILL / max(m.size)
-    m = m.resize((round(m.width * k), round(m.height * k)), Image.LANCZOS)
-    mask = Image.new('L', (NONE_PX, NONE_PX), 0)
-    mask.paste(m, ((NONE_PX - m.width) // 2, (NONE_PX - m.height) // 2))
-    edge = mask.filter(ImageFilter.MaxFilter(7)).filter(ImageFilter.GaussianBlur(2))
-    img = Image.new('RGBA', mask.size, (10, 9, 8, 0))
-    img.putalpha(edge.point(lambda v: v * 150 // 255))
-    tone = [Image.new('L', mask.size, t) for t in (222, 214, 200)]
-    img.alpha_composite(Image.merge('RGBA', (*tone, mask)))
+def arc_badge(src, extent, seed):
+    """badge_gen.badge() at BADGE_PX instead of its 80px canvas: the same look and proportions (glyph extent / 80 of the
+    box, the 3px dark outline with its soft last pixel, the worn fill), drawn at the size the Arc shows it, so the
+    game doesn't scale an 80px texture up (blurry)."""
+    import badge_gen as bg
+    k = BADGE_PX / bg.CANVAS
+    lum = src.convert('L').point(lambda v: max(0, min(255, (v - 60) * 255 // 120)))
+    a = ImageChops.multiply(src.getchannel('A'), lum)
+    a = a.crop(a.getbbox())
+    f = extent * k / max(a.size)
+    a = a.resize((max(1, round(a.width * f)), max(1, round(a.height * f))), Image.LANCZOS)
+    mask = Image.new('L', (BADGE_PX, BADGE_PX), 0)
+    mask.paste(a, ((BADGE_PX - a.width) // 2, (BADGE_PX - a.height) // 2))
+    solid = mask.point(lambda v: 255 if v > 96 else 0)
+    r1, r2 = round(3 * k), round(4 * k)
+    ring = solid.filter(ImageFilter.MaxFilter(2 * r1 + 1)).filter(ImageFilter.GaussianBlur(k * 0.4))
+    outer = solid.filter(ImageFilter.MaxFilter(2 * r2 + 1)).filter(ImageFilter.GaussianBlur(k * 0.5))
+    out_a = ImageChops.lighter(ring.point(lambda v: v * bg.OUTLINE_A // 255), outer.point(lambda v: v * 126 // 255))
+    img = Image.new('RGBA', (BADGE_PX, BADGE_PX), (bg.OUTLINE, bg.OUTLINE, bg.OUTLINE, 0))
+    img.putalpha(out_a)
+    fill = bg.grain(bg.CANVAS, bg.CANVAS, seed).resize((BADGE_PX, BADGE_PX), Image.BICUBIC)
+    img.alpha_composite(Image.merge('RGBA', (fill, fill, fill, mask.point(lambda v: min(255, int(v * 1.08))))))
     return img
+
+
+def arc_badges():
+    """name: image - the badges the Arc shows as entries (the wheel's own, redrawn; the armour for the weapon sets'
+    way back to the outfits)."""
+    import badge_gen as bg, glyphs
+    cog = bg.BADGES['outfitmanager_badge_cog']
+    return {'outfitmanager_peek_edit': arc_badge(bg.source(cog[0], cog[1]), cog[2], 1),
+            'outfitmanager_peek_back': arc_badge(glyphs.as_src(glyphs.return_arrow()), 36, 7),
+            'outfitmanager_peek_none': arc_badge(glyphs.as_src(glyphs.slashed_plate_armour()), 36, 8),
+            'outfitmanager_peek_outfits': arc_badge(glyphs.as_src(glyphs.plate_armour()), 36, 41)}
 
 
 def slot_pos(k):
@@ -421,35 +438,35 @@ ARCS = {n: arc_image(n) for n in range(1, 6)}
 def atlas_merge():
     rows = [f'<Texture Name="{n}" Filename="UI/texture/image/customizeimage/{n}.dds" Type="Image" GetRect="1,1,126,126"/>'
             for n in ('outfitmanager_peek_slot', 'outfitmanager_peek_slot_sel')]
-    rows.append(f'<Texture Name="outfitmanager_peek_none" Filename="UI/texture/image/customizeimage/outfitmanager_peek_none.dds" '
-                f'Type="Image" GetRect="1,1,{NONE_PX},{NONE_PX}"/>')
     rows += [f'<Texture Name="outfitmanager_peek_arc_n{n}" Filename="UI/texture/image/customizeimage/outfitmanager_peek_arc_n{n}.dds" '
              f'Type="Image" GetRect="1,1,{im.width},{im.height}"/>' for n, im in ARCS.items()]
     for n, px in (('outfitmanager_peek_pin', MARK_PX), ('outfitmanager_peek_unpin', MARK_PX),
                   ('outfitmanager_peek_lift', LIFT_PX)):
         rows.append(f'<Texture Name="{n}" Filename="UI/texture/image/customizeimage/{n}.dds" Type="Image" GetRect="1,1,{px},{px}"/>')
-    for n in ('outfitmanager_peek_key_a', 'outfitmanager_peek_key_cross', 'outfitmanager_peek_back',
-              'outfitmanager_peek_edit'):  # (the wheel's confirm icons, its Back and settings badges, for the HUD)
+    for n in arc_badges():
+        rows.append(f'<Texture Name="{n}" Filename="UI/texture/image/customizeimage/{n}.dds" Type="Image" '
+                    f'GetRect="1,1,{BADGE_PX},{BADGE_PX}"/>')
+    for n in ('outfitmanager_peek_key_a', 'outfitmanager_peek_key_cross'):  # (the wheel's confirm icons, for the HUD)
         rows.append(f'<Texture Name="{n}" Filename="UI/texture/image/customizeimage/{n}.dds" Type="Image" GetRect="1,1,80,80"/>')
     return '<__dmm_root__>\n' + '\n'.join(rows) + '\n</__dmm_root__>\n'
 
 
 if __name__ == '__main__':
+    import shutil
     img = os.path.join(FILES, 'ui', 'texture', 'image', 'customizeimage')
     os.makedirs(img, exist_ok=True)
     write_dds(os.path.join(img, 'outfitmanager_peek_slot.dds'), frame(False), 128)
     write_dds(os.path.join(img, 'outfitmanager_peek_slot_sel.dds'), frame(True), 128)
-    write_dds(os.path.join(img, 'outfitmanager_peek_none.dds'), no_outfit_icon(), 256)
+    # (Edit Pins / Back / No Outfit - the wheel's Unequip Outfit, flat like the cog - and the weapon sets' Outfits)
+    for n, im in arc_badges().items():
+        write_dds(os.path.join(img, n + '.dds'), im, 256)
     for n, im in ARCS.items():
         write_dds(os.path.join(img, f'outfitmanager_peek_arc_n{n}.dds'), im, tex_size(im))
     write_dds(os.path.join(img, 'outfitmanager_peek_pin.dds'), diamond(MARK_PX, 'pin'), 128)
     write_dds(os.path.join(img, 'outfitmanager_peek_unpin.dds'), diamond(MARK_PX, 'unpin'), 128)
     write_dds(os.path.join(img, 'outfitmanager_peek_lift.dds'), lift_glow(), 256)
-    import shutil
     for k in ('a', 'cross'):
         shutil.copyfile(os.path.join(img, f'outfitmanager_key_{k}.dds'), os.path.join(img, f'outfitmanager_peek_key_{k}.dds'))
-    shutil.copyfile(os.path.join(img, 'outfitmanager_badge_return.dds'), os.path.join(img, 'outfitmanager_peek_back.dds'))
-    shutil.copyfile(os.path.join(img, 'outfitmanager_badge_cog.dds'), os.path.join(img, 'outfitmanager_peek_edit.dds'))
     for rel, text in ((('ui', 'xml', 'texture', 'cd_hud_status_02.xml.merge'), atlas_merge()),
                       (('ui', 'xml', 'gamemain', 'play', 'statusgaugeview2.css.merge'), css())):
         p = os.path.join(FILES, *rel)

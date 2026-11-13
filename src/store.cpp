@@ -166,6 +166,7 @@ bool write_store_file()
     if (!g_language.empty()) put(out, "setting\tlanguage\t%s\n", g_language.c_str());
     if (const char* id = peek_key_id()) put(out, "setting\tpeekkey\t%s\n", id);
     if (g_peek_pad) put(out, "setting\tpeekpad\t1\n");
+    if (g_peek_weapons) put(out, "setting\tpeekmode\t1\n");
     if (U32 hv = g_helmet_vk.load()) put(out, "setting\thelmetkey\t%u\t%u\n", hv, unsigned(g_helmet_mods.load()));
     write_lists(out, g_published);
     for (const auto& [slot, b] : g_bound) {
@@ -383,6 +384,7 @@ void load_outfits()
                 else if (v[1] == "language") g_language = v[2];
                 else if (v[1] == "peekkey") peek_key_load(v[2]);
                 else if (v[1] == "peekpad") g_peek_pad = x != 0;
+                else if (v[1] == "peekmode") g_peek_weapons = x == 1;
                 else if (v[1] == "helmetkey") {
                     g_helmet_vk = x > 0 && x < 256 ? U32(x) : 0;
                     g_helmet_mods = static_cast<std::uint8_t>(v.size() >= 4 ? std::strtoul(v[3].c_str(), nullptr, 10) & 15 : 0);

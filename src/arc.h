@@ -7,6 +7,7 @@ namespace om {
 extern std::atomic<U32> g_peek_key;
 extern std::atomic<U32> g_hotkeys[16];
 extern std::atomic<bool> g_peek_pad;
+extern std::atomic<bool> g_peek_weapons; // (the Outfit Arc shows the weapon sets, not the outfits: kept, #32)
 void peek_key_load(const std::string& id);
 const char* peek_key_id();
 std::string peek_key_name(U32 vk);

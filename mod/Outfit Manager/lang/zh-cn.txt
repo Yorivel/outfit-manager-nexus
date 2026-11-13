@@ -230,6 +230,10 @@ peek.edit = 编辑
 peek.moving = 移动中
 peek.drop = 放下
 peek.unpin_move = 取消固定 · 长按移动
+peek.weapons_label = 武器套组
+peek.outfits = 套装
+peek.to_weapons = 武器套组
+peek.to_outfits = 切换
 toast.released = 已卸下“{outfit}”：装备保持穿戴，在你加载或保存套装前，其显示设置处于关闭状态
 
 # next version: weapon sets, underwear
