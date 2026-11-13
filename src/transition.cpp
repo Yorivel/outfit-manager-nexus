@@ -187,11 +187,15 @@ std::vector<U32> part_handles(U64 model) // every model part handle (the clean-u
 constexpr float kEmissive = 2.5f, kSpread = 3.0f, kRadius = 3.0f;
 constexpr U64 kInMs = 450, kOutMs = 800;
 // the weapons' glow: dark grey (the user's pick), the sneak peek's own timing (shorter ones cut its sweep short)
-constexpr U32 kGlowColour = 0xFF202830;
+// (game 2.05: the weapon effect shows its own blue light through a very dark colour - 0xFF202830 looked blue; this
+// lighter grey reads as the grey glow it was, picked by the user)
+constexpr U32 kGlowColour = 0xFF9098A0;
 constexpr float kGlowIn = 0.4f, kGlowHold = 1.5f, kGlowOut = 0.6f;
 constexpr U64 kGlowMs = 2600, kGlowPeakMs = 1950;
 // the mesh effect's settings / data templates (from the game's own weapon effect call)
-const U32 kSet[18] = {0, 0, 0, 0, 0x3F800000, 0xFF37281E, 0, 0x3E4CCCCD, 0x3E99999A, 0x3E4CCCCD, 1, 0, 0, 0, 0x4192, 0, 0, 0};
+// (+0x38: the mesh effect type, a name id - CharacterMeshEffectWeapon, looked up by name in glow_templates: game 2.05
+// added names before it, so the 2.04 number, 0x4192, named another type there and no glow instance was made)
+const U32 kSet[18] = {0, 0, 0, 0, 0x3F800000, 0xFF37281E, 0, 0x3E4CCCCD, 0x3E99999A, 0x3E4CCCCD, 1, 0, 0, 0, 0, 0, 0, 0};
 const U32 kData[10] = {0, 0, 0, 0x7F01, 0, 0xBF800000, 0xBF800000, 0, 0, 0};
 
 int setting() { return g_faulted ? 0 : transition_setting(); } // 0 off, 1 performance (no glow particles), 2 quality
@@ -231,6 +235,7 @@ void glow_templates(U8 (&set)[0x48], U8 (&data)[0x28], bool named)
     *reinterpret_cast<float*>(set + 0x20) = kGlowHold;
     *reinterpret_cast<float*>(set + 0x24) = kGlowOut;
     if (named) set[0x29] = 1; // (names given: as the game's named call)
+    *reinterpret_cast<U32*>(set + 0x38) = id_of("CharacterMeshEffectWeapon"); // (the effect type, by name)
     if (setting() == 1) reinterpret_cast<float*>(data)[5] = 0.0f; // (performance: no glow particles - data [5] = spawn ratio)
 }
 int glow_piece(U64 e, U64 data)

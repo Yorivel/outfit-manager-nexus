@@ -24,6 +24,7 @@ Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods
 - Fix: expansion pieces (the diving suit) could go missing from outfits when the game renumbered its items; they now follow their item. Thanks for the report!
 - Fix: a save changed outside the game (a save editor) lost its outfits. Saves are now also recognised by the world time and place they were made. Thanks for the report!
 - Updated for Crimson Desert 2.05 (the game rebuilt its code): every game address found again, and the item, string, bag and quick slot lookups, their tables, the gear wheel's tab table and two values that moved are read the way 2.05 has them.
+- Fix (game 2.05): hidden weapons' glow plays again as they appear and go; its grey is a little lighter, as 2.05's weapon effect showed its own blue through the old dark grey.
 - Technical: the helmet animations play the chart states the way a chart branch does (anim.cpp); the helmet pin is saved per character as "helmetpin", the No Outfit looks as "nolook <slot> <look>" (23 the back shield, 30 the underwear). Item stat lists at +0x120 / +0x190 for the 2026-11-06 build; resolver recipes for the new addresses.
 
 ## 0.6.0 (2026-11-08)
