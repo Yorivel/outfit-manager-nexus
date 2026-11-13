@@ -1,4 +1,5 @@
 // The Outfit Arc and per-outfit hotkeys.
+#include "charlook.h"
 #include "om.h"
 #include "arc.h"
 #include "addrs.h"
@@ -950,6 +951,7 @@ float __fastcall gauge_frame_hook(U64 self)
         g_ui_thread = GetCurrentThreadId();
         LOG("ui thread %lu (from the status screen)", g_ui_thread);
     }
+    g_hud_root = self; // (#35: the barber question opens from here)
     peek_frame(self);
     fx_tick(self); // (the outfit effect's timeline)
     return g_gauge_frame_orig(self);

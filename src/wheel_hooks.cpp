@@ -231,6 +231,7 @@ void center_for_focus(U64 self, U64 script, bool hide_otherwise)
                         : saved                              ? g_outfits[o].name
                         : g_outfits.size() >= kMaxOutfits    ? std::string(lang::t("center.limit"))
                                                              : std::string(lang::t("center.save"));
+        g_center_desc.clear(); // (an outfit's disc has no caption: the page slot's stayed, 2026-11-13)
         g_center_outfit = saved && mode == kModeMain ? int(o) : -1;
         g_center_frames = 30;
         center_show(self);

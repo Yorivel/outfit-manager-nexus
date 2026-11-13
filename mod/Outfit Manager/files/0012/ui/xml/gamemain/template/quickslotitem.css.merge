@@ -588,3 +588,110 @@
 .self-center.om-wa12-11 { display: block; opacity: 1; left: 25px; top: 255px; width: 650px; height: 650px; rotate-z: 0deg; pa-pickable: none; translate-x: -325px; translate-y: -325px; background-image: textureid(outfitmanager_worn_amber_12); }
 .self-center.om-wg12-11 { display: block; opacity: 1; left: 25px; top: 255px; width: 650px; height: 650px; rotate-z: 0deg; pa-pickable: none; translate-x: -325px; translate-y: -325px; background-image: textureid(outfitmanager_worn_green_12); }
 .self-center.om-wb12-11 { display: block; opacity: 1; left: 25px; top: 255px; width: 650px; height: 650px; rotate-z: 0deg; pa-pickable: none; translate-x: -325px; translate-y: -325px; background-image: textureid(outfitmanager_worn_12); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
+/* BADGES (tools/badge_css.py) begin */
+.self-center.om-lookmain-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(cd_icon_map_beauty); }
+.om-sb.om-sb-bed { background-image: textureid(cd_uitexture_tab_icon_housing_Bed); }
+.om-sb.om-sb-look { background-image: textureid(cd_icon_map_beauty); }
+.om-cb-row { position: relative; width: 250px; height: 38px; margin-top: 2px; display: flex; flex-direction: row; justify-content: center; align-items: center; }
+.om-cb { position: relative; width: 34px; height: 34px; margin-left: 3px; margin-right: 3px; background-image: textureid(cd_slot_bg_small_abyssgear_socket); }
+.om-cb-icon { position: absolute; left: 5px; top: 5px; width: 24px; height: 24px; }
+.om-cb-icon.om-cbi-eye { background-image: textureid(outfitmanager_badge_eye); }
+.om-cb-icon.om-cbi-cold { background-image: textureid(cd_icon_temperature_freeze_00); }
+.om-cb-icon.om-cbi-heat { background-image: textureid(cd_icon_temperature_burn_00); }
+.om-cb-icon.om-cbi-cold2 { background-image: textureid(cd_icon_temperature_freeze_phase_00); }
+.om-cb-icon.om-cbi-heat2 { background-image: textureid(cd_icon_temperature_burn_phase_00); }
+.om-cb-icon.om-cbi-bed { background-image: textureid(cd_uitexture_tab_icon_housing_Bed); }
+.om-cb-icon.om-cbi-look { background-image: textureid(cd_icon_map_beauty); }
+.om-cb-icon.om-cbi-eye { left: -1px; top: -1px; width: 36px; height: 36px; }
+.om-hk-caps-eye2 { left: -78px; top: 62px; }
+.quickslot-item-name.om-value-text.om-hotkey-eye2 { bottom: -34px; height: 22px; line-height: 22px; font-size: 15px; translate-x: -150px; }
+.self-center.om-plus-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: 6.5px; background-image: textureid(Common_Icon_Keyguide_Plus); }
+.self-center.om-plus-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 40px; height: 40px; rotate-z: 0deg; translate-x: -7px; translate-y: 9px; background-image: textureid(Common_Icon_Keyguide_Plus); }
+.self-center.om-cog-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: 6.5px; background-image: textureid(outfitmanager_badge_cog); }
+.self-center.om-cog-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 40px; height: 40px; rotate-z: 0deg; translate-x: -7px; translate-y: 9px; background-image: textureid(outfitmanager_badge_cog); }
+.self-center.om-cross-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 30.6px; height: 30.6px; rotate-z: 0deg; translate-x: -15.3px; translate-y: 5.7px; background-image: textureid(outfitmanager_key_cross); }
+.self-center.om-cross-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 27.2px; height: 27.2px; rotate-z: 0deg; translate-x: -13.6px; translate-y: 7.4px; background-image: textureid(outfitmanager_key_cross); }
+.self-center.om-abtn-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 30.6px; height: 30.6px; rotate-z: 0deg; translate-x: -15.3px; translate-y: 5.7px; background-image: textureid(outfitmanager_key_a); }
+.self-center.om-abtn-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 27.2px; height: 27.2px; rotate-z: 0deg; translate-x: -13.6px; translate-y: 7.4px; background-image: textureid(outfitmanager_key_a); }
+.self-center.om-flag-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: 6.5px; background-image: textureid(outfitmanager_badge_flag); }
+.self-center.om-flag-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 40px; height: 40px; rotate-z: 0deg; translate-x: -7px; translate-y: 9px; background-image: textureid(outfitmanager_badge_flag); }
+.self-center.om-cold-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(cd_icon_temperature_freeze_00); }
+.self-center.om-cold-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(cd_icon_temperature_freeze_00); }
+.self-center.om-heat-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(cd_icon_temperature_burn_00); }
+.self-center.om-heat-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(cd_icon_temperature_burn_00); }
+.self-center.om-cold2-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(cd_icon_temperature_freeze_phase_00); }
+.self-center.om-cold2-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(cd_icon_temperature_freeze_phase_00); }
+.self-center.om-heat2-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(cd_icon_temperature_burn_phase_00); }
+.self-center.om-heat2-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(cd_icon_temperature_burn_phase_00); }
+.self-center.om-sleep-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 25.2px; height: 25.2px; rotate-z: 0deg; translate-x: 1.4px; translate-y: 17.4px; background-image: textureid(cd_uitexture_tab_icon_housing_Bed); }
+.self-center.om-sleep-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 22.4px; height: 22.4px; rotate-z: 0deg; translate-x: 2.8px; translate-y: 18.8px; background-image: textureid(cd_uitexture_tab_icon_housing_Bed); }
+.self-center.om-eye-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: 6.5px; background-image: textureid(outfitmanager_badge_eye); }
+.self-center.om-eye-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 40px; height: 40px; rotate-z: 0deg; translate-x: -7px; translate-y: 9px; background-image: textureid(outfitmanager_badge_eye); }
+.self-center.om-eye2-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: -17.5px; background-image: textureid(outfitmanager_badge_eye); }
+.self-center.om-eye2-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 40px; height: 40px; rotate-z: 0deg; translate-x: -7px; translate-y: -15px; background-image: textureid(outfitmanager_badge_eye); }
+.self-center.om-look-shown-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: 6.5px; background-image: textureid(outfitmanager_badge_eye); }
+.self-center.om-look-shown-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 40px; height: 40px; rotate-z: 0deg; translate-x: -7px; translate-y: 9px; background-image: textureid(outfitmanager_badge_eye); }
+.self-center.om-look-hidden-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: 6.5px; background-image: textureid(outfitmanager_badge_hidden); }
+.self-center.om-look-hidden-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 40px; height: 40px; rotate-z: 0deg; translate-x: -7px; translate-y: 9px; background-image: textureid(outfitmanager_badge_hidden); }
+.self-center.om-unequip-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: 6.5px; background-image: textureid(outfitmanager_badge_unequip); }
+.self-center.om-unequip-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 40px; height: 40px; rotate-z: 0deg; translate-x: -7px; translate-y: 9px; background-image: textureid(outfitmanager_badge_unequip); }
+.self-center.om-wset-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(outfitmanager_wset); }
+.self-center.om-wset-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(outfitmanager_wset); }
+.self-center.om-wset-gold-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(outfitmanager_wset_gold); }
+.self-center.om-wset-gold-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(outfitmanager_wset_gold); }
+.self-center.om-wset-busy-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(outfitmanager_wset_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
+.self-center.om-wset-busy-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(outfitmanager_wset_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
+.self-center.om-look-combat-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: 6.5px; background-image: textureid(outfitmanager_badge_combat); }
+.self-center.om-look-combat-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 40px; height: 40px; rotate-z: 0deg; translate-x: -7px; translate-y: 9px; background-image: textureid(outfitmanager_badge_combat); }
+.self-center.om-look-peace-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: 6.5px; background-image: textureid(outfitmanager_badge_peace); }
+.self-center.om-look-peace-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 40px; height: 40px; rotate-z: 0deg; translate-x: -7px; translate-y: 9px; background-image: textureid(outfitmanager_badge_peace); }
+.self-center.om-return-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: 6.5px; background-image: textureid(outfitmanager_badge_return); }
+.self-center.om-return-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 40px; height: 40px; rotate-z: 0deg; translate-x: -7px; translate-y: 9px; background-image: textureid(outfitmanager_badge_return); }
+.self-center.om-prompt-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 30.6px; height: 30.6px; rotate-z: 0deg; translate-x: -15.3px; translate-y: 5.7px; background-image: textureid(Common_Icon_Keyguide_PC_Mouse_left); }
+.self-center.om-prompt-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 27.2px; height: 27.2px; rotate-z: 0deg; translate-x: -13.6px; translate-y: 7.4px; background-image: textureid(Common_Icon_Keyguide_PC_Mouse_left); }
+.self-center.om-lookmain-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(cd_icon_map_beauty); }
+.self-center.om-lookmain-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(cd_icon_map_beauty); }
+.om-sb { position: absolute; width: 26px; height: 26px; }
+.om-sb.om-sb-k0.om-sb-plain { left: -28px; top: 16px; }
+.om-sb.om-sb-k0.om-sb-eye { left: -16px; top: 12px; }
+.om-sb.om-sb-k0.om-sb-eye2 { left: -16px; top: 36px; }
+.om-sb.om-sb-k1.om-sb-plain { left: -56px; top: 16px; }
+.om-sb.om-sb-k1.om-sb-eye { left: -44px; top: 12px; }
+.om-sb.om-sb-k1.om-sb-eye2 { left: -44px; top: 36px; }
+.om-sb.om-z11 { position: absolute; width: 23.4px; height: 23.4px; }
+.om-sb.om-sb-k0.om-sb-plain.om-z11 { left: -23.9px; top: 17.3px; }
+.om-sb.om-sb-k0.om-sb-eye.om-z11 { left: -14.4px; top: 10.8px; }
+.om-sb.om-sb-k0.om-sb-eye2.om-z11 { left: -14.4px; top: 34.8px; }
+.om-sb.om-sb-k1.om-sb-plain.om-z11 { left: -49.1px; top: 17.3px; }
+.om-sb.om-sb-k1.om-sb-eye.om-z11 { left: -39.6px; top: 10.8px; }
+.om-sb.om-sb-k1.om-sb-eye2.om-z11 { left: -39.6px; top: 34.8px; }
+.om-hk-caps.om-z11 { height: 19.8px; }
+.om-hk-caps.om-hk-caps-plain.om-z11 { left: -90px; top: 42px; }
+.om-hk-caps.om-hk-caps-eye.om-z11 { left: -80.5px; top: 35.5px; }
+.om-hk-caps.om-hk-caps-eye2.om-z11 { left: -80.5px; top: 59.5px; }
+.om-hk-mod.om-z11 { width: 32.4px; height: 19.8px; }
+.om-hk-key.om-z11 { width: 19.8px; height: 19.8px; }
+.om-hk-key.om-hk-wide.om-z11 { width: 32.4px; }
+.om-hk-plus.om-z11 { width: 10.8px; height: 19.8px; line-height: 19.8px; font-size: 13.5px; }
+.quickslot-item-name.om-value-text.om-hotkey-plain.om-z11 { font-size: 13.5px; }
+.quickslot-item-name.om-value-text.om-hotkey-eye.om-z11 { font-size: 13.5px; }
+.quickslot-item-name.om-value-text.om-hotkey-eye2.om-z11 { font-size: 13.5px; }
+.om-sb.om-z12 { position: absolute; width: 20.8px; height: 20.8px; }
+.om-sb.om-sb-k0.om-sb-plain.om-z12 { left: -19.8px; top: 18.6px; }
+.om-sb.om-sb-k0.om-sb-eye.om-z12 { left: -12.8px; top: 9.6px; }
+.om-sb.om-sb-k0.om-sb-eye2.om-z12 { left: -12.8px; top: 33.6px; }
+.om-sb.om-sb-k1.om-sb-plain.om-z12 { left: -42.2px; top: 18.6px; }
+.om-sb.om-sb-k1.om-sb-eye.om-z12 { left: -35.2px; top: 9.6px; }
+.om-sb.om-sb-k1.om-sb-eye2.om-z12 { left: -35.2px; top: 33.6px; }
+.om-hk-caps.om-z12 { height: 17.6px; }
+.om-hk-caps.om-hk-caps-plain.om-z12 { left: -90px; top: 42px; }
+.om-hk-caps.om-hk-caps-eye.om-z12 { left: -83px; top: 33px; }
+.om-hk-caps.om-hk-caps-eye2.om-z12 { left: -83px; top: 57px; }
+.om-hk-mod.om-z12 { width: 28.8px; height: 17.6px; }
+.om-hk-key.om-z12 { width: 17.6px; height: 17.6px; }
+.om-hk-key.om-hk-wide.om-z12 { width: 28.8px; }
+.om-hk-plus.om-z12 { width: 9.6px; height: 17.6px; line-height: 17.6px; font-size: 12px; }
+.quickslot-item-name.om-value-text.om-hotkey-plain.om-z12 { font-size: 12px; }
+.quickslot-item-name.om-value-text.om-hotkey-eye.om-z12 { font-size: 12px; }
+.quickslot-item-name.om-value-text.om-hotkey-eye2.om-z12 { font-size: 12px; }
+/* BADGES end */

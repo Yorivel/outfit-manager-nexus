@@ -1,4 +1,5 @@
 // Looks: how each piece shows (the visibility engine).
+#include "charlook.h"
 #include "om.h"
 #include "looks.h"
 #include <intrin.h>
@@ -1010,6 +1011,7 @@ void mark_worn(int index)
     }
     save_outfits(); // (publishes the looks)
     look_refresh();
+    charlook_follow(); // (#35: the outfit's character look, or the character's own)
 }
 
 // A model swapped with the menu closed (gear changed in the inventory, the game): an exact match moves the anchor,

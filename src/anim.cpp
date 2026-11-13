@@ -16,6 +16,7 @@
 //    2026-11-13) all need the helmet - except the item's charges (kRvaItemCharges): the Visione's recharge, divided by
 //    a recharge time a helmet's info doesn't have (a crash with the Plate Helm of the Shadows).
 // The caller (the helmet key, arc.cpp) hides / shows the helmet when the state is left (anim_outcome).
+#include "charlook.h"
 #include "anim.h"
 #include "addrs.h"
 #include "gear.h"
@@ -198,6 +199,7 @@ void anim_install()
 
 void anim_tick()
 {
+    charlook_tick(); // (#35: the character look follows the applied outfit)
     if (!g_ok.load()) return;
     { // the played character
         U64 ctx[4] = {};

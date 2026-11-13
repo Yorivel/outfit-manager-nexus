@@ -218,6 +218,12 @@ void outfit_resistance(const Outfit& o, int& ice, int& fire)
 const char* climate_badge(const Outfit& o)
 {
     if (o.activity == kActivitySleep) return "om-sleep-c"; // (Activity: Sleeping: the bed, in the thermometer's spot)
+    return climate_only(o);
+}
+
+// The Climate marker alone (the wheel's slots show the bed beside it, the Outfit Arc one icon: climate_badge).
+const char* climate_only(const Outfit& o)
+{
     if (o.climate == 1) return "om-cold-c";
     if (o.climate == 2) return "om-heat-c";
     if (o.climate == 3) return nullptr;

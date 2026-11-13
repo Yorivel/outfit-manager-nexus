@@ -4,6 +4,9 @@
 
 namespace om {
 
+void show_side_badges(U64 root, const char* const kind[2], int where); // (the badge row beside the badge spot)
+void badge_tier(U64 root, U32 visible);   // (the badges' size for the slot count)
+
 extern std::uint8_t g_slot_mode[kOutfitSlots];
 extern ScrollFn g_scroll_prev_orig, g_scroll_next_orig;
 extern SelectorSelectFn g_selector_select;

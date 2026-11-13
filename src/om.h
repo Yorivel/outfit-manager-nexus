@@ -144,6 +144,7 @@ struct Outfit {
     // while exactly its weapons are worn. Its armour stays saved: back to Load / Leave, it is an outfit again.
     bool weapons_only = false;
     std::string weapon_icon; // (the main weapon's icon, for a weapon set's picture: set when saved / loaded)
+    U16 icon_slot = 0; // a weapon set's Icon setting: 0 its main weapon, else the equip slot + 1 of the weapon pictured
     std::uint8_t climate = 0; // Conditions: 0 Auto (from its resistance), 1 Cold, 2 Heat (manual), 3 Off (a badge only)
     std::uint8_t stash = 0;   // Conditions: Stash, 0 = the global setting, 1 on, 2 off
     // Activity (2026-11-09): what the outfit is worn for, put on when the character starts it (several: one at random),
@@ -173,6 +174,11 @@ struct Outfit {
     std::uint8_t has_back = 0;
     // Looks of the slots the outfit holds nothing in (a look belongs to the slot: it applies to whatever is worn there).
     std::map<U16, std::uint8_t> empty_looks;
+    // Character look (#35): the character's barber look (charlook.cpp: 16 mesh options + 250 values, as the game keeps
+    // them) taken by hand from the settings; char_look 1: the outfit brings it while applied, 0: not (a snapshot taken
+    // is kept). Never updated by the outfit itself.
+    std::uint8_t char_look = 0;
+    std::string look_snap; // (raw bytes; empty: none taken)
 };
 constexpr std::uint8_t kActivityNone = 0, kActivitySleep = 1, kActivityCount = 2;
 constexpr U16 kBackShieldSlot = 23;
@@ -193,6 +199,9 @@ struct CharacterOutfits {
     U16 character;
     std::vector<Outfit> outfits;
     std::uint8_t helmet_pin = 0; // the helmet key's pin (#34: 0 none, 1 hidden, 2 shown): bound to saves with the outfits
+    // #35: the character's own look, the No Outfit one (raw, charlook.cpp; empty: not seen yet). Bound to saves with the
+    // outfits (the game's save may hold an outfit's look: the barber's change saved to it).
+    std::string look_base;
     // #33: the looks while no outfit is applied (only its empty_looks, back_look and underwear_look are used); edited in
     // the Appearance view from the "+" slot's settings, bound to saves with the outfits
     Outfit no_outfit;
@@ -263,7 +272,7 @@ const char* const kBadges[] = {"om-plus-big", "om-cog-big", "om-plus-c", "om-cog
                                "om-cold2-c", "om-heat2-c", "om-eye-c", "om-look-shown-c", "om-look-hidden-c",
                                "om-look-combat-c", "om-look-peace-c", "om-return-c", "om-prompt-c", "om-cross-c",
                                "om-abtn-c", "om-unequip-c", "om-wset-c", "om-wset-gold-c", "om-wset-busy-c",
-                               "om-sleep-c"};
+                               "om-sleep-c", "om-lookmain-c"};
 // The game's slot refresh (after every equipment change) re-selects every slot's dots with its own count (0 for ours:
 // no items) and -1: the select is hooked, and for our slots' selectors it gets our count and mode instead, so the dots
 // never go blank. Our own calls pass through it as well. Our slots are looked up live (the Outfits menu's slot list).
@@ -441,12 +450,12 @@ struct AskedLoad {
     bool takes_answered = false, take = false, copies_answered = false, use_copies = false;
 };
 
-enum Confirm { kConfirmNone, kConfirmOverwrite, kConfirmDelete, kConfirmSwap, kConfirmCleanSave, kConfirmUninstall };
+enum Confirm { kConfirmNone, kConfirmOverwrite, kConfirmDelete, kConfirmSwap, kConfirmCleanSave, kConfirmUninstall, kConfirmBarberLook };
 
 enum CfgKind : std::uint8_t {
     kCfgVisibility, kCfgClimate, kCfgWeapons, kCfgStash, kCfgPosition, kCfgRename, kCfgOverwrite, kCfgDelete, // a saved outfit's
     kCfgGStash, kCfgParty, kCfgMessages, kCfgClear, kCfgUninstall,                               // the "+" slot's
-    kCfgBack, kCfgLanguage, kCfgPeekKey, kCfgPeekPad, kCfgHotkey, kCfgEffects, kCfgActivity, kCfgHelmetKey
+    kCfgBack, kCfgLanguage, kCfgPeekKey, kCfgPeekPad, kCfgHotkey, kCfgEffects, kCfgActivity, kCfgHelmetKey, kCfgLook, kCfgIcon
 };
 
 // Every move gives the piece a new uid. The stash knows what it moved, so it follows each piece exactly: the copy of its
