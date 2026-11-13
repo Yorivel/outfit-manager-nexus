@@ -467,4 +467,14 @@ U64 kRvaMeshCollectNamed = 0x3027b80; // (object*, out list*, settings*, ids*): 
 U64 kRvaMeshColour = 0x58afb0;       // (piece*, object*, arg, data*): a piece started with the effect's data [0x4b2100]
 U64 kRvaMeshColourArg = 0x71aeb08;   // its third argument (the game passes this global) [0x146cd7ca8]
 
+// Character Look (#35, charlook.cpp; game 2.05). A look is {vec<u8> 16 mesh options, vec<u8> 250 values, u32 1}.
+U64 kRvaLookCtor = 0x192b2b0;        // (look*): a look, 0xFF-filled (the barber reply builds one)
+U64 kRvaLookDtor = 0x41d270;         // (look*): frees one
+U64 kRvaLookApply = 0x1933070;       // (component, u32* result, look*, 0): applies a look (a jump: OM hooks its target,
+                                     // read from the jump, for the loading screen)
+U64 kRvaCompStoreLook = 0x1932f80;   // (component, look*): the component keeps a copy at +kOffCompLook (witness)
+U64 kOffCompLook = 0x3b0;            // the actor's look component (+kOffActorComp -> +0x20) -> its look record
+U64 kRvaBarberAckVt = 0x5a170b8;     // TrocTrCharacterCustomizationAck
+U64 kRvaBarberAck = 0xcba740;        // (its slot 2: the barber's reply, applies the confirmed look - hooked)
+
 } // namespace om

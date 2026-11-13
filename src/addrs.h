@@ -227,6 +227,7 @@ extern U64 kRvaMeshCollect;
 extern U64 kRvaMeshCollectNamed;
 extern U64 kRvaMeshColour;
 extern U64 kRvaMeshColourArg;
+extern U64 kRvaLookCtor, kRvaLookDtor, kRvaLookApply, kRvaCompStoreLook, kOffCompLook, kRvaBarberAckVt, kRvaBarberAck;
 void resolve_addresses();
 
 } // namespace om

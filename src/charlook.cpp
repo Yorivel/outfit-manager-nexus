@@ -35,16 +35,9 @@ std::atomic<U64> g_hud_root{0}; // (the status gauge's UI root, from its frame: 
 
 namespace {
 
-constexpr U64 kRvaLookCtor = 0x192B2B0;
-constexpr U64 kRvaLookDtor = 0x41D270;
-constexpr U64 kRvaLookApply = 0x1933070;
-constexpr U64 kRvaBarberAck = 0xCBA740; // (TrocTrCharacterCustomizationAck's handler: vtable +5A170B8 slot 2)
-constexpr U64 kOffCompLook = 0x3B0;
+// (the game's look functions and the record's offset: addrs.cpp, found by the resolver after a game update)
 constexpr U32 kMeshCount = 16, kValueCount = 250;
 constexpr size_t kLookBytes = kMeshCount + kValueCount;
-const unsigned char kCtorHead[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18};
-const unsigned char kDtorHead[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18};
-const unsigned char kAckHead[] = {0x48, 0x89, 0x5C, 0x24, 0x08, 0x55, 0x56, 0x57, 0x41, 0x54};
 
 struct Vec {
     std::uint8_t* p;
@@ -60,24 +53,15 @@ using AckFn = U64(__fastcall*)(U64, U64, U64, U64);
 AckFn g_ack_orig = nullptr;
 thread_local bool t_own_apply = false; // (OM's own apply, or the barber's reply: the loading screen hook lets it pass)
 
-bool head_is(U64 rva, const unsigned char* b, size_t n)
-{
-    for (size_t i = 0; i < n; ++i) {
-        unsigned char c = 0;
-        if (!rd(g_base + rva + i, c) || c != b[i]) return false;
-    }
-    return true;
-}
-
 // The game's functions are the ones this was made for (else the feature stays off: a game update moved them).
 bool usable()
 {
     static int ok = -1;
     if (ok < 0) {
         unsigned char j = 0;
-        ok = head_is(kRvaLookCtor, kCtorHead, sizeof kCtorHead) && head_is(kRvaLookDtor, kDtorHead, sizeof kDtorHead) &&
-             rd(g_base + kRvaLookApply, j) && (j == 0xE9 || j == 0x48);
-        LOG("character look: %s", ok ? "on" : "off (the game's look functions aren't the 2.05 ones)");
+        ok = have({kRvaLookCtor, kRvaLookDtor, kRvaLookApply, kOffCompLook}) && rd(g_base + kRvaLookApply, j) &&
+             (j == 0xE9 || j == 0x48);
+        LOG("character look: %s", ok ? "on" : "off (the game's look functions weren't found)");
     }
     return ok == 1;
 }
@@ -226,8 +210,16 @@ void barber_done(U64 actor, U16 character)
 // the apply (+1933070 -> +B767BF0, seen in a probe: half a second after the save is read, on the main thread). For a
 // while after a load that call gets the look OM wants instead (the applied outfit's snapshot, else the No Outfit look,
 // from the loaded set), so the character is built with it; OM's own calls, other threads and other characters pass.
-constexpr U64 kRvaApplyBody = 0xB767BF0;
-const unsigned char kApplyHead[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18, 0x48, 0x89, 0x74, 0x24, 0x20};
+// (the apply is a jump into protected code: its target, the body, is read from the jump - +B767BF0 on 2.05)
+U64 apply_body()
+{
+    unsigned char op = 0;
+    std::int32_t rel = 0;
+    if (!rd(g_base + kRvaLookApply, op)) return 0;
+    if (op != 0xE9) return kRvaLookApply; // (a plain function: hooked itself)
+    if (!rd(g_base + kRvaLookApply + 1, rel)) return 0;
+    return U64(std::int64_t(kRvaLookApply) + 5 + rel);
+}
 ApplyFn g_apply_orig = nullptr;
 std::atomic<U64> g_swap_until{0};
 std::atomic<U32> g_swap_gen{0xFFFFFFFF};
@@ -304,17 +296,17 @@ std::string charlook_read()
 void charlook_install()
 {
     if (!usable()) return;
-    if (!head_is(kRvaBarberAck, kAckHead, sizeof kAckHead)) {
-        LOG("character look: the barber's reply isn't the 2.05 one - barber changes are the character's own look");
-        return;
-    }
-    if (head_is(kRvaApplyBody, kApplyHead, sizeof kApplyHead)) { // (the look from the loading screen)
-        void* st = reinterpret_cast<void*>(g_base + kRvaApplyBody);
+    if (const U64 body = apply_body()) { // (the look from the loading screen)
+        void* st = reinterpret_cast<void*>(g_base + body);
         if (MH_CreateHook(st, reinterpret_cast<void*>(&apply_hook), reinterpret_cast<void**>(&g_apply_orig)) != MH_OK ||
             MH_EnableHook(st) != MH_OK)
-            LOG("character look: loading screen hook at +%llX failed - the look follows once in the game", kRvaApplyBody);
+            LOG("character look: loading screen hook at +%llX failed - the look follows once in the game", body);
     } else {
-        LOG("character look: the look apply isn't the 2.05 one - the look follows once in the game");
+        LOG("character look: the look apply's target wasn't read - the look follows once in the game");
+    }
+    if (!have({kRvaBarberAck})) {
+        LOG("character look: the barber's reply wasn't found - barber changes are the character's own look");
+        return;
     }
     void* t = reinterpret_cast<void*>(g_base + kRvaBarberAck);
     if (MH_CreateHook(t, reinterpret_cast<void*>(&ack_hook), reinterpret_cast<void**>(&g_ack_orig)) != MH_OK ||
