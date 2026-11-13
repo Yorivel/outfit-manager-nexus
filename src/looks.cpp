@@ -990,6 +990,11 @@ void mark_worn(int index)
         if (g_outfits[i].worn != (static_cast<int>(i) == index)) g_outfits[i].worn = static_cast<int>(i) == index, changed = true;
     if (!changed) return;
     LOG("appearance: last loaded outfit is now %d", index);
+    if (index >= 0 && size_t(index) < g_outfits.size()) { // (#32: the Outfit Arc's recent outfits)
+        U32 top = 0;
+        for (const Outfit& o : g_outfits) top = std::max(top, o.used);
+        g_outfits[size_t(index)].used = top + 1;
+    }
     { // (another outfit, or none: the helmet follows it again - the helmet key is for the outfit worn now, #34)
         std::lock_guard<std::mutex> lock(g_store_mu);
         if (std::uint8_t& pin = store_for(g_character).helmet_pin; pin) {

@@ -229,6 +229,18 @@ center.release = نزع الزي
 center.no_outfit = لا يوجد زي مطبّق
 peek.none_label = نزع
 peek.none = بلا زي
+peek.group.pinned = مثبّت
+peek.group.recent = حديث
+peek.pin = تثبيت
+peek.unpin = إلغاء التثبيت
+peek.editing = تعديل التثبيت
+peek.done = تم
+peek.pins_label = المثبّتة
+peek.edit_pins = تعديل المثبّتة
+peek.edit = تعديل
+peek.moving = نقل
+peek.drop = إفلات
+peek.unpin_move = إلغاء التثبيت · اضغط مطولًا للنقل
 toast.released = نُزع "{outfit}": تبقى معداتك عليك، وإعدادات الظهور الخاصة به متوقفة حتى تحمّل زيًا أو تحفظه
 
 # next version: weapon sets, underwear

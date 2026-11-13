@@ -221,6 +221,18 @@ center.release = Outfit ablegen
 center.no_outfit = Kein Outfit aktiv
 peek.none_label = ABLEGEN
 peek.none = Kein Outfit
+peek.group.pinned = ANGEHEFTET
+peek.group.recent = ZULETZT
+peek.pin = Anheften
+peek.unpin = Lösen
+peek.editing = PINS BEARBEITEN
+peek.done = Fertig
+peek.pins_label = PINS
+peek.edit_pins = Pins bearbeiten
+peek.edit = Bearbeiten
+peek.moving = VERSCHIEBEN
+peek.drop = Ablegen
+peek.unpin_move = Lösen · halten zum Verschieben
 toast.released = „{outfit}“ abgelegt: deine Ausrüstung bleibt an, seine Sichtbarkeitseinstellungen sind aus, bis du ein Outfit lädst oder speicherst
 
 # next version: weapon sets, underwear

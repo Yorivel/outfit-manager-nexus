@@ -78,8 +78,11 @@ void strip_pad_report(unsigned char* r, DWORD n, bool dualsense)
     if (face < 0 || DWORD(face) >= n) return;
     static const unsigned char kNoUpDown[9] = {8, 2, 2, 2, 8, 6, 6, 6, 8};
     unsigned char d = r[face] & 0x0F;
-    if (d > 8 || kNoUpDown[d] == d) return;
-    r[face] = static_cast<unsigned char>((r[face] & 0xF0) | kNoUpDown[d]);
+    if (d > 8) return;
+    // (the d-pad's up / down out, and Cross (0x20): the arc's while it owns the pad, #32)
+    const unsigned char to = static_cast<unsigned char>((r[face] & 0xF0 & ~0x20) | kNoUpDown[d]);
+    if (to == r[face]) return;
+    r[face] = to;
     if ((r[0] == 0x31 || r[0] == 0x11) && n >= 78) {
         unsigned char seed = 0xA1;
         U32 c = crc32_bytes(crc32_bytes(0, &seed, 1) , r, 74);
@@ -178,7 +181,7 @@ DWORD xget_filter(DWORD r, void* state)
 {
     if (r == ERROR_SUCCESS && state && !t_own_pad && peek_pad_owned()) {
         WORD& b = *reinterpret_cast<WORD*>(static_cast<unsigned char*>(state) + 4); // (XINPUT_STATE: packet, then buttons)
-        if (b & 0x0003) b &= static_cast<WORD>(~0x0003);
+        if (b & 0x1003) b &= static_cast<WORD>(~0x1003); // (the d-pad's up / down, and A: #32)
     }
     return r;
 }

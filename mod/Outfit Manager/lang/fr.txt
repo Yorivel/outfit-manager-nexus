@@ -221,6 +221,18 @@ center.release = Retirer la tenue
 center.no_outfit = Aucune tenue appliquée
 peek.none_label = RETIRER
 peek.none = Aucune tenue
+peek.group.pinned = ÉPINGLÉE
+peek.group.recent = RÉCENTE
+peek.pin = Épingler
+peek.unpin = Désépingler
+peek.editing = ÉPINGLES
+peek.done = Terminé
+peek.pins_label = ÉPINGLES
+peek.edit_pins = Modifier les épingles
+peek.edit = Modifier
+peek.moving = DÉPLACEMENT
+peek.drop = Déposer
+peek.unpin_move = Désépingler · maintenir pour déplacer
 toast.released = « {outfit} » retirée : votre équipement reste porté, ses réglages de visibilité sont désactivés jusqu'à ce que vous chargiez ou enregistriez une tenue
 
 # next version: weapon sets, underwear

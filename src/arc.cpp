@@ -17,6 +17,9 @@
 #include "looks.h"
 #include "anim.h"
 #include "store.h"
+#include <atomic>
+#include <algorithm>
+#include <set>
 
 namespace om {
 
@@ -131,8 +134,31 @@ struct Peek {
     float reveal_last = 0;           // ... the last of those heights
     std::string icon_set[5];         // last icon set per position
     bool slide_b = false;            // the scroll's slide: which class set (a / b) the last step used
-    std::string slide_set[20];       // its class on each element (frames, icons, badges, then the texts)
+    std::string slide_set[25];       // its class on each element (frames, icons, badges, the texts, then the marks)
+    // #32 pins: No outfit, the pinned outfits, the recent ones (group per entry: 0 / 1 / 2); a press (A / Cross / left
+    // click) toggles the highlighted outfit's pin, shown at once (its corner mark, the hint), applied when it closes
+    std::vector<std::uint8_t> group;
+    std::set<int> toggled;
+    // Editing pins (the user's call, 2026-11-13): the first entry (kPeekEdit) is "Edit Pins"; pressed, the arc edits:
+    // the outfits show their hints and marks, a press pins / unpins, letting go only saves the pins, and the first entry
+    // is Back (pressed: the picker again, on the entry it opened on). Otherwise a press does nothing.
+    bool edit = false;
+    int opened_on = -1;              // (the entry it opened on, by value)
+    U64 mark[5] = {}, hint = 0, hint_icon = 0, ripple = 0;
+    std::string mark_set[5], hint_icon_set;
+    U64 lift = 0, hold = 0; // (the picked-up glow, the hold disc)
+    // Moving a pinned outfit (edit mode): held on it, it is picked up - scrolling moves it among the pinned ones, a tap
+    // drops it. The presses: a down starts one (press_at), its up ends it - a tap unless the hold already acted.
+    bool moving = false, order_changed = false;
+    U64 press_at = 0;
+    bool press_used = false;
+    bool fx_b = false;               // the press animations' class set (a / b alternate: a press right after restarts)
 } g_peek;
+std::atomic<int> g_peek_clicks{0};    // left clicks taken from the game while the arc is open (input.cpp's mouse hook)
+constexpr size_t kPeekRecent = 3;     // the recent outfits on the arc
+constexpr int kPeekEdit = -2;         // (the first entry: Edit Pins / Back while editing)
+constexpr U64 kPeekHoldMs = 450;      // a hold this long on a pinned outfit picks it up (tools/peek_gen.py HOLD_MS)
+std::atomic<int> g_peek_ups{0};       // left button releases taken while it is open (input.cpp)
 bool g_peek_down = false;             // the arc key on the last frame
 
 bool g_peek_by_pad = false;           // the open arc came from the pad (L1 / LB held: it closes when that lets go)
@@ -148,7 +174,13 @@ bool peek_elements()
 {
     Peek& p = g_peek;
     if (p.wrap && is_element(p.wrap) && has_class(p.wrap, "om-peek-wrap")) return true;
-    p = Peek{p.open, p.entries, p.sel, p.worn, p.applied, p.sel0};
+    {
+        std::vector<std::uint8_t> group = p.group;
+        std::set<int> toggled = p.toggled;
+        const bool editing = p.edit;
+        p = Peek{p.open, p.entries, p.sel, p.worn, p.applied, p.sel0};
+        p.group = std::move(group), p.toggled = std::move(toggled), p.edit = editing;
+    }
     p.wrap = find_by_class(g_peek_root, "om-peek-wrap", 8);
     if (!p.wrap) return false;
     for (int k = 0; k < 5; ++k) {
@@ -159,6 +191,10 @@ bool peek_elements()
     p.arc = find_by_class(p.wrap, "om-peek-arc", 1);
     for (int k = 0; k < 5; ++k) p.badge[k] = find_by_class(p.wrap, ("om-peek-badge-" + std::to_string(k)).c_str(), 1);
     for (int k = 0; k < 2; ++k) p.nb[k] = find_by_class(p.wrap, ("om-peek-nb-" + std::to_string(k)).c_str(), 1);
+    for (int k = 0; k < 5; ++k) p.mark[k] = find_by_class(p.wrap, ("om-peek-mark-" + std::to_string(k)).c_str(), 1);
+    p.lift = find_by_class(p.wrap, "om-peek-lift", 1), p.hold = find_by_class(p.wrap, "om-peek-hold", 1);
+    p.hint = find_by_class(p.wrap, "om-peek-hint", 1), p.hint_icon = find_by_class(p.wrap, "om-peek-hint-icon", 1);
+    p.ripple = find_by_class(p.wrap, "om-peek-ripple", 1);
     p.trk = find_by_class(g_peek_root, "cpp-hp-actor-tracker", 4);
     p.hp_gauge = find_by_class(p.trk, "hp-sub-gauge-bar-wrap", 1);
     bool all = p.label && p.name && p.arc && p.trk;
@@ -183,7 +219,8 @@ void peek_draw(U64 self)
         std::string pic;
         if (shown) {
             int e = p.entries[(p.sel + n + size_t(off % int(n) + int(n))) % n];
-            pic = e < 0 ? std::string("outfitmanager_peek_none") // (No outfit: the slashed armour, drawn as an item icon)
+            pic = e == kPeekEdit ? std::string(p.edit ? "outfitmanager_peek_back" : "outfitmanager_peek_edit")
+                  : e < 0 ? std::string("outfitmanager_peek_none") // (No outfit: the slashed armour, drawn as an item icon)
                         : e < int(g_outfits.size()) ? g_outfits[size_t(e)].chest_icon : std::string();
         }
         if (pic != p.icon_set[k]) {
@@ -238,10 +275,52 @@ void peek_draw(U64 self)
         bool caps = o && o->hk_vk && show_caps(self, p.wrap, o->hk_vk, o->hk_mods, 0);
         if (!caps)
             if (U64 box = find_by_class(p.wrap, "om-hk-caps", 1)) set_class(box, "!cpp-none", true);
+        // #32: the hint (what a press does to it: pin / unpin), under the hotkey or in its place
+        const bool pinned_now = o && ((o->pin > 0) != (p.toggled.count(e) != 0));
+        const bool hotkey = o && o->hk_vk; // (its caps row is there: the hint goes under it)
+        // (a hint only where a press does something: the first entry, and the outfits while editing)
+        const bool first = e == kPeekEdit, hinted = first || (o && p.edit) || p.moving;
+        if (p.hint) {
+            if (hinted && g_set_text)
+                g_set_text(p.hint, lang::t(p.moving ? "peek.drop"
+                                           : first ? (p.edit ? "peek.done" : "peek.edit")
+                                           : !pinned_now ? "peek.pin"
+                                           : p.sel < p.group.size() && p.group[p.sel] == 1 ? "peek.unpin_move" : "peek.unpin"), 0);
+            set_class(p.hint, "!cpp-none", !hinted);
+            set_class(p.hint, "om-peek-hint-hi", !hotkey);
+        }
+        if (p.hint_icon) {
+            image(p.hint_icon, p.hint_icon_set, !hinted ? nullptr
+                                                : g_peek_by_pad ? (g_pad_is_ps ? "outfitmanager_peek_key_cross" : "outfitmanager_peek_key_a")
+                                                                : "Common_Icon_Keyguide_PC_Mouse_left");
+            set_class(p.hint_icon, "om-peek-hicon-hi", !hotkey);
+            if (p.ripple) set_class(p.ripple, "om-peek-ripple-hi", !hotkey);
+            if (p.hold) set_class(p.hold, "om-peek-hold-hi", !hotkey);
+        }
     }
+    // #32: a pin / unpin to come on each shown outfit (its corner); a divider where the groups meet
+    auto entry_at = [&](int k) -> int { // (the entry index at position k, or -1 when not shown)
+        int off = k - 2;
+        bool shown = n && (off >= -int((n - 1) / 2) && off <= int(n / 2));
+        return shown ? int((p.sel + n + size_t(off % int(n) + int(n))) % n) : -1;
+    };
+    for (int k = 0; k < 5; ++k) {
+        const int ei = entry_at(k);
+        const int ek = ei >= 0 ? p.entries[size_t(ei)] : -1;
+        const char* tex = nullptr;
+        if (p.edit && ek >= 0 && ek < int(g_outfits.size()) && p.toggled.count(ek))
+            tex = g_outfits[size_t(ek)].pin > 0 ? "outfitmanager_peek_unpin" : "outfitmanager_peek_pin";
+        image(p.mark[k], p.mark_set[k], tex);
+    }
+    if (p.lift) set_class(p.lift, "om-peek-lift-on", p.moving);
     // (the first entry: No outfit; the others: the saved outfit's number and name)
-    std::string label = e < 0 ? lang::t("peek.none_label") : lang::f("peek.label", {{"n", std::to_string(e + 1)}});
-    std::string name = e < 0 ? lang::t("peek.none") : e < int(g_outfits.size()) ? g_outfits[size_t(e)].name : "";
+    // (#32: the group's name - pinned / recent)
+    const std::uint8_t grp = n && p.sel < p.group.size() ? p.group[p.sel] : 0;
+    std::string label = p.moving ? lang::t("peek.moving")
+                        : e == kPeekEdit ? lang::t(p.edit ? "peek.editing" : "peek.pins_label")
+                        : e < 0 ? lang::t("peek.none_label") : lang::t(grp == 2 ? "peek.group.recent" : "peek.group.pinned");
+    std::string name = e == kPeekEdit ? lang::t(p.edit ? "setting.back" : "peek.edit_pins")
+                       : e < 0 ? lang::t("peek.none") : e < int(g_outfits.size()) ? g_outfits[size_t(e)].name : "";
     if (g_set_text) g_set_text(p.label, label.c_str(), 0), g_set_text(p.name, name.c_str(), 0);
 }
 
@@ -269,6 +348,10 @@ void peek_animate(PeekAnim a)
         if (p.badge[k]) set_class(p.badge[k], ("om-peek-in-badge-" + std::to_string(k)).c_str(), in);
     for (U64 b : {p.nb[0], p.nb[1]})
         if (b) set_class(b, "om-peek-in-name", in); // (with the texts)
+    for (int k = 0; k < 5; ++k)
+        if (p.mark[k]) set_class(p.mark[k], ("om-peek-in-mark-" + std::to_string(k)).c_str(), in);
+    for (U64 b : {p.hint, p.hint_icon})
+        if (b) set_class(b, "om-peek-in-name", in);
     if (U64 box = find_by_class(p.wrap, "om-hk-caps", 1)) set_class(box, "om-peek-in-name", in);
     set_class(p.wrap, "om-peek-out-wrap", a == PeekAnim::Out);
 }
@@ -286,13 +369,14 @@ U64 peek_slide_element(int i)
     if (i == 15) return p.label;
     if (i == 16) return p.name;
     if (i < 19) return p.nb[i - 17];
-    return find_by_class(p.wrap, "om-hk-caps", 1);
+    if (i == 19) return find_by_class(p.wrap, "om-hk-caps", 1);
+    return p.mark[i - 20]; // (20-24: the marks, #32)
 }
 
 void peek_slide_clear()
 {
     Peek& p = g_peek;
-    for (int i = 0; i < 20; ++i) {
+    for (int i = 0; i < 25; ++i) {
         if (p.slide_set[i].empty()) continue;
         if (U64 el = peek_slide_element(i)) set_class(el, p.slide_set[i].c_str(), false);
         p.slide_set[i].clear();
@@ -308,12 +392,12 @@ void peek_slide(int dir)
     char ab = p.slide_b ? 'b' : 'a', ud = dir > 0 ? 'u' : 'd';
     int lo = -std::min(2, (n - 1) / 2), hi = std::min(2, n / 2); // (the positions shown, as peek_draw)
     char cls[48];
-    for (int i = 0; i < 20; ++i) {
+    for (int i = 0; i < 25; ++i) {
         U64 el = peek_slide_element(i);
         if (!el) continue;
-        if (i < 15) {
+        if (i < 15 || i >= 20) {
             int k = i % 5, from = k + dir - 2;
-            const char* part = i < 5 ? "frame" : i < 10 ? "icon" : "badge";
+            const char* part = i < 5 ? "frame" : i < 10 ? "icon" : i < 15 ? "badge" : "mark";
             std::snprintf(cls, sizeof cls, "om-peek-sl%c-%c%c-%s-%d", ab, from >= lo && from <= hi ? 'm' : 'e', ud,
                           part, k);
         } else {
@@ -327,6 +411,53 @@ void peek_slide(int dir)
 
 U32 riding_mount(); // (below: the mount being ridden, 0 on foot)
 
+// #32: the arc's entries - Edit Pins (Back while editing) and No outfit (not while editing: nothing to pin there) in one
+// group, then the pinned outfits in pin order, then the last applied ones not pinned (weapon sets: the wheel and
+// hotkeys, #27).
+void peek_build(Peek& p)
+{
+    p.entries.assign(1, kPeekEdit), p.group.assign(1, 0);
+    if (!p.edit) p.entries.push_back(-1), p.group.push_back(0);
+    normalize_pins(g_outfits);
+    std::vector<int> pinned, recent;
+    for (size_t i = 0; i < g_outfits.size(); ++i) {
+        if (is_weapon_set(g_outfits[i])) continue;
+        if (g_outfits[i].pin > 0) pinned.push_back(int(i));
+        else if (g_outfits[i].used) recent.push_back(int(i));
+    }
+    std::sort(pinned.begin(), pinned.end(), [](int a, int b) { return g_outfits[size_t(a)].pin < g_outfits[size_t(b)].pin; });
+    std::sort(recent.begin(), recent.end(), [](int a, int b) { return g_outfits[size_t(a)].used > g_outfits[size_t(b)].used; });
+    if (recent.size() > kPeekRecent) recent.resize(kPeekRecent);
+    for (int i : pinned) p.entries.push_back(i), p.group.push_back(1);
+    for (int i : recent) p.entries.push_back(i), p.group.push_back(2);
+}
+size_t peek_find(const Peek& p, int e, size_t fallback) // (the entry showing e)
+{
+    for (size_t k = 0; k < p.entries.size(); ++k)
+        if (p.entries[k] == e) return k;
+    return fallback < p.entries.size() ? fallback : 0;
+}
+// #32: the pins the presses changed, saved (when editing ends or the arc closes). Unpinned: the first recent one.
+void peek_apply_pins(Peek& p)
+{
+    p.moving = false;
+    if (p.order_changed && p.toggled.empty() && g_character == p.character) save_outfits(); // (moved, nothing toggled)
+    p.order_changed = false;
+    if (p.toggled.empty() || g_character != p.character) return;
+    int top = 0;
+    U32 last = 0;
+    for (const Outfit& o : g_outfits) top = std::max(top, o.pin), last = std::max(last, o.used);
+    for (int t : p.toggled)
+        if (t >= 0 && size_t(t) < g_outfits.size()) {
+            Outfit& o = g_outfits[size_t(t)];
+            o.pin = o.pin > 0 ? 0 : ++top;
+            if (!o.pin) o.used = ++last; // (a press away from pinned again)
+            LOG("Outfit Arc: \"%s\" %s", o.name.c_str(), o.pin ? "pinned" : "no longer pinned");
+        }
+    p.toggled.clear();
+    save_outfits();
+}
+
 void peek_open(U64 self)
 {
     Peek& p = g_peek;
@@ -335,16 +466,16 @@ void peek_open(U64 self)
     p.entries.clear();
     p.worn = find_worn_outfit(self);
     // (the entries: see the top of this section)
-    p.entries.push_back(-1);
+    p.toggled.clear();
+    p.edit = p.moving = p.order_changed = false;
+    p.press_at = 0;
+    g_peek_clicks = 0, g_peek_ups = 0;
     const int anchor = anchor_outfit();
     p.applied = anchor >= 0;
-    for (size_t i = 0; i < g_outfits.size(); ++i)
-        if (!is_weapon_set(g_outfits[i])) p.entries.push_back(int(i)); // (weapon sets: the wheel and hotkeys, #27)
+    peek_build(p);
     // (on the outfit applied - also when some of its pieces were changed since -, else on No outfit)
-    p.sel = 0;
-    for (size_t k = 0; p.applied && k < p.entries.size(); ++k)
-        if (p.entries[k] == anchor) p.sel = k;
-    p.sel0 = p.sel;
+    p.opened_on = p.applied ? anchor : -1;
+    p.sel = p.sel0 = peek_find(p, p.opened_on, 1);
     p.open = true;
     p.character = g_character;
     set_class(p.trk, "!cpp-none", false); // (the HP tracker: shown while the peek is, its own gauge hidden)
@@ -366,6 +497,70 @@ void peek_open(U64 self)
         p.entries.size());
 }
 
+// #32: a picked-up outfit moved one place among the pinned ones (dir +1: down the arc); the arc follows it.
+void peek_move(U64 self, int dir)
+{
+    Peek& p = g_peek;
+    const size_t k = p.sel;
+    if ((dir < 0 && k == 0) || k + dir >= p.entries.size()) return;
+    const size_t k2 = k + dir;
+    if (p.group[k] != 1 || p.group[k2] != 1) return; // (only among the pinned outfits)
+    const int a = p.entries[k], b = p.entries[k2];
+    std::swap(g_outfits[size_t(a)].pin, g_outfits[size_t(b)].pin);
+    std::swap(p.entries[k], p.entries[k2]);
+    p.sel = k2;
+    p.order_changed = true;
+    peek_draw(self);
+    peek_slide(dir);
+}
+
+// #32: A / Cross / a left click on the highlighted outfit: its pin changes when the arc closes (again: as it was). The
+// mark and the hint show it at once; the button dips with the game's press ripple behind it, a new mark pops.
+void peek_toggle(U64 self)
+{
+    Peek& p = g_peek;
+    if (!p.open || p.entries.empty()) return;
+    if (p.moving) { // (a tap while one is picked up: it is dropped there)
+        p.moving = false;
+        LOG("Outfit Arc: dropped \"%s\" at place %zu", g_outfits[size_t(p.entries[p.sel])].name.c_str(), p.sel);
+        peek_draw(self);
+        return;
+    }
+    const int e = p.entries[p.sel];
+    if (e == kPeekEdit) { // (Edit Pins: editing; Back: the pins applied, the picker again - still on Edit Pins)
+        p.edit = !p.edit;
+        if (!p.edit) peek_apply_pins(p);
+        peek_build(p);
+        p.sel = 0;
+        if (!p.edit) p.sel0 = 0; // (letting go right away: nothing changes)
+        LOG("Outfit Arc: %s", p.edit ? "editing pins (letting go wears nothing)" : "done editing pins");
+        peek_draw(self);
+        p.fx_b = !p.fx_b;
+        const char* on = p.fx_b ? "b" : "a";
+        const char* off = p.fx_b ? "a" : "b";
+        for (auto [el, base] : {std::pair<U64, const char*>{p.hint_icon, "om-peek-dip-"}, {p.ripple, "om-peek-ripple-"}})
+            if (el) set_class(el, (std::string(base) + off).c_str(), false), set_class(el, (std::string(base) + on).c_str(), true);
+        return;
+    }
+    if (!p.edit || e < 0 || size_t(e) >= g_outfits.size()) return; // (only while editing; No outfit: nothing to pin)
+    const bool now = p.toggled.insert(e).second;
+    if (!now) p.toggled.erase(e);
+    LOG("Outfit Arc: \"%s\" %s when it closes", g_outfits[size_t(e)].name.c_str(),
+        now ? (g_outfits[size_t(e)].pin > 0 ? "unpinned" : "pinned") : "left as it was");
+    peek_draw(self);
+    p.fx_b = !p.fx_b;
+    const char* on = p.fx_b ? "b" : "a";
+    const char* off = p.fx_b ? "a" : "b";
+    auto replay = [&](U64 el, const char* base) {
+        if (!el) return;
+        set_class(el, (std::string(base) + off).c_str(), false);
+        set_class(el, (std::string(base) + on).c_str(), true);
+    };
+    replay(p.hint_icon, "om-peek-dip-");
+    replay(p.ripple, "om-peek-ripple-");
+    if (now) replay(p.mark[2], "om-peek-pop-");
+}
+
 void peek_close(bool choose)
 {
     Peek& p = g_peek;
@@ -376,13 +571,17 @@ void peek_close(bool choose)
     p.open = false;
     // (let go on another entry than the one it opened on: an outfit is put on and applied - also one whose pieces are
     // already worn after an unequip -; No outfit unequips the one applied)
+    const bool editing = p.edit; // (editing pins: letting go only saves them)
+    p.edit = false;
+    if (editing) choose = false;
     bool load = choose && e >= 0 && p.sel != p.sel0 && static_cast<size_t>(e) < g_outfits.size();
-    LOG("Outfit Arc: closed on %s%s (%s, wheel notches %u)", e < 0 ? "No outfit" : ("outfit " + std::to_string(e + 1)).c_str(),
+    peek_apply_pins(p); // (#32: the outfits' indices don't change: a load below is unaffected)
+    LOG("Outfit Arc: closed on %s%s (%s, wheel notches %u)", e == kPeekEdit ? "Edit Pins" : e < 0 ? "No outfit" : ("outfit " + std::to_string(e + 1)).c_str(),
         !choose ? "" : load ? "; putting it on" : " (nothing to change)", g_peek_by_pad ? "pad" : "key",
         g_wheel_notches.load());
     // as a click on it in the wheel: where each piece is, the questions (pieces on other characters, copies), the load
     if (load) start_loading(p.self, static_cast<U32>(e));
-    else if (choose && e < 0 && p.applied && p.sel != p.sel0) release_outfit(p.self); // (#21: No outfit)
+    else if (choose && e == -1 && p.applied && p.sel != p.sel0) release_outfit(p.self); // (#21: No outfit)
 }
 
 // The outfits' hotkeys, in play (not in menus, prompts or with the arc open): a press of exactly the combination loads
@@ -599,7 +798,8 @@ void peek_frame(U64 self)
     bool free = !g_menu_open && !g_ask_modal && !g_name_modal;
     // The pad: hold L1 / LB and press the d-pad's down (2026-11-05: down does nothing while L1 is held outside combat;
     // left raises the lantern, up calls the horse, right the items); up / down then move, letting go of L1 wears it.
-    U8 pad = g_peek_pad && game_focused() ? pad_buttons_raw() : 0, pressed = pad & ~g_peek_pad_last;
+    U8 pad = g_peek_pad && game_focused() ? pad_buttons_raw() : 0, pressed = pad & ~g_peek_pad_last,
+       released = g_peek_pad_last & ~pad;
     g_peek_pad_last = pad;
     if (down && !g_peek_down && !p.open && free) {
         g_peek_wheel = 0;
@@ -612,6 +812,37 @@ void peek_frame(U64 self)
         pressed = 0; // (the opening press doesn't also move)
     } else if (p.open && (g_peek_by_pad ? !(pad & kPadL1) : !down)) {
         peek_close(true);
+    }
+    { // #32: A / Cross / left click (the mouse hook takes them from the game while it is open): a tap acts on release;
+      // held on a pinned outfit while editing, it is picked up once the hold has lasted (the game's hold disc closing in)
+        const int downs = g_peek_clicks.exchange(0), ups = g_peek_ups.exchange(0);
+        const bool pd = p.open && g_peek_by_pad && (pressed & kPadCross), pu = p.open && g_peek_by_pad && (released & kPadCross);
+        const U64 now = GetTickCount64();
+        auto hold_disc = [&](bool on) {
+            if (p.hold) set_class(p.hold, "om-peek-hold-on", on);
+        };
+        if (p.open && (downs || pd) && !p.press_at) {
+            p.press_at = now, p.press_used = false;
+            const bool can_lift = p.edit && !p.moving && p.sel < p.group.size() && p.group[p.sel] == 1;
+            hold_disc(can_lift);
+        }
+        if (p.open && p.press_at && !p.press_used && now - p.press_at >= kPeekHoldMs && p.edit && !p.moving &&
+            p.sel < p.group.size() && p.group[p.sel] == 1) {
+            p.press_used = true, p.moving = true;
+            hold_disc(false);
+            LOG("Outfit Arc: picked up \"%s\"", g_outfits[size_t(p.entries[p.sel])].name.c_str());
+            peek_draw(self);
+            p.fx_b = !p.fx_b;
+            for (auto [el, base] : {std::pair<U64, const char*>{p.ripple, "om-peek-ripple-"}})
+                if (el) set_class(el, (std::string(base) + (p.fx_b ? "a" : "b")).c_str(), false),
+                        set_class(el, (std::string(base) + (p.fx_b ? "b" : "a")).c_str(), true);
+        }
+        if ((ups || pu) && p.press_at) {
+            hold_disc(false);
+            if (p.open && !p.press_used) peek_toggle(self);
+            p.press_at = 0;
+        }
+        if (!p.open) p.press_at = 0;
     }
     if (p.open && g_peek_by_pad && (pressed & (kPadUp | kPadDown)))
         g_peek_wheel += (pressed & kPadUp) ? WHEEL_DELTA : -WHEEL_DELTA; // (as a wheel notch: up = up the arc)
@@ -637,6 +868,12 @@ void peek_frame(U64 self)
         int w = g_peek_wheel.load(), steps = w / WHEEL_DELTA;
         if (steps) {
             g_peek_wheel -= steps * WHEEL_DELTA;
+            if (p.moving) { // (#32: the picked-up outfit moves, the arc follows it)
+                for (int q = 0; q < std::abs(steps); ++q) peek_move(self, steps < 0 ? 1 : -1);
+                steps = 0;
+            }
+        }
+        if (steps) {
             long long n = static_cast<long long>(p.entries.size());
             long long m = (static_cast<long long>(p.sel) - steps) % n;
             p.sel = static_cast<size_t>(m < 0 ? m + n : m);

@@ -12,7 +12,7 @@ from PIL import Image, ImageChops, ImageFilter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from omring_gen import enc_block, MOD, IMG_DIR
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = 'F:/MyProjects/CDInventory'  # (the game extracts live there, not in this repo; as omring_gen.py)
 SRC = os.path.join(ROOT, 're', 'omring', 'badge')          # extracted atlases + previews
 CANVAS = 80                                                 # as the "+" texture
 TEX = 128                                                   # DDS size (image at 1,1)

@@ -221,6 +221,18 @@ center.release = Kıyafeti Çıkar
 center.no_outfit = Uygulanan kıyafet yok
 peek.none_label = ÇIKAR
 peek.none = Kıyafet Yok
+peek.group.pinned = SABİTLENDİ
+peek.group.recent = SON
+peek.pin = Sabitle
+peek.unpin = Kaldır
+peek.editing = SABİTLEMELER
+peek.done = Tamam
+peek.pins_label = SABİTLER
+peek.edit_pins = Sabitleri düzenle
+peek.edit = Düzenle
+peek.moving = TAŞINIYOR
+peek.drop = Bırak
+peek.unpin_move = Kaldır · taşımak için basılı tut
 toast.released = "{outfit}" çıkarıldı: ekipmanın üstünde kalır, bir kıyafet yükleyene ya da kaydedene kadar görünürlük ayarları kapalıdır
 
 # next version: weapon sets, underwear

@@ -221,6 +221,18 @@ center.release = Quitar atuendo
 center.no_outfit = Ningún atuendo aplicado
 peek.none_label = QUITAR
 peek.none = Sin atuendo
+peek.group.pinned = FIJADO
+peek.group.recent = RECIENTE
+peek.pin = Fijar
+peek.unpin = Quitar
+peek.editing = EDITANDO FIJADOS
+peek.done = Listo
+peek.pins_label = FIJADOS
+peek.edit_pins = Editar fijados
+peek.edit = Editar
+peek.moving = MOVIENDO
+peek.drop = Soltar
+peek.unpin_move = Quitar · mantén para mover
 toast.released = "{outfit}" quitado: tu equipo se queda puesto y su configuración de visibilidad se desactiva hasta que cargues o guardes un atuendo
 
 # next version: weapon sets, underwear

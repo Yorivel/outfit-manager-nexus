@@ -235,6 +235,18 @@ center.release = Zdejmij strój
 center.no_outfit = Brak zastosowanego stroju
 peek.none_label = ZDEJMIJ
 peek.none = Bez stroju
+peek.group.pinned = PRZYPIĘTY
+peek.group.recent = OSTATNI
+peek.pin = Przypnij
+peek.unpin = Odepnij
+peek.editing = EDYCJA PRZYPIĘĆ
+peek.done = Gotowe
+peek.pins_label = PRZYPIĘTE
+peek.edit_pins = Edytuj przypięte
+peek.edit = Edytuj
+peek.moving = PRZENOSZENIE
+peek.drop = Upuść
+peek.unpin_move = Odepnij · przytrzymaj, by przenieść
 toast.released = „{outfit}” zdjęty: twój ekwipunek zostaje, jego ustawienia widoczności są wyłączone, dopóki nie wczytasz lub nie zapiszesz stroju
 
 # next version: weapon sets, underwear

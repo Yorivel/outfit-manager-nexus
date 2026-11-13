@@ -43,6 +43,7 @@ void save_new_outfit(U64 self)
             return;
         }
     o.name = default_name();
+    o.pin = 0; // (#32: not on the Outfit Arc's pinned ones; it shows among the recent ones, a press there pins it)
     g_unmanaged.erase(g_character); // (a save: what is worn is managed again, #21)
     if (int a = anchor_outfit(); a >= 0) carry_looks(g_outfits[size_t(a)], o); // (a changed outfit saved as new looks the same)
     g_outfits.push_back(o);
@@ -227,6 +228,7 @@ void confirmed(U64 self, U32 index, int what, U32 other)
     const Outfit& was = g_outfits[index];
     o.name = was.name;
     o.worn = was.worn; // (whether it is the last loaded one: not a setting)
+    o.pin = was.pin, o.used = was.used; // (#32: its place on the Outfit Arc stays)
     bool keep = other == 0;
     if (keep) { // (its settings and looks stay; reset: as newly saved)
         if (was.has_weapons) o.load_weapons = was.load_weapons;

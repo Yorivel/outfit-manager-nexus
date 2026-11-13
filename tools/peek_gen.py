@@ -14,7 +14,7 @@ texture's left edge, at mid-height (row 155); it spans about +-41 degrees.
 
 peek_gen.py [out dir]"""
 import math, os, sys
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from badge_gen import write_dds
@@ -122,7 +122,7 @@ def slide_css():
                     if me == 'e':
                         sop = 0.0
                     for part, ox, oy, scale_op in (('frame', 0, 0, 1.0), ('icon', 0, 0, 1.0 if k == 2 else 0.9),
-                                                   ('badge', 0.36, 0.34, 1.0)):
+                                                   ('badge', 0.36, 0.34, 1.0), ('mark', 0.36, -0.36, 1.0)):
                         own_op = op * scale_op
                         src_op = sop * scale_op
                         dx = (sx + sf * ox) - (x + f * ox)
@@ -146,6 +146,46 @@ def slide_css():
             out.append(f'.{name} {{ animation-name: {name}; animation-duration: {SLIDE_S:.2f}s; '
                        'animation-timing-function: Linear; animation-fill-mode: forwards; }')
     return out
+
+
+# #32 pins (2026-11-13, Round 15 of the mockups): the corner mark of a pending pin (a gold diamond) / unpin (hollow,
+# struck).
+GOLD_RGB, IVORY_RGB, DARK_RGB = (203, 147, 73), (236, 228, 214), (16, 14, 12)
+
+
+def diamond(px, kind):
+    """A diamond px wide: 'pin' gold with a dark edge, 'unpin' hollow and struck."""
+    s = 4 * px / 40  # (its drawing units: tuned at 40 px, drawn at 4x and scaled down - smooth edges)
+    n = px * 4
+    im = Image.new('RGBA', (n, n), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    c, r = n / 2, n / 2 - 2 * s
+    pts = [(c, c - r), (c + r, c), (c, c + r), (c - r, c)]
+    if kind == 'pin':
+        d.polygon(pts, fill=GOLD_RGB + (255,), outline=DARK_RGB + (235,))
+        d.line(pts + [pts[0]], fill=DARK_RGB + (235,), width=int(1.6 * s))
+    else:
+        d.polygon(pts, fill=(20, 18, 16, 175))
+        d.line(pts + [pts[0]], fill=IVORY_RGB + (210,), width=int(1.6 * s))
+        d.line((c - r * 0.55, c + r * 0.55, c + r * 0.55, c - r * 0.55), fill=IVORY_RGB + (210,), width=int(1.8 * s))
+    return im.resize((px, px), Image.LANCZOS)
+
+
+MARK_PX = 96  # texture px (shown at ~21 css px: 4x, crisp after the DXT blocks and at high resolutions)
+HOLD_MS = 450  # a hold this long picks a pinned outfit up (arc.cpp kPeekHoldMs)
+LIFT_PX = 192             # the picked-up glow
+
+
+def lift_glow():
+    """A soft gold glow (the picked-up outfit's)."""
+    im = Image.new('RGBA', (LIFT_PX, LIFT_PX), (0, 0, 0, 0))
+    a = im.load()
+    c = LIFT_PX / 2
+    for yy in range(LIFT_PX):
+        for x in range(LIFT_PX):
+            r = math.hypot(x - c, yy - c) / c
+            a[x, yy] = GOLD_RGB + (int(max(0.0, 1 - r) ** 1.6 * 200),)
+    return im
 
 
 def frame(selected):
@@ -310,8 +350,6 @@ def css():
     for k in range(2):
         out.append(f'.om-peek-nb-{k} {{ position: absolute; left: {right - 22 - (1 - k) * 24:.1f}px; top: {y - 27:.1f}px; '
                    f'width: 22px; height: 22px; }}')
-    out.append('.om-peek-label-s1 { translate-x: -26px; }')
-    out.append('.om-peek-label-s2 { translate-x: -50px; }')
     out.append(f'.om-peek-hk {{ position: absolute; left: {right - 200:.1f}px; top: {y + 27:.1f}px; width: 200px; height: 20px; '
                'display: flex; flex-direction: row; justify-content: flex-end; align-items: center; }')
     out.append('.om-hk-mod { position: relative; width: 33px; height: 20px; background-color: #f6f0f0; background-blend-mode: multiply; }')
@@ -320,8 +358,59 @@ def css():
     out.append('.om-hk-plus { position: relative; width: 12px; height: 20px; line-height: 20px; text-align: center; font-size: 14px; }')
     out.append(f'.om-peek-label {{ position: absolute; left: {right - 320:.1f}px; '
                f'top: {y - 26:.1f}px; width: 320px; height: 20px; text-align: right; font-size: 14px; color: {GOLD}; }}')
+    # (the badges' room by `left`, after the base rule: a translate stayed on once its class was gone, and a base
+    # translate-x: 0 then won over the shift, 2026-11-13)
+    out.append(f'.om-peek-label-s1 {{ left: {right - 320 - 26:.1f}px; }}')
+    out.append(f'.om-peek-label-s2 {{ left: {right - 320 - 50:.1f}px; }}')
     out.append(f'.om-peek-name {{ position: absolute; left: {right - 320:.1f}px; '
                f'top: {y - 6:.1f}px; width: 320px; height: 30px; text-align: right; font-size: 22px; color: {IVORY}; }}')
+    # #32 pins: each slot's corner mark (riding with its frame), the dividers in the gaps between positions, the hint row
+    # under the hotkey (the button, then what it does; the *-hi classes when there is no hotkey), and the press: the
+    # button dips, the mark pops
+    for k in range(5):
+        mx, my, dist = slot_pos(k)
+        f = SIZES[dist]
+        ms = round(f * 0.36)
+        out.append(f'.om-peek-mark-{k} {{ position: absolute; left: {mx + f * 0.36 - ms / 2:.1f}px; top: {my - f * 0.36 - ms / 2:.1f}px; '
+                   f'width: {ms}px; height: {ms}px; opacity: {OPACITY[dist]}; transform-origin: 50% 50%; }}')
+        anim(f'om-peek-in-mark-{k}', f'om-peek-unfold-frame-{k}', slot_motion(k, OPACITY[dist], pulse=(k == 2))[0])
+    # picked up (edit mode, held on a pinned outfit): a gold glow behind the middle slot
+    lx, ly, _ = slot_pos(2)
+    lf = SIZES[0] * 1.7
+    out.append(f'.om-peek-lift {{ position: absolute; left: {lx - lf / 2:.1f}px; top: {ly - lf / 2:.1f}px; width: {lf:.1f}px; '
+               f'height: {lf:.1f}px; opacity: 0; background-image: textureid(outfitmanager_peek_lift); }}')
+    out.append('.om-peek-lift-on { opacity: 1; }')
+    # the game's hold look behind the button (qtecommon.css ani-qte-keyguide-back-press-hold-effect: its disc closing in
+    # 1.8 -> 1 as it fades in), over the hold time
+    out.append(f'.om-peek-hold {{ position: absolute; left: {right - 26:.1f}px; top: {y + 50:.1f}px; width: 26px; height: 26px; '
+               'opacity: 0; transform-origin: 50% 50%; background-image: textureid(cd_common_bg_04); }')
+    out.append(f'@keyframes om-peek-hold-k {{ 0% {{ opacity: 0; scale-x: 1.8; scale-y: 1.8; }} 100% {{ opacity: 0.6; scale-x: 1; scale-y: 1; }} }}')
+    out.append(f'.om-peek-hold-on {{ animation-name: om-peek-hold-k; animation-duration: {HOLD_MS / 1000:.2f}s; '
+               'animation-timing-function: Linear; animation-fill-mode: forwards; }')
+    out.append(f'.om-peek-hint {{ position: absolute; left: {right - 350:.1f}px; top: {y + 50:.1f}px; width: 320px; height: 26px; '
+               f'text-align: right; line-height: 26px; font-size: 17px; color: {IVORY}; translate-y: 0px; }}')
+    out.append(f'.om-peek-hint-icon {{ position: absolute; left: {right - 26:.1f}px; top: {y + 50:.1f}px; width: 26px; height: 26px; '
+               'transform-origin: 50% 50%; translate-y: 0px; }')
+    # the press's ripple behind the button: the game's own button press (qtecommon.css ani-qte-keyguide-back-effect: its
+    # soft disc cd_common_bg_04 growing 1 -> 1.7 as it fades), quieter
+    out.append(f'.om-peek-ripple {{ position: absolute; left: {right - 26:.1f}px; top: {y + 50:.1f}px; width: 26px; height: 26px; '
+               'opacity: 0; transform-origin: 50% 50%; translate-y: 0px; background-image: textureid(cd_common_bg_04); }')
+    # (no hotkey: the row takes the hotkey's place - by `top`, as the press animations' scale would undo a translate)
+    for cls in ('om-peek-hint-hi', 'om-peek-hicon-hi', 'om-peek-ripple-hi', 'om-peek-hold-hi'):
+        out.append(f'.{cls} {{ top: {y + 27:.1f}px; }}')
+    for ab in 'ab':
+        out.append(f'@keyframes om-peek-ripple-k{ab} {{ 0% {{ opacity: 0.55; scale-x: 1; scale-y: 1; }} '
+                   '100% { opacity: 0; scale-x: 1.7; scale-y: 1.7; } }')
+        out.append(f'.om-peek-ripple-{ab} {{ animation-name: om-peek-ripple-k{ab}; animation-duration: 0.4s; '
+                   'animation-timing-function: OutQuad; }')
+        out.append(f'@keyframes om-peek-dip-k{ab} {{ 0% {{ scale-x: 1; scale-y: 1; }} 40% {{ scale-x: 0.88; scale-y: 0.88; }} '
+                   '100% { scale-x: 1; scale-y: 1; } }')
+        out.append(f'.om-peek-dip-{ab} {{ animation-name: om-peek-dip-k{ab}; animation-duration: 0.16s; '
+                   'animation-timing-function: Linear; }')
+        out.append(f'@keyframes om-peek-pop-k{ab} {{ 0% {{ opacity: 0; scale-x: 0.2; scale-y: 0.2; }} '
+                   '50% { opacity: 1; scale-x: 1.3; scale-y: 1.3; } 100% { opacity: 1; scale-x: 1; scale-y: 1; } }')
+        out.append(f'.om-peek-pop-{ab} {{ animation-name: om-peek-pop-k{ab}; animation-duration: 0.24s; '
+                   'animation-timing-function: Linear; }')
     out += slide_css()  # (last: a slide's class wins over the opening's)
     return '\n'.join(out) + '\n'
 
@@ -336,6 +425,12 @@ def atlas_merge():
                 f'Type="Image" GetRect="1,1,{NONE_PX},{NONE_PX}"/>')
     rows += [f'<Texture Name="outfitmanager_peek_arc_n{n}" Filename="UI/texture/image/customizeimage/outfitmanager_peek_arc_n{n}.dds" '
              f'Type="Image" GetRect="1,1,{im.width},{im.height}"/>' for n, im in ARCS.items()]
+    for n, px in (('outfitmanager_peek_pin', MARK_PX), ('outfitmanager_peek_unpin', MARK_PX),
+                  ('outfitmanager_peek_lift', LIFT_PX)):
+        rows.append(f'<Texture Name="{n}" Filename="UI/texture/image/customizeimage/{n}.dds" Type="Image" GetRect="1,1,{px},{px}"/>')
+    for n in ('outfitmanager_peek_key_a', 'outfitmanager_peek_key_cross', 'outfitmanager_peek_back',
+              'outfitmanager_peek_edit'):  # (the wheel's confirm icons, its Back and settings badges, for the HUD)
+        rows.append(f'<Texture Name="{n}" Filename="UI/texture/image/customizeimage/{n}.dds" Type="Image" GetRect="1,1,80,80"/>')
     return '<__dmm_root__>\n' + '\n'.join(rows) + '\n</__dmm_root__>\n'
 
 
@@ -347,6 +442,14 @@ if __name__ == '__main__':
     write_dds(os.path.join(img, 'outfitmanager_peek_none.dds'), no_outfit_icon(), 256)
     for n, im in ARCS.items():
         write_dds(os.path.join(img, f'outfitmanager_peek_arc_n{n}.dds'), im, tex_size(im))
+    write_dds(os.path.join(img, 'outfitmanager_peek_pin.dds'), diamond(MARK_PX, 'pin'), 128)
+    write_dds(os.path.join(img, 'outfitmanager_peek_unpin.dds'), diamond(MARK_PX, 'unpin'), 128)
+    write_dds(os.path.join(img, 'outfitmanager_peek_lift.dds'), lift_glow(), 256)
+    import shutil
+    for k in ('a', 'cross'):
+        shutil.copyfile(os.path.join(img, f'outfitmanager_key_{k}.dds'), os.path.join(img, f'outfitmanager_peek_key_{k}.dds'))
+    shutil.copyfile(os.path.join(img, 'outfitmanager_badge_return.dds'), os.path.join(img, 'outfitmanager_peek_back.dds'))
+    shutil.copyfile(os.path.join(img, 'outfitmanager_badge_cog.dds'), os.path.join(img, 'outfitmanager_peek_edit.dds'))
     for rel, text in ((('ui', 'xml', 'texture', 'cd_hud_status_02.xml.merge'), atlas_merge()),
                       (('ui', 'xml', 'gamemain', 'play', 'statusgaugeview2.css.merge'), css())):
         p = os.path.join(FILES, *rel)

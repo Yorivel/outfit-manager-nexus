@@ -68,8 +68,7 @@ def slashed_plate_armour():
     Unequip Outfit dot (the outfit stops applying; picked by the user 2026-11-08 from tools/unequip_badges_preview.py)."""
     import os
     from PIL import ImageChops
-    src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 're', 'omring', 'badge',
-                       'cd_icon_common_01.png')
+    src = os.path.join('F:/MyProjects/CDInventory', 're', 'omring', 'badge', 'cd_icon_common_01.png')  # (the extracts)
     im = Image.open(src).convert('RGBA').crop((483, 433, 483 + 52, 433 + 52)).resize((S, S), Image.LANCZOS)
     lum = im.convert('L').point(lambda v: max(0, min(255, (v - 60) * 255 // 120)))
     m = ImageChops.multiply(im.getchannel('A'), lum)
@@ -85,8 +84,7 @@ def no_outfit():
     Chosen by the user from tools/no_outfit_icon_preview.py (crisp 140/8, slash k=105)."""
     import os
     from PIL import ImageChops, ImageFilter
-    src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 're', 'omring', 'badge',
-                       'cd_icon_common_01.png')
+    src = os.path.join('F:/MyProjects/CDInventory', 're', 'omring', 'badge', 'cd_icon_common_01.png')  # (the extracts)
     big = 1600
     im = Image.open(src).convert('RGBA').crop((483, 433, 483 + 52, 433 + 52))
     lum = im.convert('L').point(lambda v: max(0, min(255, (v - 60) * 255 // 120)))

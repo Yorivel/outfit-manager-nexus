@@ -100,6 +100,8 @@ void write_lists(std::string& out, const Store& s)
                 if (o.activity) put(out, "activity\t%u\n", o.activity);
                 if (o.hk_vk) put(out, "hotkey\t%u\t%u\n", o.hk_vk, o.hk_mods);
                 if (o.worn) put(out, "worn\t1\n");
+                if (o.pin >= 0) put(out, "pin\t%d\n", o.pin);
+                if (o.used) put(out, "used\t%u\n", o.used);
                 if (o.back_look) put(out, "backlook\t%u\n", o.back_look);
                 if (o.underwear_look) put(out, "underwear\t%u\n", o.underwear_look);
                 if (o.has_back) put(out, "backshield\t%u\n", o.has_back);
@@ -211,9 +213,19 @@ bool pull_active()
     return true;
 }
 
+// #32: outfits read from a file before pins were kept are pinned, after the pinned ones, in the wheel's order.
+void normalize_pins(std::vector<Outfit>& v)
+{
+    int top = 0;
+    for (const Outfit& o : v) top = std::max(top, o.pin);
+    for (Outfit& o : v)
+        if (o.pin < 0) o.pin = ++top;
+}
+
 void save_outfits()
 {
     std::lock_guard<std::mutex> lock(g_store_mu);
+    normalize_pins(g_outfits);
     if (g_generation.load() != g_seen_generation) {
         LOG("outfit change dropped: a save was loaded meanwhile");
         return;
@@ -417,6 +429,11 @@ void load_outfits()
                 unsigned vk = static_cast<unsigned>(std::strtoul(v[1].c_str(), nullptr, 10));
                 unsigned m = static_cast<unsigned>(std::strtoul(v[2].c_str(), nullptr, 10));
                 if (vk > 0 && vk < 256 && m < 8) list.back().hk_vk = static_cast<U16>(vk), list.back().hk_mods = static_cast<std::uint8_t>(m);
+            } else if (!list.empty() && v[0] == "pin" && v.size() >= 2) { // (#32)
+                const long p = std::strtol(v[1].c_str(), nullptr, 10);
+                list.back().pin = p < 0 ? -1 : int(p);
+            } else if (!list.empty() && v[0] == "used" && v.size() >= 2) {
+                list.back().used = U32(std::strtoul(v[1].c_str(), nullptr, 10));
             } else if (!list.empty() && v[0] == "worn") {
                 list.back().worn = true;
             } else if (!list.empty() && v[0] == "backlook" && v.size() >= 2) {

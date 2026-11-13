@@ -221,6 +221,18 @@ center.release = Desequipar traje
 center.no_outfit = Nenhum traje aplicado
 peek.none_label = DESEQUIPAR
 peek.none = Sem traje
+peek.group.pinned = FIXADO
+peek.group.recent = RECENTE
+peek.pin = Fixar
+peek.unpin = Desafixar
+peek.editing = EDITANDO FIXADOS
+peek.done = Concluir
+peek.pins_label = FIXADOS
+peek.edit_pins = Editar fixados
+peek.edit = Editar
+peek.moving = MOVENDO
+peek.drop = Soltar
+peek.unpin_move = Desafixar · segure para mover
 toast.released = "{outfit}" desequipado: seu equipamento continua, as configurações de visibilidade dele ficam desligadas até você carregar ou salvar um traje
 
 # next version: weapon sets, underwear

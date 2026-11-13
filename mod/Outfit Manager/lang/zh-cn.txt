@@ -218,6 +218,18 @@ center.release = 卸下套装
 center.no_outfit = 未应用套装
 peek.none_label = 卸下
 peek.none = 无套装
+peek.group.pinned = 已固定
+peek.group.recent = 最近
+peek.pin = 固定
+peek.unpin = 取消固定
+peek.editing = 正在编辑固定
+peek.done = 完成
+peek.pins_label = 固定
+peek.edit_pins = 编辑固定
+peek.edit = 编辑
+peek.moving = 移动中
+peek.drop = 放下
+peek.unpin_move = 取消固定 · 长按移动
 toast.released = 已卸下“{outfit}”：装备保持穿戴，在你加载或保存套装前，其显示设置处于关闭状态
 
 # next version: weapon sets, underwear

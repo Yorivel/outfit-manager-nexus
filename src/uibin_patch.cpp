@@ -362,6 +362,7 @@ bool add_peek(Bytes& res, Report& r)
     Bytes tmpl(res.begin() + bs, res.begin() + be);
     // the children
     std::vector<std::pair<std::string, std::vector<std::string>>> kids = {{"OmPeekArc", {"om-peek-arc"}}};
+    kids.push_back({"OmPeekLift", {"om-peek-lift"}}); // (#32: behind the middle slot while an outfit is picked up)
     for (int k = 0; k < 5; ++k) kids.push_back({"OmPeekFrame" + std::to_string(k), {"om-peek-frame", "om-peek-frame-" + std::to_string(k)}});
     for (int k = 0; k < 5; ++k) kids.push_back({"OmPeekIcon" + std::to_string(k), {"om-peek-icon", "om-peek-icon-" + std::to_string(k)}});
     kids.push_back({"OmPeekLabel", {"om-peek-label", "font-stroke-common", "font-text-caption-minor-white"}});
@@ -369,6 +370,12 @@ bool add_peek(Bytes& res, Report& r)
     // the badges (2026-11-06): each other slot's climate thermometer, the highlighted outfit's beside its label
     for (int k = 0; k < 5; ++k) kids.push_back({"OmPeekBadge" + std::to_string(k), {"om-peek-badge", "om-peek-badge-" + std::to_string(k), "!cpp-none"}});
     for (int k = 0; k < 2; ++k) kids.push_back({"OmPeekNb" + std::to_string(k), {"om-peek-nb", "om-peek-nb-" + std::to_string(k), "!cpp-none"}});
+    // #32 pins (2026-11-13): each slot's corner mark (a pin / unpin to come), then the hint row (the button, what it does)
+    for (int k = 0; k < 5; ++k) kids.push_back({"OmPeekMark" + std::to_string(k), {"om-peek-mark", "om-peek-mark-" + std::to_string(k), "!cpp-none"}});
+    kids.push_back({"OmPeekHold", {"om-peek-hold"}}); // (behind the button: the game's hold look)
+    kids.push_back({"OmPeekRipple", {"om-peek-ripple"}}); // (behind the button: the press's ripple)
+    kids.push_back({"OmPeekHintIcon", {"om-peek-hint-icon", "!cpp-none"}});
+    kids.push_back({"OmPeekHint", {"om-peek-hint", "font-stroke-common", "font-text-caption-minor-white", "!cpp-none"}});
     Bytes body;
     for (const auto& [id, cls] : kids) {
         Bytes e;

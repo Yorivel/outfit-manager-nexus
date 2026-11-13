@@ -235,6 +235,18 @@ center.release = Снять наряд
 center.no_outfit = Наряд не применён
 peek.none_label = СНЯТЬ
 peek.none = Без наряда
+peek.group.pinned = ЗАКРЕПЛЁН
+peek.group.recent = НЕДАВНИЙ
+peek.pin = Закрепить
+peek.unpin = Открепить
+peek.editing = ЗАКРЕПЛЕНИЕ
+peek.done = Готово
+peek.pins_label = ЗАКРЕПЛЁННЫЕ
+peek.edit_pins = Изменить закреплённые
+peek.edit = Изменить
+peek.moving = ПЕРЕМЕЩЕНИЕ
+peek.drop = Поставить
+peek.unpin_move = Открепить · удерживайте, чтобы переместить
 toast.released = «{outfit}» снят: снаряжение остаётся на вас, его настройки видимости отключены, пока вы не загрузите или не сохраните наряд
 
 # next version: weapon sets, underwear

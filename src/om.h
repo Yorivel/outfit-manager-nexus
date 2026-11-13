@@ -153,6 +153,11 @@ struct Outfit {
     // The character's last loaded outfit (one per character, kept per save): its pieces' looks apply wherever the exact
     // piece is worn in its slot, also after other slots were changed by hand.
     bool worn = false;
+    // The Outfit Arc (#32): pinned outfits are on it in pin order (1.. as they were pinned); 0: not pinned (on it among
+    // the recent ones while it is one of the last applied); -1: not read (a file from before pins: pinned, in the
+    // wheel's order - normalize_pins). used: when it was last applied (a count over the character's outfits; 0 never).
+    int pin = -1;
+    U32 used = 0;
     // The shield the character always carries on its back (equipment-23: it shows whatever the shield slot holds; on
     // no wheel, so in no outfit): its look in this outfit (a Look), applied to whatever is in that slot.
     std::uint8_t back_look = 0;
