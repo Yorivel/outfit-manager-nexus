@@ -304,8 +304,8 @@ void load_outfits()
             }
             // (an outfit beyond the wheel's slots is dropped with every line of it, not merged into the one before)
             if (v[0] == "outfit") {
-                skipping = cur->outfits.size() >= kOutfitSlots;
-                if (skipping) LOG("outfit file: \"%s\" is beyond the wheel's %u slots; not read", v.size() >= 2 ? v[1].c_str() : "", kOutfitSlots);
+                skipping = cur->outfits.size() >= kMaxOutfits;
+                if (skipping) LOG("outfit file: \"%s\" is beyond the %u outfits a character can have; not read", v.size() >= 2 ? v[1].c_str() : "", kMaxOutfits);
                 if (skipping) continue;
             } else if (v[0] == "character" || v[0] == "save" || v[0] == "pending") {
                 skipping = false;

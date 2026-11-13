@@ -49,7 +49,12 @@ constexpr U64 kVfUiMgr = 0x118; // slot 35 (34 before the 2026-10-30 update)
 
 constexpr U16 kTemplateRecord = 1; // Armor: 12 item slots
 constexpr U32 kOutfitSlots = 12;
-constexpr U32 kMaxOutfits = kOutfitSlots - 1; // the last slot is always the "+" (saving, the global settings)
+// #32 outfit pages: up to kPagelessMax outfits share one page with the "+" slot (as before); with more, each page has
+// kPageOutfits outfits, the page slot and the "+" slot. kMaxOutfits: a safety cap only.
+constexpr U32 kPagelessMax = kOutfitSlots - 1;
+constexpr U32 kPageOutfits = kOutfitSlots - 2;
+constexpr U32 kMaxOutfits = 200;
+constexpr U32 kPageSlot = 0xFFFFFFF0u; // (slot_outfit's value for the page slot)
 constexpr U32 kRecordSize = 0x30; // (copied whole; the 2026-10-30 header is 8 bytes shorter)
 // QuickSlotInfo record: slot count and slot array (+0x14 / +0x20 before the 2026-10-30 update)
 constexpr U32 kRecSlotCount = 0x0c, kRecSlots = 0x18;

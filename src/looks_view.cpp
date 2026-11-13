@@ -8,6 +8,7 @@
 #include "settings.h"
 #include "wheel_draw.h"
 #include "wheel_hooks.h"
+#include <map>
 
 namespace om {
 
@@ -108,18 +109,64 @@ std::uint8_t& eye_look(size_t idx)
     return o.empty_looks[static_cast<U16>(idx)];
 }
 
-// Saved outfits plus one empty "+" slot, until all 12 are used; in the Appearance view the pieces, the page slot and
-// Back (the fullest page, Weapons: 8 slots and the back shield, 11 in all).
+// --- Outfit pages (#32) ----------------------------------------------------------------------------------------------
+// Up to kPagelessMax outfits: one page, as before. More: page p shows outfits p*kPageOutfits.., then the page slot (its
+// dots are the pages: scrolled to choose, a click opens it), then the "+" slot. The wheel opens on the character's last
+// page, unless the applied outfit changed since it was left (a hotkey, the Arc, sleepwear, a load): then on its page.
+U32 g_page = 0, g_page_pick = 0;
+std::map<U16, std::pair<U32, int>> g_char_page; // character -> (the page left, the applied outfit then)
+bool paged() { return g_outfits.size() > kPagelessMax; }
+U32 page_count() { return paged() ? U32((g_outfits.size() + kPageOutfits - 1) / kPageOutfits) : 1; }
+U32 page_of(size_t o) { return paged() && !g_outfits.empty() ? U32(std::min(o, g_outfits.size() - 1) / kPageOutfits) : 0; }
+void page_clamp()
+{
+    const U32 n = page_count();
+    if (g_page >= n) g_page = n - 1;
+    if (g_page_pick >= n) g_page_pick = g_page;
+}
+U32 page_len()
+{
+    if (!paged()) return g_outfit_count;
+    page_clamp();
+    return std::min<U32>(kPageOutfits, U32(g_outfits.size()) - g_page * kPageOutfits);
+}
+void page_show(U32 p)
+{
+    g_page = g_page_pick = p;
+    page_clamp();
+}
+void pages_on_open()
+{
+    const int applied = anchor_outfit();
+    auto it = g_char_page.find(g_character);
+    U32 p = it != g_char_page.end() ? it->second.first : 0;
+    if ((it == g_char_page.end() || it->second.second != applied) && applied >= 0) p = page_of(size_t(applied));
+    page_show(p);
+    if (paged()) LOG("outfit pages: %u, opening on page %u", page_count(), g_page + 1);
+}
+void pages_on_close() { g_char_page[g_character] = {g_page, anchor_outfit()}; }
+
+// Saved outfits plus one empty "+" slot, until all 12 are used (with pages: the page's outfits, the page slot and the
+// "+" slot); in the Appearance view the pieces, the page slot and Back (the fullest page, Weapons: 8 slots and the back
+// shield, 11 in all).
 U32 visible_slots()
 {
     if (g_eye >= 0) return static_cast<U32>(eye_pieces().size()) + 2;
     if (g_cfg >= 0) return static_cast<U32>(cfg_entries().size());
+    if (paged()) return page_len() + 2;
     return g_outfit_count < kOutfitSlots ? g_outfit_count + 1 : kOutfitSlots;
 }
 
 // Visible slot i sits at (i+1)*360/N, so slot N-1 is the top one: outfits start there and run clockwise,
-// which puts the "+" slot (outfit index = saved count) last, just left of the top.
-U32 slot_outfit(U32 i) { return (i + 1) % visible_slots(); }
+// which puts the "+" slot (outfit index = saved count) last, just left of the top. On the outfits' wheel with pages:
+// the outfit's own index, kPageSlot for the page slot (before the "+").
+U32 slot_outfit(U32 i)
+{
+    const U32 pos = (i + 1) % visible_slots();
+    if (g_eye >= 0 || g_cfg >= 0 || !paged()) return pos;
+    const U32 len = page_len();
+    return pos < len ? g_page * kPageOutfits + pos : pos == len ? kPageSlot : U32(g_outfits.size());
+}
 
 // --- Appearance view: entering, paging, leaving, and the presses in it -----------------------------
 

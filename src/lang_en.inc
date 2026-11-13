@@ -90,6 +90,8 @@
 {"page.accessories", "Accessories"},
 {"page.this", "This page (scroll to choose another)"},
 {"page.open", "Click to open (scroll to choose)"},
+{"page.n", "Page {n}"},
+{"page.of", "Page {n} of {count}"},
 {"look.default", "Visibility: game default"},
 {"look.hidden", "Visibility: always hidden"},
 {"look.combat", "Visibility: shown only in combat"},

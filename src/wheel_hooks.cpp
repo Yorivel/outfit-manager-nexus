@@ -216,7 +216,13 @@ void center_for_focus(U64 self, U64 script, bool hide_otherwise)
         return;
     }
     U32 o = i < visible_slots() ? slot_outfit(i) : kOutfitSlots;
-    if (o < kOutfitSlots) {
+    if (o == kPageSlot) { // (#32: the page its dots chose, and what a click does)
+        g_center_name = lang::f("page.of", {{"n", std::to_string(g_page_pick + 1)}, {"count", std::to_string(page_count())}});
+        g_center_desc = lang::t(g_page_pick == g_page ? "page.this" : "page.open");
+        g_center_outfit = -1;
+        g_center_frames = 30;
+        center_show(self);
+    } else if (o <= g_outfits.size()) {
         std::uint8_t mode = slot_mode_of(i);
         bool saved = o < g_outfits.size();
         g_center_name = mode == kModeSettings ? std::string(lang::t(saved ? "center.outfit_settings" : "center.settings"))
@@ -448,12 +454,20 @@ void pump(U64 self)
             script, o, g_outfits.size());
         std::uint8_t mode = i < visible_slots() ? slot_mode_of(i) : std::uint8_t(kModeMain);
         bool press = click || space;
-        if (press && mode == kModeSettings && o <= g_outfits.size()) cfg_enter(self, o); // (the "+" slot: the plugin's)
+        if (press && o == kPageSlot) { // (#32: the page its dots chose; on this page already: the next one)
+            const U32 to = g_page_pick != g_page ? g_page_pick : (g_page + 1) % page_count();
+            LOG("outfit pages: page %u -> %u", g_page + 1, to + 1);
+            page_show(to);
+            reset_modes();
+            g_force_images = 3; // (the game resets the hovered slot's picture: set again for a few frames)
+            refresh_wheel(self);
+            center_for_focus(self, focused_script(self), true);
+        } else if (press && mode == kModeSettings && o <= g_outfits.size()) cfg_enter(self, o); // (the "+" slot: the plugin's)
         else if (press && mode == kModeRelease) { // (the "+" slot's Unequip Outfit, #21; none applied: nothing to do)
             if (anchor_outfit() >= 0) release_outfit(self);
             refresh_wheel(self);
             center_for_focus(self, focused_script(self), true);
-        } else if (press && o == g_outfits.size() && o < kOutfitSlots) save_new_outfit(self);
+        } else if (press && o == g_outfits.size()) save_new_outfit(self);
         else if (press && o < g_outfits.size()) start_loading(self, o), refresh_wheel(self);
     }
     // The worn armor can also change outside our loader (Armor tab, game events): rechecked when a model swaps (without
@@ -568,6 +582,14 @@ void scroll_slot(U64 self, U64 slot, U32 i, int step)
         cfg_scroll(self, i, step);
         return;
     }
+    if (slot_outfit(i) == kPageSlot) { // (#32: its dots choose a page; a click opens it)
+        const U32 n = page_count();
+        g_page_pick = (g_page_pick + n + U32(step + int(n))) % n;
+        LOG("scroll %s on the page slot: page %u chosen", step > 0 ? "next" : "prev", g_page_pick + 1);
+        apply_outfit_slots(self, i);
+        center_for_focus(self, slot, false);
+        return;
+    }
     U32 n = mode_count(i);
     std::uint8_t before = g_slot_mode[i];
     g_slot_mode[i] = std::uint8_t((before + n + step) % n);
@@ -581,6 +603,7 @@ U64 __fastcall scroll_next_hook(U64 slot) { return scroll_mode(slot, 1) ? 1 : g_
 
 U64 __fastcall close_hook(U64 self, U64 a, U64 b, U64 c, U64 d, U64 e)
 {
+    pages_on_close(); // (#32)
     bool sub = g_eye >= 0 || g_cfg >= 0;
     reset_modes();
     g_eye = -1, g_eye_step = 0, g_cfg = -1; // (the views end with the menu)
@@ -623,6 +646,7 @@ U64 __fastcall open_hook(U64 self, U64 a, U64 b, U64 c)
     g_ui_thread = GetCurrentThreadId();
     center_restore();
     prepare_outfits(); // (each character has its own outfits: the wheel shows those of the one it opens for)
+    pages_on_open();   // (#32: the last page, or the applied outfit's when it changed since)
     U64 r = g_open_orig(self, a, b, c);
     g_menu_open = true;
     g_gear_resist.clear(); // (abyss gears can change between opens: read again)

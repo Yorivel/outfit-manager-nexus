@@ -45,6 +45,10 @@
 .self-center.om-look-combat-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_combat); }
 .self-center.om-look-peace-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_peace); }
 .self-center.om-return-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_return); }
+/* #32 outfit pages: the page slot's dot for the page holding the applied outfit, gold (the Equipped tag's colour);
+   brighter while it is the dot chosen. */
+.common-select-icon-bg.om-dot-gold { background-color: #cb9349; }
+.common-select-icon-bg.om-dot-gold.cpp-checked { background-color: #f2c47a; }
 /* The settings view: a setting's name (and its value below it) on the slot's charge-count text, centred in the segment
    (its wrap is an anchor at the slot's centre); an action's name sits above the centre with the game's click prompt
    (om-prompt-c, its key guide icon) below. */

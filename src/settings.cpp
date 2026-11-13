@@ -287,6 +287,7 @@ void cfg_enter(U64 self, U32 o)
 void cfg_leave(U64 self)
 {
     LOG("settings view: back to the outfits");
+    if (g_cfg >= 0 && size_t(g_cfg) < g_outfits.size()) page_show(page_of(size_t(g_cfg))); // (#32: where it is now)
     g_cfg = -1;
     g_center_desc.clear();
     reset_modes();

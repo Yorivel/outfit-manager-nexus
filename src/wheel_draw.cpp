@@ -346,6 +346,52 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
     if (!ok) LOG("  appearance slot %u: class change skipped (%s)", i, describe(root).c_str());
 }
 
+// The outfits' page slot (#32): "Page N" (the page its dots chose) as a label, the click prompt, one dot per page.
+void apply_page_slot(U64 self, U64 script, U64 root, U32 i, U32 visible)
+{
+    show_slot_image(self, root, i, std::string());
+    show_mode_dots(script, mode_count(i), mode_lit(i));
+    U64 badge = find_by_class(root, "quickslot-occupancy-icon-chain"), low = find_by_class(root, "cpp-icon-disable-item");
+    const char* want = prompt_class();
+    g_badge_elem[i] = badge, g_badge_class[i] = want;
+    bool ok = true;
+    if (badge) {
+        ok &= set_class(badge, "self-center", true);
+        for (const char* c : kBadges) ok &= set_class(badge, c, want && !std::strcmp(want, c));
+        ok &= set_class(badge, "!cpp-none", !want);
+    }
+    U64 mark = find_parent_of_class(root, "charged-count");
+    if (mark) {
+        ok &= set_class(mark, "self-center", true) && set_class(mark, "om-label-wrap", true);
+        ok &= set_class(mark, "om-eye-c", false) && set_class(mark, "om-eye2-c", false) && set_class(mark, "!cpp-none", false);
+        if (U64 text = find_by_class(mark, "charged-count")) {
+            const std::string label = lang::f("page.n", {{"n", std::to_string(g_page_pick + 1)}});
+            if (g_set_text) g_set_text(text, label.c_str(), 0);
+            ok &= set_class(text, "om-label", true) && set_class(text, "om-label-value", false);
+        }
+    }
+    g_mark_elem[i] = mark, g_mark_shown[i] = mark != 0;
+    ok &= show_value(root, "");
+    g_slot_image[i].missing = false;
+    ok &= set_class(root, "!cpp-none", false);
+    if (U64 img = find_by_class(root, "quickslot-item-img"))
+        ok &= set_class(img, "om-missing", false) && set_class(img, "om-present", true);
+    ok &= swap_class(root, g_slot_class[i], numbered("om-s%u-%u", visible, i));
+    U64 icon = rp(script + kOffScriptCategoryIcon);
+    if (icon && is_element(icon)) {
+        ok &= set_class(icon, "quickslot-item-image-none", false);
+        ok &= swap_class(icon, g_placeholder_class[i], std::string());
+        ok &= set_class(icon, "om-empty-armor", false) && set_class(icon, "om-empty-sword", false) &&
+              set_class(icon, "om-empty-necklace", false);
+        ok &= set_class(icon, "!cpp-none", true) && set_class(icon, "om-missing", false);
+    }
+    g_low_elem[i] = low, g_low_shown[i] = false;
+    if (low) ok &= swap_class(low, g_worn_class[i], "") && set_class(low, "!cpp-none", true);
+    if (U64 focus = find_by_class(root, "quickslot-item-focus-bg-10"))
+        ok &= swap_class(focus, g_focus_class[i], numbered("om-f%u-%u", visible, i));
+    if (!ok) LOG("  page slot %u: class change skipped (%s)", i, describe(root).c_str());
+}
+
 // The settings view's label on a slot's charge-count wrap: taken off (the outfits and the pieces don't show one).
 bool clear_label(U64 mark)
 {
@@ -418,6 +464,10 @@ void apply_outfit_slots(U64 self, U32 only)
         }
         if (g_cfg >= 0) {
             apply_cfg_slot(self, script, root, i, visible);
+            continue;
+        }
+        if (i < visible && slot_outfit(i) == kPageSlot) { // (#32)
+            apply_page_slot(self, script, root, i, visible);
             continue;
         }
         bool empty = i < visible && slot_outfit(i) >= g_outfit_count;
@@ -562,7 +612,9 @@ U32 mode_count(U32 i)
         return k < n ? kLookCount : k == n ? kEyeSteps : 0;
     }
     if (g_cfg >= 0) return cfg_dots(i, nullptr);
-    // (an outfit: its action, its settings; the "+" slot once outfits exist: Unequip Outfit, Save, Settings - #21)
+    // (an outfit: its action, its settings; the "+" slot once outfits exist: Unequip Outfit, Save, Settings - #21; the page
+    // slot: one per page, #32)
+    if (slot_outfit(i) == kPageSlot) return page_count();
     return slot_outfit(i) == g_outfits.size() && !g_outfits.empty() ? 3 : 2;
 }
 // What slot i's lit dot does (a SlotMode): the dot itself, but the "+" slot's three are Unequip / Save / Settings.
@@ -581,7 +633,7 @@ U32 mode_lit(U32 i)
         U32 lit = 0;
         return cfg_dots(i, &lit) ? lit : 0xFFFFFFFFu;
     }
-    if (g_eye < 0) return g_slot_mode[i];
+    if (g_eye < 0) return slot_outfit(i) == kPageSlot ? g_page_pick : g_slot_mode[i];
     std::vector<size_t> pieces = eye_pieces();
     U32 k = slot_outfit(i);
     return k < pieces.size() ? look_pos(eye_look(pieces[k])) : k == pieces.size() ? g_eye_pick : 0xFFFFFFFFu;
@@ -641,6 +693,23 @@ void show_mode_dots(U64 script, U32 count, U32 mode)
     if (!g_dots_logged) g_dots_logged = true, LOG("slot dots: %u, %u lit (selector %llX)", count, mode, sel);
 }
 
+// #32: the page slot's dot for the applied outfit's page gold (om-dot-gold on the dot's -bg element: the game's
+// quickslot-select-icon-wrap > common-select-icon > common-select-icon-bg); any other slot's dots plain (the page slot
+// moves between the physical slots as pages change).
+void gold_page_dot(U64 script, bool page_slot)
+{
+    U64 root = script ? rp(script + 8) : 0;
+    U64 wrap = root ? find_by_class(root, "quickslot-select-icon-wrap") : 0;
+    if (!wrap) return;
+    const int applied = anchor_outfit();
+    const int gold = page_slot && applied >= 0 && !g_unmanaged.count(g_character) ? int(page_of(size_t(applied))) : -1;
+    U64 kids = rp(wrap + 0x40);
+    U32 count = r32(wrap + 0x48);
+    for (U32 k = 0; kids && k < count && k < 32; ++k)
+        if (U64 bg = find_by_class(rp(kids + k * 8ull), "common-select-icon-bg", 1))
+            if (has_class(bg, "om-dot-gold") != (int(k) == gold)) set_class(bg, "om-dot-gold", int(k) == gold);
+}
+
 // Every frame: the visible slots' dots as they should be (cheap: two reads each; the select only on a difference).
 void keep_mode_dots(U64 self)
 {
@@ -649,8 +718,14 @@ void keep_mode_dots(U64 self)
     if (!sv || !g_selector_select) return;
     U64 arr = rp(sv + tab * 0x10ull);
     U32 cnt = r32(sv + tab * 0x10ull + 8), visible = visible_slots();
+    const bool wheel = g_eye < 0 && g_cfg < 0;
+    static bool had_pages = false; // (once there were pages, the dots stay checked: a gold one is taken off again)
+    had_pages |= paged();
     for (U32 i = 0; arr && i < cnt && i < visible && i < kOutfitSlots; ++i)
-        if (U64 script = rp(arr + i * 8ull)) show_mode_dots(script, mode_count(i), mode_lit(i));
+        if (U64 script = rp(arr + i * 8ull)) {
+            show_mode_dots(script, mode_count(i), mode_lit(i));
+            if (had_pages) gold_page_dot(script, wheel && slot_outfit(i) == kPageSlot);
+        }
 }
 
 // The 12-slot ring texture (QuickSlotItemListBg) is shared by every tab body: on the Outfits tab it gets the

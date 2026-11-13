@@ -4,6 +4,7 @@
 #include "addrs.h"
 #include "ui.h"
 #include "gear.h"
+#include "looks_view.h"
 #include "store.h"
 #include "prompts.h"
 #include "settings.h"
@@ -46,6 +47,7 @@ void save_new_outfit(U64 self)
     if (int a = anchor_outfit(); a >= 0) carry_looks(g_outfits[size_t(a)], o); // (a changed outfit saved as new looks the same)
     g_outfits.push_back(o);
     g_outfit_count = static_cast<U32>(g_outfits.size());
+    page_show(page_count() - 1); // (#32: the new outfit's page, the last)
     LOG("saved \"%s\" (%zu items, chest %s)", o.name.c_str(), o.items.size(),
         o.chest_icon.empty() ? "none" : o.chest_icon.c_str());
     save_outfits();
