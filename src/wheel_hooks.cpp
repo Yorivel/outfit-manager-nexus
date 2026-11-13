@@ -45,20 +45,20 @@ std::atomic<U32> g_fake_key{0xFFFF}; // record index served from g_fake_rec (0xF
 U64 g_outfits_root = 0; // the menu the Outfits tab was injected into (build_hook)
 
 // --- Outfits tab --------------------------------------------------------------------------------
-// The count the body builder iterates: (***root + 8) -> +0x460 -> +8 (root depends on a TLS flag,
+// The count the body builder iterates: (***root + 8) -> +0x438 -> +0x28 (2.05; root depends on a TLS flag,
 // so both candidates are adjusted).
 U64 qsi_table(U64 root_rva)
 {
     U64 p = rp(g_base + root_rva);
     p = p ? rp(p) : 0;
     p = p ? rp(p + 8) : 0;
-    return p ? rp(p + 0x460) : 0;
+    return p ? rp(p + 0x438) : 0; // (game 2.05: +0x438, was +0x460; the count in it at +0x28, was +8)
 }
 
-U64 __fastcall qsi_get_hook(U64 unused, U32 key)
+U64 __fastcall qsi_get_hook(const U16* key)
 {
-    if (U16(key) == g_fake_key.load()) return reinterpret_cast<U64>(g_fake_rec);
-    return g_qsi_get(unused, key);
+    if (key && *key == g_fake_key.load()) return reinterpret_cast<U64>(g_fake_rec);
+    return g_qsi_get(key);
 }
 
 // Equip slot ids of the template (Armor) record's slots, read before the fake slots are cleared.
@@ -80,7 +80,7 @@ constexpr U16 kWeaponRecord = 0;
 void collect_weapon_slots()
 {
     U16 key = kWeaponRecord;
-    U64 rec = g_qsi_get(0, key);
+    U64 rec = by_key(g_qsi_get, key);
     U64 slots = rec ? rp(rec + kRecSlots) : 0;
     U32 n = rec ? r32(rec + kRecSlotCount) : 0;
     // (read on the UI thread and, at the loading screen, the game's: filled whole, then counted; the same values)
@@ -105,7 +105,7 @@ void collect_weapon_slots()
 bool prepare_fake_record()
 {
     U16 key = kTemplateRecord;
-    U64 rec = g_qsi_get(0, key);
+    U64 rec = by_key(g_qsi_get, key);
     U64 slots = rec ? rp(rec + kRecSlots) : 0;
     if (!slots || r32(rec + kRecSlotCount) != kOutfitSlots) {
         LOG("template record %u unusable (rec %llX slots %u)", key, rec, rec ? r32(rec + kRecSlotCount) : 0);
@@ -178,7 +178,7 @@ void center_for_focus(U64 self, U64 script, bool hide_otherwise)
         center_show(self);
         return;
     }
-    if (g_eye >= 0 && size_t(g_eye) < g_outfits.size()) { // the Appearance view: the piece and its look / the page step
+    if (g_eye >= 0 && size_t(g_eye) <= g_outfits.size()) { // the Appearance view (an outfit's, or no outfit's: #33): the piece and its look / the page step
         std::vector<size_t> pieces = eye_pieces();
         U32 k = i < visible_slots() ? slot_outfit(i) : kOutfitSlots;
         static const char* const kLookText[kLookCount] = { // (by Look value)
@@ -189,10 +189,17 @@ void center_for_focus(U64 self, U64 script, bool hide_otherwise)
             const OutfitItem& it = *eye_item(pieces[k], tmp);
             std::string nm = it.key != 0xFFFF ? item_name(it.key) : std::string();
             if (pieces[k] == kUnderwearPiece) nm = lang::t("piece.underwear");
-            if (pieces[k] == kBackPiece)
+            // (Oongka's slot 23 carries his cannon, not a shield: named like the other carried weapons)
+            const bool carried = pieces[k] == kCarriedSlotA || pieces[k] == kCarriedSlotB || (pieces[k] == kBackPiece && g_character == 5);
+            if (carried)
+                nm = nm.empty() ? std::string(lang::t("piece.carried")) : lang::f("piece.carried_item", {{"item", nm}});
+            else if (pieces[k] == kBackPiece)
                 nm = nm.empty() ? std::string(lang::t("piece.back_shield")) : lang::f("piece.back_shield_item", {{"item", nm}});
             g_center_name = nm.empty() ? std::string(lang::t("piece.empty")) : nm;
             g_center_desc = lang::t(kLookText[it.look < kLookCount ? it.look : 0]);
+            if (pieces[k] == kHelmetSlot) // (the helmet key overrides it: say so, #34)
+                if (const std::uint8_t pin = helmet_pin(g_character))
+                    g_center_desc = lang::f(pin == 1 ? "look.helmetkey.hidden" : "look.helmetkey.shown", {{"look", g_center_desc}});
         } else if (k == pieces.size()) {
             g_center_name = lang::t(kStepName[g_eye_pick]);
             g_center_desc = lang::t(g_eye_pick == g_eye_step ? "page.this" : "page.open");
@@ -209,7 +216,13 @@ void center_for_focus(U64 self, U64 script, bool hide_otherwise)
         return;
     }
     U32 o = i < visible_slots() ? slot_outfit(i) : kOutfitSlots;
-    if (o < kOutfitSlots) {
+    if (o == kPageSlot) { // (#32: the page its dots chose, and what a click does)
+        g_center_name = lang::f("page.of", {{"n", std::to_string(g_page_pick + 1)}, {"count", std::to_string(page_count())}});
+        g_center_desc = lang::t(g_page_pick == g_page ? "page.this" : "page.open");
+        g_center_outfit = -1;
+        g_center_frames = 30;
+        center_show(self);
+    } else if (o <= g_outfits.size()) {
         std::uint8_t mode = slot_mode_of(i);
         bool saved = o < g_outfits.size();
         g_center_name = mode == kModeSettings ? std::string(lang::t(saved ? "center.outfit_settings" : "center.settings"))
@@ -218,6 +231,7 @@ void center_for_focus(U64 self, U64 script, bool hide_otherwise)
                         : saved                              ? g_outfits[o].name
                         : g_outfits.size() >= kMaxOutfits    ? std::string(lang::t("center.limit"))
                                                              : std::string(lang::t("center.save"));
+        g_center_desc.clear(); // (an outfit's disc has no caption: the page slot's stayed, 2026-11-13)
         g_center_outfit = saved && mode == kModeMain ? int(o) : -1;
         g_center_frames = 30;
         center_show(self);
@@ -441,12 +455,20 @@ void pump(U64 self)
             script, o, g_outfits.size());
         std::uint8_t mode = i < visible_slots() ? slot_mode_of(i) : std::uint8_t(kModeMain);
         bool press = click || space;
-        if (press && mode == kModeSettings && o <= g_outfits.size()) cfg_enter(self, o); // (the "+" slot: the plugin's)
+        if (press && o == kPageSlot) { // (#32: the page its dots chose; on this page already: the next one)
+            const U32 to = g_page_pick != g_page ? g_page_pick : (g_page + 1) % page_count();
+            LOG("outfit pages: page %u -> %u", g_page + 1, to + 1);
+            page_show(to);
+            reset_modes();
+            g_force_images = 3; // (the game resets the hovered slot's picture: set again for a few frames)
+            refresh_wheel(self);
+            center_for_focus(self, focused_script(self), true);
+        } else if (press && mode == kModeSettings && o <= g_outfits.size()) cfg_enter(self, o); // (the "+" slot: the plugin's)
         else if (press && mode == kModeRelease) { // (the "+" slot's Unequip Outfit, #21; none applied: nothing to do)
             if (anchor_outfit() >= 0) release_outfit(self);
             refresh_wheel(self);
             center_for_focus(self, focused_script(self), true);
-        } else if (press && o == g_outfits.size() && o < kOutfitSlots) save_new_outfit(self);
+        } else if (press && o == g_outfits.size()) save_new_outfit(self);
         else if (press && o < g_outfits.size()) start_loading(self, o), refresh_wheel(self);
     }
     // The worn armor can also change outside our loader (Armor tab, game events): rechecked when a model swaps (without
@@ -561,6 +583,14 @@ void scroll_slot(U64 self, U64 slot, U32 i, int step)
         cfg_scroll(self, i, step);
         return;
     }
+    if (slot_outfit(i) == kPageSlot) { // (#32: its dots choose a page; a click opens it)
+        const U32 n = page_count();
+        g_page_pick = (g_page_pick + n + U32(step + int(n))) % n;
+        LOG("scroll %s on the page slot: page %u chosen", step > 0 ? "next" : "prev", g_page_pick + 1);
+        apply_outfit_slots(self, i);
+        center_for_focus(self, slot, false);
+        return;
+    }
     U32 n = mode_count(i);
     std::uint8_t before = g_slot_mode[i];
     g_slot_mode[i] = std::uint8_t((before + n + step) % n);
@@ -574,6 +604,7 @@ U64 __fastcall scroll_next_hook(U64 slot) { return scroll_mode(slot, 1) ? 1 : g_
 
 U64 __fastcall close_hook(U64 self, U64 a, U64 b, U64 c, U64 d, U64 e)
 {
+    pages_on_close(); // (#32)
     bool sub = g_eye >= 0 || g_cfg >= 0;
     reset_modes();
     g_eye = -1, g_eye_step = 0, g_cfg = -1; // (the views end with the menu)
@@ -616,6 +647,7 @@ U64 __fastcall open_hook(U64 self, U64 a, U64 b, U64 c)
     g_ui_thread = GetCurrentThreadId();
     center_restore();
     prepare_outfits(); // (each character has its own outfits: the wheel shows those of the one it opens for)
+    pages_on_open();   // (#32: the last page, or the applied outfit's when it changed since)
     U64 r = g_open_orig(self, a, b, c);
     g_menu_open = true;
     g_gear_resist.clear(); // (abyss gears can change between opens: read again)

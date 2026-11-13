@@ -8,6 +8,8 @@
 
 namespace om {
 
+constexpr U64 kQsiCountAt = 0x28; // (the quick slot table's record count: +0x28 since game 2.05, +8 before)
+
 // --- UI elements --------------------------------------------------------------------------------
 // Element: +0x20 class holder {element*, vector<u32 classId>*}. Script object: +8 element.
 std::string class_name(U32 id)
@@ -67,7 +69,7 @@ std::string str_id(U64 at)
 {
     U16 id = 0xFFFF;
     if (!rd(at, id)) return "?";
-    U64 si = g_str_get(0, id);
+    U64 si = by_key(g_str_get, id);
     std::string s = si ? cstr(rp(rp(si + 0x10))) : std::string();
     char b[16];
     std::snprintf(b, sizeof b, "[%u]", id);
@@ -77,11 +79,11 @@ std::string str_id(U64 at)
 void dump_quickslotinfo()
 {
     U64 mgr = rp(g_base + kRvaQuickSlotInfoMgr);
-    U32 count = mgr ? r32(mgr + 8) : 0;
+    U32 count = mgr ? r32(mgr + kQsiCountAt) : 0;
     LOG("QuickSlotInfo mgr %llX: %u records", mgr, count);
     for (U32 i = 0; i < count && i < 16; ++i) {
         U16 key = static_cast<U16>(i);
-        U64 rec = g_qsi_get(0, key);
+        U64 rec = by_key(g_qsi_get, key);
         if (!rec) continue;
         U32 slots = r32(rec + kRecSlotCount);
         U64 sarr = rp(rec + kRecSlots);
@@ -183,7 +185,7 @@ U64 __fastcall build_hook(U64 self, U64 out, U64 a, U64 b)
     U64 tables[2] = {qsi_table(kRvaQsiTableRoot0), qsi_table(kRvaQsiTableRoot1)};
     U64 tb = rp(self + kOffRootTabBar);
     U32 headers = tb ? r32(tb + kOffTabHeaderCount) : 0;
-    U32 records = tables[0] ? r32(tables[0] + 8) : 0;
+    U32 records = tables[0] ? r32(tables[0] + kQsiCountAt) : 0;
     LOG("build bodies: self %llX tabbar %llX headers=%u records=%u tables %llX %llX", self, tb, headers, records,
         tables[0], tables[1]);
 
@@ -199,14 +201,14 @@ U64 __fastcall build_hook(U64 self, U64 out, U64 a, U64 b)
     U32 bumped[2] = {};
     for (int i = 0; i < 2; ++i) {
         if (!tables[i] || (i == 1 && tables[1] == tables[0])) continue;
-        U32* cnt = reinterpret_cast<U32*>(tables[i] + 8);
+        U32* cnt = reinterpret_cast<U32*>(tables[i] + kQsiCountAt);
         if (*cnt != records) continue;
         *cnt = records + 1;
         bumped[i] = 1;
     }
     U64 r = g_build_orig(self, out, a, b);
     for (int i = 0; i < 2; ++i)
-        if (bumped[i]) *reinterpret_cast<U32*>(tables[i] + 8) = records;
+        if (bumped[i]) *reinterpret_cast<U32*>(tables[i] + kQsiCountAt) = records;
     LOG("  injected record %u; result %u, bodies now %u", records, r32(out), r32(self + kOffRootBodyCount));
     return r;
 }

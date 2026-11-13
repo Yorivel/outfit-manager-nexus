@@ -20,6 +20,7 @@ extern const char* g_store_why;
 extern std::vector<U32> g_placeholder_ids;
 bool write_store_file();
 bool pull_active();
+void normalize_pins(std::vector<Outfit>& v);
 void save_outfits();
 void load_outfits();
 bool switch_character(U16 character);

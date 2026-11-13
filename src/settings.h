@@ -15,6 +15,7 @@ extern std::string g_detected_language;
 const char* character_name(U16 key);
 extern std::atomic<bool> g_peek_capture;
 std::vector<std::uint8_t> cfg_entries();
+int cfg_gold(U32 i); // (#35: the settings view slot's gold dot, -1 none)
 std::vector<const char*> cfg_values(std::uint8_t k, U32& cur);
 std::string cfg_value_text(std::uint8_t k, const char* v);
 std::string cfg_title(std::uint8_t k);

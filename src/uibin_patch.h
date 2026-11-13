@@ -12,7 +12,8 @@
 namespace uibin {
 
 struct Report {
-    int headers = 0, values = 0, peeks = 0;
+    int headers = 0, values = 0, peeks = 0, centre = 0;
+    std::string centre_skipped; // (why the centre badges weren't added: the rest still is)
     std::string error; // why nothing was changed
 };
 

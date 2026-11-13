@@ -49,14 +49,25 @@ constexpr U64 kVfUiMgr = 0x118; // slot 35 (34 before the 2026-10-30 update)
 
 constexpr U16 kTemplateRecord = 1; // Armor: 12 item slots
 constexpr U32 kOutfitSlots = 12;
-constexpr U32 kMaxOutfits = kOutfitSlots - 1; // the last slot is always the "+" (saving, the global settings)
+// #32 outfit pages: up to kPagelessMax outfits share one page with the "+" slot (as before); with more, each page has
+// kPageOutfits outfits, the page slot and the "+" slot. kMaxOutfits: a safety cap only.
+constexpr U32 kPagelessMax = kOutfitSlots - 1;
+constexpr U32 kPageOutfits = kOutfitSlots - 2;
+constexpr U32 kMaxOutfits = 200;
+constexpr U32 kPageSlot = 0xFFFFFFF0u; // (slot_outfit's value for the page slot)
 constexpr U32 kRecordSize = 0x30; // (copied whole; the 2026-10-30 header is 8 bytes shorter)
 // QuickSlotInfo record: slot count and slot array (+0x14 / +0x20 before the 2026-10-30 update)
 constexpr U32 kRecSlotCount = 0x0c, kRecSlots = 0x18;
 constexpr U32 kSlotSize = 0x50;
 
-// The static-info getters take the key by value since the 2026-10-30 update (first argument unused; was const u16*).
-using RecordGetFn = U64(__fastcall*)(U64, U32);
+// The static-info getters take the key by pointer (const u16*) - as before 2026-10-30, again since game 2.05 (2026-11-13);
+// in between: (unused, u32 key). by_key calls one with a key.
+using RecordGetFn = U64(__fastcall*)(const U16* key);
+inline U64 by_key(RecordGetFn f, U32 key)
+{
+    const U16 k = static_cast<U16>(key);
+    return f(&k);
+}
 
 using OpenFn = U64(__fastcall*)(U64, U64, U64, U64);
 using TabFn = U64(__fastcall*)(U64, U64, U64, U64, U64, U64);
@@ -86,7 +97,7 @@ using ErrorTextFn = U64(__fastcall*)(U64, const int*);
 // (its entry +4 = the destination bag). It only sends the request: the game checks it a moment later (and says why
 // when it refuses), so whether a piece moved is seen in the bag afterwards.
 using ItemMoveFn = int*(__fastcall*)(U64, int*, U32, U32, short, U16, U64, U16, U16, U32);
-using BagInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
+using BagInfoFn = RecordGetFn; // (key)
 
 // Companions (actor kind != 1) only change gear through the game's UI requests (the wheel's / inventory's path):
 // equip takes an item copy {200-byte item, u16 +0xc8, u16 bag position +0xca} (its bag comes from the item type).
@@ -133,8 +144,15 @@ struct Outfit {
     // while exactly its weapons are worn. Its armour stays saved: back to Load / Leave, it is an outfit again.
     bool weapons_only = false;
     std::string weapon_icon; // (the main weapon's icon, for a weapon set's picture: set when saved / loaded)
+    U16 icon_slot = 0; // a weapon set's Icon setting: 0 its main weapon, else the equip slot + 1 of the weapon pictured
     std::uint8_t climate = 0; // Conditions: 0 Auto (from its resistance), 1 Cold, 2 Heat (manual), 3 Off (a badge only)
     std::uint8_t stash = 0;   // Conditions: Stash, 0 = the global setting, 1 on, 2 off
+    // Activity (2026-11-09): what the outfit is worn for, put on when the character starts it (several: one at random),
+    // the outfit or items worn before back when it ends. kActivitySleep: in bed (sleep.cpp); its own looks win over the
+    // game's in-bed hiding. (The first build's "Sleepwear: On" reads as Sleeping.)
+    std::uint8_t activity = 0; // kActivityNone / kActivitySleep
+    // A temporary outfit (sleep.cpp: the pieces worn before a sleep, going back on): loaded like any other, never saved.
+    bool temp = false;
     // Its hotkey (the outfit's settings, 2026-11-06): a key or mouse button (virtual-key code; 0 = none) and the
     // modifiers held with it (kModCtrl / kModAlt / kModShift; none: the key alone). Pressed in play, the outfit loads.
     U16 hk_vk = 0;
@@ -142,6 +160,11 @@ struct Outfit {
     // The character's last loaded outfit (one per character, kept per save): its pieces' looks apply wherever the exact
     // piece is worn in its slot, also after other slots were changed by hand.
     bool worn = false;
+    // The Outfit Arc (#32): pinned outfits are on it in pin order (1.. as they were pinned); 0: not pinned (on it among
+    // the recent ones while it is one of the last applied); -1: not read (a file from before pins: pinned, in the
+    // wheel's order - normalize_pins). used: when it was last applied (a count over the character's outfits; 0 never).
+    int pin = -1;
+    U32 used = 0;
     // The shield the character always carries on its back (equipment-23: it shows whatever the shield slot holds; on
     // no wheel, so in no outfit): its look in this outfit (a Look), applied to whatever is in that slot.
     std::uint8_t back_look = 0;
@@ -151,8 +174,20 @@ struct Outfit {
     std::uint8_t has_back = 0;
     // Looks of the slots the outfit holds nothing in (a look belongs to the slot: it applies to whatever is worn there).
     std::map<U16, std::uint8_t> empty_looks;
+    // Character look (#35): the character's barber look (charlook.cpp: 16 mesh options + 250 values, as the game keeps
+    // them) taken by hand from the settings; char_look 1: the outfit brings it while applied, 0: not (a snapshot taken
+    // is kept). Never updated by the outfit itself.
+    std::uint8_t char_look = 0;
+    std::string look_snap; // (raw bytes; empty: none taken)
 };
+constexpr std::uint8_t kActivityNone = 0, kActivitySleep = 1, kActivityCount = 2;
 constexpr U16 kBackShieldSlot = 23;
+// The display slots (the game's equip slot table, CDInventory/tools/equipslots.py): on no wheel, each shows a carried
+// weapon on the body, mirroring a weapon slot - Kliff 22 sword, 23 shield, 24 bow; Damiane 22 rapier, 23 right-hand
+// shield, 24 pistol; Oongka 22 two-hand axe, 23 cannon. 23 has its look in Outfit::back_look, 22 / 24 as slot looks.
+constexpr U16 kCarriedSlotA = 22, kCarriedSlotB = 24;
+constexpr U16 kLanternSlot = 15;
+inline bool is_display_slot(U16 slot) { return slot >= kCarriedSlotA && slot <= kCarriedSlotB; }
 constexpr U32 kMaxWeaponSlots = 16;
 constexpr U32 kWornMax = kOutfitSlots + kMaxWeaponSlots; // worn entries: armour, then weapons
 
@@ -163,6 +198,20 @@ constexpr U16 kNoCharacter = 0xFFFF;
 struct CharacterOutfits {
     U16 character;
     std::vector<Outfit> outfits;
+    std::uint8_t helmet_pin = 0; // the helmet key's pin (#34: 0 none, 1 hidden, 2 shown): bound to saves with the outfits
+    // #35: the character's own look, the No Outfit one (raw, charlook.cpp; empty: not seen yet). Bound to saves with the
+    // outfits (the game's save may hold an outfit's look: the barber's change saved to it).
+    std::string look_base;
+    // #33: the looks while no outfit is applied (only its empty_looks, back_look and underwear_look are used); edited in
+    // the Appearance view from the "+" slot's settings, bound to saves with the outfits
+    Outfit no_outfit;
+    bool no_outfit_set() const
+    {
+        if (no_outfit.back_look || no_outfit.underwear_look) return true;
+        for (const auto& [slot, look] : no_outfit.empty_looks)
+            if (look) return true;
+        return false;
+    }
 };
 using Store = std::deque<CharacterOutfits>; // deque: references stay valid when a character is added
 constexpr std::uint8_t kEyeSteps = 3;
@@ -217,12 +266,13 @@ struct Busy {
 // Fire Resistance, 0x705 Ice, 0x706 Lightning; the others are other passives (0x70a fishing cooldown, 0x6xx ...).
 // Levels add up over the worn pieces; 5 / 10 / 15 each cancel one of the cold / heat gauge's three bars, 15 also gives
 // immunity to Freeze / Burn. Item data never changes in a session: cached per key.
-using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
+using ItemInfoFn = RecordGetFn; // (key)
 
 const char* const kBadges[] = {"om-plus-big", "om-cog-big", "om-plus-c", "om-cog-c", "om-flag-c", "om-cold-c", "om-heat-c",
                                "om-cold2-c", "om-heat2-c", "om-eye-c", "om-look-shown-c", "om-look-hidden-c",
                                "om-look-combat-c", "om-look-peace-c", "om-return-c", "om-prompt-c", "om-cross-c",
-                               "om-abtn-c", "om-unequip-c", "om-wset-c", "om-wset-gold-c", "om-wset-busy-c"};
+                               "om-abtn-c", "om-unequip-c", "om-wset-c", "om-wset-gold-c", "om-wset-busy-c",
+                               "om-sleep-c", "om-lookmain-c"};
 // The game's slot refresh (after every equipment change) re-selects every slot's dots with its own count (0 for ours:
 // no items) and -1: the select is hooked, and for our slots' selectors it gets our count and mode instead, so the dots
 // never go blank. Our own calls pass through it as well. Our slots are looked up live (the Outfits menu's slot list).
@@ -236,14 +286,18 @@ using SlotRefreshFn = void(__fastcall*)(U64);
 // Save binding. The game's save writes / loads are seen on its own threads (file hook, folder watch), so they work
 // on g_published, a copy of the active set the UI thread publishes after each change (all under g_store_mu).
 // A load replaces g_published and bumps g_generation; the UI thread then takes it over (pull_active).
-// A save is recognised by its save.save content (hash), with size + write time as the quick check.
+// A save is recognised by its save.save content (hash), with size + write time as the quick check. A save whose bytes
+// changed (a save editor) is still the same save if its world clock and place match (savekey.cpp).
 struct SaveId {
     U64 size = 0, time = 0, hash = 0; // 0 = not known
+    U64 clock = 0;                    // the save's world clock (_fieldTimeRaw), 0 = not known
+    U32 place = 0;                    // a hash of the position it was made at
     bool same(const SaveId& o) const
     {
         if (hash && o.hash) return hash == o.hash;
         return size && size == o.size && time == o.time;
     }
+    bool same_moment(const SaveId& o) const { return clock && clock == o.clock && place && place == o.place; }
 };
 struct BoundSet {
     SaveId id;
@@ -361,7 +415,7 @@ struct PieceCheck {
     std::vector<std::pair<size_t, U64>> copies; // outfit item index -> uid of the copy offered for it
     std::vector<size_t> gone;                   // item indices with no copy
 };
-using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
+using ItemInfoFn = RecordGetFn; // (key)
 
 // A prompt takes the input while it is open, so the gear menu misses the release of the button that holds it open
 // and stays up afterwards. Once a prompt is gone, do what the game's release handler (0x1098f10, event 1) does.
@@ -396,12 +450,12 @@ struct AskedLoad {
     bool takes_answered = false, take = false, copies_answered = false, use_copies = false;
 };
 
-enum Confirm { kConfirmNone, kConfirmOverwrite, kConfirmDelete, kConfirmSwap, kConfirmCleanSave, kConfirmUninstall };
+enum Confirm { kConfirmNone, kConfirmOverwrite, kConfirmDelete, kConfirmSwap, kConfirmCleanSave, kConfirmUninstall, kConfirmBarberLook };
 
 enum CfgKind : std::uint8_t {
     kCfgVisibility, kCfgClimate, kCfgWeapons, kCfgStash, kCfgPosition, kCfgRename, kCfgOverwrite, kCfgDelete, // a saved outfit's
     kCfgGStash, kCfgParty, kCfgMessages, kCfgClear, kCfgUninstall,                               // the "+" slot's
-    kCfgBack, kCfgLanguage, kCfgPeekKey, kCfgPeekPad, kCfgHotkey, kCfgEffects
+    kCfgBack, kCfgLanguage, kCfgPeekKey, kCfgPeekPad, kCfgHotkey, kCfgEffects, kCfgActivity, kCfgHelmetKey, kCfgLook, kCfgIcon
 };
 
 // Every move gives the piece a new uid. The stash knows what it moved, so it follows each piece exactly: the copy of its

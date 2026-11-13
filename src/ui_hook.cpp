@@ -63,6 +63,8 @@ void ui_patch_stream(U64 stream, const std::string& path, unsigned what)
     if (r.headers) ++g_ui_tab_added;
     LOG("gear wheel UI: %s: %d tab header(s), %d value text(s), %d peek(s) added (%u -> %zu bytes)", path.c_str(),
         r.headers, r.values, r.peeks, size, kept.size());
+    if (r.centre) LOG("ui patch: centre badges in %d tooltip(s)", r.centre);
+    if (!r.centre_skipped.empty()) LOG("ui patch: no centre badges (%s)", r.centre_skipped.c_str());
 }
 
 U64 __fastcall ui_parse_hook(U64 loader, U64 stream)

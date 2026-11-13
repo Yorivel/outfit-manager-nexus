@@ -137,9 +137,9 @@ void put32(Bytes& b, size_t at, std::uint32_t v) { std::memcpy(b.data() + at, &v
 
 // The element whose id string (length-prefixed) is at `at`: parse back from up to 12000 bytes before it (the id comes
 // after the children: a tracker is ~3000 bytes).
-bool element_of(const Bytes& b, size_t at, SV id, size_t& start, size_t& end, std::vector<Found>& found)
+bool element_of(const Bytes& b, size_t at, SV id, size_t& start, size_t& end, std::vector<Found>& found, size_t back = 12000)
 {
-    size_t lo = at > 12000 ? at - 12000 : 0;
+    size_t lo = at > back ? at - back : 0;
     for (size_t s = at; s-- > lo + 1;) { // (s from at-1 down to lo+1, as the tool's range(at - 1, lo, -1))
         if (b[s] != 1) continue;
         found.clear();
@@ -257,10 +257,20 @@ bool add_values(Bytes& res, Report& r)
         Bytes caps; // (the hotkey's key caps, after the value text)
         if (!make_caps(Bytes(res.begin() + cs, res.begin() + ce), caps)) return r.error = "could not make the key caps", false;
         copy.insert(copy.end(), caps.begin(), caps.end());
+        // (two side badges, OmSideBadge0 / 1, left of the slot's badge spot: the bed and the Character Look badge (#35)
+        // beside the thermometer; the text element's copy with only its id and classes changed, hidden until shown, placed
+        // by their om-sb-* classes for the wrap's state, like the caps)
+        for (int k = 0; k < 2; ++k) {
+            Bytes side(res.begin() + cs, res.begin() + ce);
+            if (!replace_one(side, lp(kText), lp("OmSideBadge" + std::to_string(k))) ||
+                !set_classes(side, {"om-sb", "om-sb-k" + std::to_string(k), "!cpp-none"}))
+                return r.error = "could not make the side badges", false;
+            copy.insert(copy.end(), side.begin(), side.end());
+        }
         std::uint32_t n;
         if (!u32(res, count_at, n) || n != 1) return r.error = "the wrap's child count isn't 1", false;
         res.insert(res.begin() + ce, copy.begin(), copy.end());
-        put32(res, count_at, n + 2);
+        put32(res, count_at, n + 4);
         std::vector<Found> check;
         size_t e = 0;
         bool has = false;
@@ -269,6 +279,62 @@ bool add_values(Bytes& res, Report& r)
         if (e != end + copy.size() || !has) return r.error = "the wrap doesn't re-parse", false;
         pos = end + copy.size();
         ++r.values;
+    }
+}
+
+// The centre disc's outfit badges (2026-11-13): after the name's divider line (QuickItemTooltipCenterLine), its
+// sibling in the tooltip's info wrap, a row OmCBRow (om-cb-row, hidden until it has a badge) of four sockets OmCB0-3
+// (om-cb, hidden until shown: the abyss gear socket frame) each holding an icon OmCBIcon0-3 (om-cb-icon; the plugin sets
+// its om-cbi-* class). (Tried: inside the caption - setting its text replaced the row; inside the line - its fade mask
+// hides children, and it draws the line.) The info wrap's child count is found by its header bytes. Every
+// element is the line's copy with only its id and classes changed. Anything unexpected: no badges, the rest goes on.
+bool add_center_badges(Bytes& res, Report& r)
+{
+    constexpr SV kLine = "QuickItemTooltipCenterLine", kInfo = "QuickItemTooltipInfoWrap";
+    size_t pos = 0;
+    for (;;) {
+        size_t at = find(res, lp(kLine), pos);
+        if (at == SIZE_MAX) return true;
+        size_t start, end;
+        std::vector<Found> found;
+        if (!element_of(res, at, kLine, start, end, found)) return r.centre_skipped = "no element for the centre line", true;
+        // (the info wrap's child count, found by its header: it holds widgets this parser can't read. In the file, game
+        // 2.05: the tooltip's classes ending "tooltip-wrap", its one child (01 01 00 00 00), the info wrap's empty class
+        // list (01 00 00 00 00) and its children flag (01), then the count - 8)
+        Bytes sig = lp("tooltip-wrap");
+        for (unsigned char c : {1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1}) sig.push_back(c);
+        size_t hdr = SIZE_MAX;
+        for (size_t q = find(res, sig, start > 8000 ? start - 8000 : 0, start); q != SIZE_MAX; q = find(res, sig, q + 1, start))
+            hdr = q;
+        std::uint32_t n = 0;
+        if (hdr == SIZE_MAX || !u32(res, hdr + sig.size(), n) || n < 7 || n > 12)
+            return r.centre_skipped = "the tooltip's info wrap header isn't the known one", true;
+        const size_t count_at = hdr + sig.size();
+        const Bytes line(res.begin() + start, res.begin() + end);
+        auto make = [&](const std::string& id, const std::vector<std::string>& cls, Bytes& e) {
+            e = line;
+            return replace_one(e, lp(kLine), lp(id)) && set_classes(e, cls);
+        };
+        Bytes frames, row;
+        for (int k = 0; k < 4; ++k) {
+            Bytes icon, frame;
+            if (!make("OmCBIcon" + std::to_string(k), {"om-cb-icon"}, icon) ||
+                !make("OmCB" + std::to_string(k), {"om-cb", "!cpp-none"}, frame) || !give_children(frame, icon, 1))
+                return r.centre_skipped = "could not make the centre badges", true;
+            frames.insert(frames.end(), frame.begin(), frame.end());
+        }
+        if (!make("OmCBRow", {"om-cb-row", "!cpp-none"}, row) || !give_children(row, frames, 4))
+            return r.centre_skipped = "could not make the centre badge row", true;
+        res.insert(res.begin() + end, row.begin(), row.end());
+        put32(res, count_at, n + 1);
+        size_t e1 = 0, e2 = 0;
+        if (!element(res, start, e1, nullptr) || e1 != end || !element(res, end, e2, nullptr) || e2 != end + row.size()) {
+            res.erase(res.begin() + end, res.begin() + end + row.size()); // (undone: the file as it was)
+            put32(res, count_at, n);
+            return r.centre_skipped = "the row doesn't parse in place", true;
+        }
+        pos = end + row.size();
+        ++r.centre;
     }
 }
 
@@ -362,6 +428,7 @@ bool add_peek(Bytes& res, Report& r)
     Bytes tmpl(res.begin() + bs, res.begin() + be);
     // the children
     std::vector<std::pair<std::string, std::vector<std::string>>> kids = {{"OmPeekArc", {"om-peek-arc"}}};
+    kids.push_back({"OmPeekLift", {"om-peek-lift"}}); // (#32: behind the middle slot while an outfit is picked up)
     for (int k = 0; k < 5; ++k) kids.push_back({"OmPeekFrame" + std::to_string(k), {"om-peek-frame", "om-peek-frame-" + std::to_string(k)}});
     for (int k = 0; k < 5; ++k) kids.push_back({"OmPeekIcon" + std::to_string(k), {"om-peek-icon", "om-peek-icon-" + std::to_string(k)}});
     kids.push_back({"OmPeekLabel", {"om-peek-label", "font-stroke-common", "font-text-caption-minor-white"}});
@@ -369,6 +436,12 @@ bool add_peek(Bytes& res, Report& r)
     // the badges (2026-11-06): each other slot's climate thermometer, the highlighted outfit's beside its label
     for (int k = 0; k < 5; ++k) kids.push_back({"OmPeekBadge" + std::to_string(k), {"om-peek-badge", "om-peek-badge-" + std::to_string(k), "!cpp-none"}});
     for (int k = 0; k < 2; ++k) kids.push_back({"OmPeekNb" + std::to_string(k), {"om-peek-nb", "om-peek-nb-" + std::to_string(k), "!cpp-none"}});
+    // #32 pins (2026-11-13): each slot's corner mark (a pin / unpin to come), then the hint row (the button, what it does)
+    for (int k = 0; k < 5; ++k) kids.push_back({"OmPeekMark" + std::to_string(k), {"om-peek-mark", "om-peek-mark-" + std::to_string(k), "!cpp-none"}});
+    kids.push_back({"OmPeekHold", {"om-peek-hold"}}); // (behind the button: the game's hold look)
+    kids.push_back({"OmPeekRipple", {"om-peek-ripple"}}); // (behind the button: the press's ripple)
+    kids.push_back({"OmPeekHintIcon", {"om-peek-hint-icon", "!cpp-none"}});
+    kids.push_back({"OmPeekHint", {"om-peek-hint", "font-stroke-common", "font-text-caption-minor-white", "!cpp-none"}});
     Bytes body;
     for (const auto& [id, cls] : kids) {
         Bytes e;
@@ -466,6 +539,7 @@ bool patch(const Bytes& in, unsigned what, Bytes& out, Report& r)
         if (r.error.empty()) r.error = "no CoolTimeChargedCountWrap";
         return false;
     }
+    if ((what & 3) && !add_center_badges(res, r)) return false;
     if ((what & 4) && !add_peek(res, r)) return false;
     out.swap(res);
     return true;

@@ -18,19 +18,22 @@ U32 kBaseFire = 0x72, kBaseIce = 0x73; // (0x68 / 0x69 before 2026-10-30: Scout 
 // The game's item table: a key is a row, and a patch that adds items renumbers the rows; the permanent id in each row
 // stays. Only the first block is used: the rows from the data file, whose body offsets grow from row to row. After it the
 // table has room for rows the game fills while it runs (they come and go, and repeat ids). Checked: ids all different.
+// (game 2.05: rows at +0x20, 24 bytes each - u32 permanent id, u32 body offset, the record -, the count at +0x28; before:
+// rows at +0x28, 8 bytes each, the count at +8)
+constexpr U64 kItemRowsAt = 0x20, kItemCountAt = 0x28, kItemRowSize = 0x18;
 U64 item_rows(U32* count = nullptr)
 {
     static int state = 0; // 0 not checked, 1 fine, 2 not what it should be
     static U32 block = 0;
     U64 table = kRvaItemTable ? rp(g_base + kRvaItemTable) : 0;
-    U64 rows = table ? rp(table + 0x28) : 0;
-    U32 n = table ? r32(table + 8) : 0;
+    U64 rows = table ? rp(table + kItemRowsAt) : 0;
+    U32 n = table ? r32(table + kItemCountAt) : 0;
     if (!rows || !n) return 0; // (not loaded yet)
     if (!state) {
         std::set<U32> ids;
         U32 last = 0;
         for (U32 i = 0; i < n && i < 60000; ++i) {
-            U32 id = r32(rows + i * 8ull), off = r32(rows + i * 8ull + 4);
+            U32 id = r32(rows + i * kItemRowSize), off = r32(rows + i * kItemRowSize + 4);
             if (!id || (i && off <= last)) break;
             ids.insert(id);
             last = off;
@@ -46,11 +49,20 @@ U64 item_rows(U32* count = nullptr)
     return rows;
 }
 
+// True for a key the game hands out while it runs (after the data file's rows: expansion and pre-order items). Such a
+// key can name another item next session (a newly added package lands before it: 2026-11-12, a player's log, every
+// expansion piece 6 keys up), so a saved piece of that kind is found by its uid (gear.cpp, adopt_returned).
+bool key_assigned_at_run(U16 key)
+{
+    U32 n = 0;
+    return item_rows(&n) && key >= n && key != 0xFFFF;
+}
+
 U32 pid_of(U16 key)
 {
     U32 n = 0;
     U64 rows = item_rows(&n);
-    return rows && key < n ? r32(rows + key * 8ull) : 0;
+    return rows && key < n ? r32(rows + key * kItemRowSize) : 0;
 }
 
 U16 key_of_pid(U32 pid)
@@ -61,7 +73,7 @@ U16 key_of_pid(U32 pid)
     if (!rows) return 0xFFFF;
     if (keys.empty())
         for (U32 i = 0; i < n && i < 0xFFFF; ++i)
-            if (U32 id = r32(rows + i * 8ull)) keys[id] = static_cast<U16>(i);
+            if (U32 id = r32(rows + i * kItemRowSize)) keys[id] = static_cast<U16>(i);
     auto f = keys.find(pid);
     return f != keys.end() ? f->second : U16(0xFFFF);
 }
@@ -83,7 +95,7 @@ std::pair<int, int> item_resistance(U16 key)
     if (auto f = g_item_resist.find(key); f != g_item_resist.end()) return f->second;
     std::pair<int, int> r{0, 0};
     U16 k = key;
-    U64 info = g_item_info ? g_item_info(0, k) : 0;
+    U64 info = g_item_info ? by_key(g_item_info, k) : 0;
     auto [list, n] = stat_list(info, kOffItemPassives, false);
     auto [base, nb] = stat_list(info, kOffItemStats, true); // (the resistance is the same in every refinement row)
     auto sum = [&](U64 l, U32 cnt, U32 ice, U32 fire) {
@@ -120,7 +132,7 @@ void calibrate_resist_ids()
                 if (r.base != base) continue;
                 ++refs_of_kind;
                 U16 key = key_of_pid(r.pid);
-                auto [list, n] = stat_list(key != 0xFFFF && g_item_info ? g_item_info(0, key) : 0, o, base);
+                auto [list, n] = stat_list(key != 0xFFFF && g_item_info ? by_key(g_item_info, key) : 0, o, base);
                 bool has = false;
                 for (U32 i = 0; list && n <= 64 && i < n; ++i) {
                     U32 kind = 0, level = 0;
@@ -140,7 +152,7 @@ void calibrate_resist_ids()
     int answered = 0;
     for (const Ref& r : refs) {
         U16 key = key_of_pid(r.pid);
-        U64 info = key != 0xFFFF && g_item_info ? g_item_info(0, key) : 0;
+        U64 info = key != 0xFFFF && g_item_info ? by_key(g_item_info, key) : 0;
         auto [list, n] = stat_list(info, r.base ? kOffItemStats : kOffItemPassives, r.base);
         U32 id = 0;
         int hits = 0;
@@ -205,6 +217,13 @@ void outfit_resistance(const Outfit& o, int& ice, int& fire)
 // or the manual Cold / Heat (plain), or none.
 const char* climate_badge(const Outfit& o)
 {
+    if (o.activity == kActivitySleep) return "om-sleep-c"; // (Activity: Sleeping: the bed, in the thermometer's spot)
+    return climate_only(o);
+}
+
+// The Climate marker alone (the wheel's slots show the bed beside it, the Outfit Arc one icon: climate_badge).
+const char* climate_only(const Outfit& o)
+{
     if (o.climate == 1) return "om-cold-c";
     if (o.climate == 2) return "om-heat-c";
     if (o.climate == 3) return nullptr;
@@ -241,7 +260,7 @@ const char* icon_name_of(U64 item)
 // A piece's icon texture: from its copy (worn or in a bag), else from a bare item with its key (not in the inventory).
 std::string piece_icon(const OutfitItem& it)
 {
-    U64 copy = it.slot == kBackShieldSlot ? back_shield_item() : find_copy(it.uid, it.key);
+    U64 copy = is_display_slot(it.slot) ? display_item(it.slot) : find_copy(it.uid, it.key);
     if (!copy && it.key == 0xFFFF) return {}; // (nothing saved there)
     alignas(16) unsigned char bare[200] = {};
     std::memcpy(bare, &it.uid, 8);
@@ -258,7 +277,7 @@ std::map<U16, std::string> g_item_names;
 const char* item_name_raw(U16 key)
 {
     __try {
-        U64 info = g_item_info(0, key);
+        U64 info = by_key(g_item_info, key);
         if (!info || info == *reinterpret_cast<U64*>(g_base + kRvaDefaultItemInfo)) return nullptr;
         U64 text = *reinterpret_cast<U64*>(info + 0x90); // localized name, vfunc 1 (text, 0) -> UTF-8
         if (!text) return nullptr;

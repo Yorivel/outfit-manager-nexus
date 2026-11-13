@@ -9,6 +9,9 @@
 
 namespace om {
 
+U64 g_self_lo = 0, g_self_hi = 0;               // (this module: its own input reads see the truth)
+std::atomic<bool> g_lmb_held_from_arc{false}; // (#32: the left button held since the arc took it)
+
 // --- Typed characters the prompt drops -------------------------------------------------------------
 // The game's text box makes its own characters from the keys: letters (shifted too) and digits, but no Shift / AltGr
 // symbols (! + / * ...) or accented letters, though pasting them works. While our prompt is open the characters
@@ -17,6 +20,10 @@ namespace om {
 // (+0xf1: the caret-moved flag the game's own keys set, so the caret is drawn there at once).
 
 WNDPROC g_game_wndproc = nullptr;
+std::atomic<HWND> g_game_hwnd{nullptr}; // (sleep.cpp posts kWmSleep to it: the window's messages keep coming while the
+                                         // HUD is hidden, as in the sleep's fade)
+bool sleep_message(); // (sleep.cpp: kWmSleep handled)
+bool sleep_fx_timer(WPARAM id); // (sleep.cpp: its effect timer)
 
 // The wheel hook is in (the arc open): it alone counts the notches. The window and raw input routes then only keep
 // the wheel from the game (2026-11-06: all three counted, 6 steps per notch, and with 3 outfits the arc went round
@@ -41,6 +48,8 @@ bool hotkey_held_now(U32 vk)
 
 LRESULT CALLBACK name_wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
 {
+    if (m == WM_APP + 0x51 && sleep_message()) return 0; // (kWmSleep: a sleep began or ended)
+    if (m == WM_TIMER && sleep_fx_timer(wp)) return 0;
     if ((m == WM_KEYDOWN || m == WM_KEYUP || m == WM_SYSKEYDOWN || m == WM_SYSKEYUP) && hotkey_held_now(U32(wp)))
         return 0; // (an outfit's hotkey: its key does nothing else in play)
     if (m == WM_MBUTTONDOWN || m == WM_MBUTTONUP || m == WM_XBUTTONDOWN || m == WM_XBUTTONUP) {
@@ -48,6 +57,7 @@ LRESULT CALLBACK name_wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
         if (hotkey_held_now(vk)) return m == WM_XBUTTONDOWN || m == WM_XBUTTONUP ? TRUE : 0;
     }
     // The Outfit Arc: while it is open the wheel is its (not the camera's); its key's messages are its own in play.
+    if ((m == WM_LBUTTONDOWN || m == WM_LBUTTONUP || m == WM_LBUTTONDBLCLK) && g_peek_live) return 0; // (#32: the arc's)
     if (m == WM_MOUSEWHEEL) {
         if (g_peek_live) {
             if (!g_wheel_hooked) g_peek_wheel += GET_WHEEL_DELTA_WPARAM(wp); // (else the hook counts it)
@@ -74,7 +84,9 @@ void watch_game_chars()
     HWND w = GetForegroundWindow();
     g_game_wndproc = reinterpret_cast<WNDPROC>(
         SetWindowLongPtrW(w, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&name_wndproc)));
-    LOG("rename: watching typed characters (window %p)", static_cast<void*>(w));
+    g_game_hwnd = w;
+    LOG("rename: watching typed characters (window %p, its thread %lu, ui thread %lu)", static_cast<void*>(w),
+        GetWindowThreadProcessId(w, nullptr), g_ui_thread);
 }
 
 bool game_focused()
@@ -135,6 +147,7 @@ UINT WINAPI raw_input_hook(HRAWINPUT h, UINT cmd, LPVOID data, PUINT size, UINT 
                 m.usButtonData = 0;
             }
             if (hud && mouse) m.usButtonFlags &= ~mouse;
+            if (g_peek_live) m.usButtonFlags &= ~(RI_MOUSE_LEFT_BUTTON_DOWN | RI_MOUSE_LEFT_BUTTON_UP); // (#32: the arc's)
             for (U32 b : {U32(VK_MBUTTON), U32(VK_XBUTTON1), U32(VK_XBUTTON2)}) // (a hotkey's mouse button)
                 if ((m.usButtonFlags & peek_mouse_flags(b)) && hotkey_held_now(b)) m.usButtonFlags &= ~peek_mouse_flags(b);
         } else if (in->header.dwType == RIM_TYPEKEYBOARD) {
@@ -155,6 +168,11 @@ HANDLE g_wheel_open_event = nullptr;
 
 LRESULT CALLBACK wheel_ll_proc(int code, WPARAM wp, LPARAM lp)
 {
+    if (code == HC_ACTION && (wp == WM_LBUTTONDOWN || wp == WM_LBUTTONUP) && g_peek_live && game_focused()) {
+        if (wp == WM_LBUTTONDOWN) ++g_peek_clicks; // (#32: a press - a tap or a hold; the game sees no click)
+        else ++g_peek_ups;
+        return 1;
+    }
     if (code == HC_ACTION && wp == WM_MOUSEWHEEL && g_peek_live && game_focused()) {
         const MSLLHOOKSTRUCT* m = reinterpret_cast<const MSLLHOOKSTRUCT*>(lp);
         g_peek_wheel += static_cast<SHORT>(HIWORD(m->mouseData));
@@ -194,8 +212,66 @@ void wheel_hook(bool on)
     }
 }
 
+// #32: while the arc is open - and after, until the button is let go - the game reads the left button as up: it polls
+// it through GetKeyboardState and GetAsyncKeyState (its attack; found 2026-11-13), besides raw input and the window's
+// messages. Calls from this module (the plugin's own reads) see the truth.
+using GkbsFn = BOOL(WINAPI*)(PBYTE);
+GkbsFn g_gkbs_orig = nullptr;
+BOOL WINAPI gkbs_hook(PBYTE k) // (#32: the game reads the left button here too - its attack, logged 2026-11-13)
+{
+    const BOOL r = g_gkbs_orig(k);
+    if (!r || !k) return r;
+    const U64 from = reinterpret_cast<U64>(_ReturnAddress());
+    if (from >= g_self_lo && from < g_self_hi) return r;
+    if (g_peek_live || g_lmb_held_from_arc) {
+        if (k[VK_LBUTTON] & 0x80) {
+            g_lmb_held_from_arc = true;
+        } else if (!g_peek_live) {
+            g_lmb_held_from_arc = false;
+        }
+        k[VK_LBUTTON] &= 0x7F;
+    }
+    return r;
+}
+using GetAsyncKeyStateFn = SHORT(WINAPI*)(int);
+GetAsyncKeyStateFn g_gaks_orig = nullptr;
+SHORT WINAPI gaks_hook(int vk)
+{
+    const SHORT r = g_gaks_orig(vk);
+    if (vk != VK_LBUTTON) return r;
+    const U64 from = reinterpret_cast<U64>(_ReturnAddress());
+    if (from >= g_self_lo && from < g_self_hi) return r;
+    if (g_peek_live) {
+        if (r & 0x8000) g_lmb_held_from_arc = true;
+        return 0;
+    }
+    if (g_lmb_held_from_arc) {
+        if (r & 0x8000) return 0;
+        g_lmb_held_from_arc = false;
+    }
+    return r;
+}
+
 void install_raw_input()
 {
+    if (g_self) { // (this module's range: its own calls pass)
+        const U64 base = reinterpret_cast<U64>(g_self);
+        const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
+        g_self_lo = base, g_self_hi = base + nt->OptionalHeader.SizeOfImage;
+    }
+    {
+        void* t = nullptr;
+        if (MH_CreateHookApiEx(L"user32", "GetKeyboardState", reinterpret_cast<void*>(&gkbs_hook),
+                               reinterpret_cast<void**>(&g_gkbs_orig), &t) != MH_OK || MH_EnableHook(t) != MH_OK)
+            LOG("Outfit Arc: GetKeyboardState hook FAILED (a left click with the arc open also reaches the game)");
+    }
+    {
+        void* t = nullptr;
+        if (MH_CreateHookApiEx(L"user32", "GetAsyncKeyState", reinterpret_cast<void*>(&gaks_hook),
+                               reinterpret_cast<void**>(&g_gaks_orig), &t) != MH_OK || MH_EnableHook(t) != MH_OK)
+            LOG("Outfit Arc: GetAsyncKeyState hook FAILED (a left click with the arc open also reaches the game)");
+    }
     g_wheel_open_event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (HANDLE t = CreateThread(nullptr, 0, &wheel_thread, nullptr, 0, nullptr)) CloseHandle(t);
     void* target = nullptr;

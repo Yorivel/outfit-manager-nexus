@@ -1,4 +1,5 @@
 // The game's dialogs: the rename prompt, typed characters, yes / no questions.
+#include "charlook.h"
 #include "om.h"
 #include "prompts.h"
 #include "addrs.h"
@@ -482,6 +483,10 @@ void finish_ask(int answer, const char* why)
     g_pending = {};
     bool here = p.index < g_outfits.size() && g_outfits[p.index].name == p.name;
     LOG("question %d: %s (\"%s\"%s)", p.stage, why, p.name.c_str(), here ? "" : ", outfit gone");
+    if (p.confirm == kConfirmBarberLook) { // (#35: the barber's change - the outfit's look, or else the character's own)
+        charlook_barber_answer(answer == kAskYes);
+        return;
+    }
     if (p.confirm == kConfirmCleanSave || p.confirm == kConfirmUninstall) { // (about no one outfit)
         if (answer != kAskYes || !g_menu_open) return;
         if (p.confirm == kConfirmCleanSave) clean_outfits(g_ask_self);
@@ -578,6 +583,23 @@ void ask_next(U64 self, AskedLoad p)
     rd(modal + kOffModalShown, g_ask_shown);
     g_ask_modal = modal;
     LOG("question %d %llX open (+0xbd %u): %s", g_pending.stage, modal, g_ask_shown, msg.c_str());
+}
+
+// #35: after the barber, where its change goes (from the HUD's UI root: no wheel is open). Its answer: finish_ask.
+bool open_barber_question(U64 root, const char* title, const char* msg, const char* yes, const char* no)
+{
+    if (g_ask_modal || g_ask_next || g_name_modal || !g_open_common_modal) return false;
+    U64 modal = open_common_modal_raw(root, title, msg, yes, no);
+    if (!modal) return false;
+    AskedLoad p;
+    p.confirm = kConfirmBarberLook;
+    g_pending = std::move(p);
+    g_ask_self = root;
+    g_ask_opened = GetTickCount64();
+    rd(modal + kOffModalShown, g_ask_shown);
+    g_ask_modal = modal;
+    LOG("barber question %llX open: %s", modal, msg);
+    return true;
 }
 
 // pump: the next question of a load, and the asynchronous parts of the last one.

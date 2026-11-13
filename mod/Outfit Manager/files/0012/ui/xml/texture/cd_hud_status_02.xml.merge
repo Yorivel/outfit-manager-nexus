@@ -1,10 +1,18 @@
 <__dmm_root__>
 <Texture Name="outfitmanager_peek_slot" Filename="UI/texture/image/customizeimage/outfitmanager_peek_slot.dds" Type="Image" GetRect="1,1,126,126"/>
 <Texture Name="outfitmanager_peek_slot_sel" Filename="UI/texture/image/customizeimage/outfitmanager_peek_slot_sel.dds" Type="Image" GetRect="1,1,126,126"/>
-<Texture Name="outfitmanager_peek_none" Filename="UI/texture/image/customizeimage/outfitmanager_peek_none.dds" Type="Image" GetRect="1,1,254,254"/>
 <Texture Name="outfitmanager_peek_arc_n1" Filename="UI/texture/image/customizeimage/outfitmanager_peek_arc_n1.dds" Type="Image" GetRect="1,1,96,431"/>
 <Texture Name="outfitmanager_peek_arc_n2" Filename="UI/texture/image/customizeimage/outfitmanager_peek_arc_n2.dds" Type="Image" GetRect="1,1,114,467"/>
 <Texture Name="outfitmanager_peek_arc_n3" Filename="UI/texture/image/customizeimage/outfitmanager_peek_arc_n3.dds" Type="Image" GetRect="1,1,114,503"/>
 <Texture Name="outfitmanager_peek_arc_n4" Filename="UI/texture/image/customizeimage/outfitmanager_peek_arc_n4.dds" Type="Image" GetRect="1,1,197,610"/>
 <Texture Name="outfitmanager_peek_arc_n5" Filename="UI/texture/image/customizeimage/outfitmanager_peek_arc_n5.dds" Type="Image" GetRect="1,1,197,718"/>
+<Texture Name="outfitmanager_peek_pin" Filename="UI/texture/image/customizeimage/outfitmanager_peek_pin.dds" Type="Image" GetRect="1,1,96,96"/>
+<Texture Name="outfitmanager_peek_unpin" Filename="UI/texture/image/customizeimage/outfitmanager_peek_unpin.dds" Type="Image" GetRect="1,1,96,96"/>
+<Texture Name="outfitmanager_peek_lift" Filename="UI/texture/image/customizeimage/outfitmanager_peek_lift.dds" Type="Image" GetRect="1,1,192,192"/>
+<Texture Name="outfitmanager_peek_edit" Filename="UI/texture/image/customizeimage/outfitmanager_peek_edit.dds" Type="Image" GetRect="1,1,252,252"/>
+<Texture Name="outfitmanager_peek_back" Filename="UI/texture/image/customizeimage/outfitmanager_peek_back.dds" Type="Image" GetRect="1,1,252,252"/>
+<Texture Name="outfitmanager_peek_none" Filename="UI/texture/image/customizeimage/outfitmanager_peek_none.dds" Type="Image" GetRect="1,1,252,252"/>
+<Texture Name="outfitmanager_peek_outfits" Filename="UI/texture/image/customizeimage/outfitmanager_peek_outfits.dds" Type="Image" GetRect="1,1,252,252"/>
+<Texture Name="outfitmanager_peek_key_a" Filename="UI/texture/image/customizeimage/outfitmanager_peek_key_a.dds" Type="Image" GetRect="1,1,80,80"/>
+<Texture Name="outfitmanager_peek_key_cross" Filename="UI/texture/image/customizeimage/outfitmanager_peek_key_cross.dds" Type="Image" GetRect="1,1,80,80"/>
 </__dmm_root__>

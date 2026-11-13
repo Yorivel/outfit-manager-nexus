@@ -8,6 +8,7 @@ U64 equipped_item(U64 list, U16 slot);
 extern std::vector<U16> g_placeholder_keys;
 int read_worn(U64 self, WornRaw* out, int max);
 U64 back_shield_item();
+U64 display_item(U16 slot); // (what a display slot holds now, or 0)
 int anchor_outfit();
 bool left_anchor(const Outfit& o, const WornRaw* w, int n);
 void update_plus_icon(U64 self);

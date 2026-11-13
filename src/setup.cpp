@@ -1,4 +1,5 @@
 // Start-up: installing the hooks, the init thread.
+#include "charlook.h"
 #include "om.h"
 #include "setup.h"
 #include "addrs.h"
@@ -18,6 +19,11 @@
 #include "ui_hook.h"
 
 namespace om {
+
+void sleep_install(); // (sleep.cpp)
+void sound_install(); // (sound.cpp)
+void anim_install();  // (anim.cpp)
+void present_install(); // (present.cpp)
 
 std::wstring g_log_path;
 bool g_features_toast_done = false;
@@ -165,6 +171,11 @@ bool install()
     LOG("hooks: getter, builder, gear mode, open %p, tab %p, select %p, close %p, frame %p, focus %p (base %llX)",
         g_open_orig, g_tab_orig, g_select_orig, g_close_orig, g_frame_orig, g_focus_orig, g_base);
     install_rename_prompt();
+    sleep_install(); // sleepwear: the sleep seen in the action charts (sleep.cpp)
+    sound_install(); // hidden gear's sounds, the equip sounds of an outfit change (sound.cpp)
+    anim_install(); // the helmet key's take-off / take-on animations (anim.cpp)
+    charlook_install(); // the barber's reply (#35: where a change goes; charlook.cpp)
+    present_install(); // hidden pieces off the game's presentation (present.cpp)
     install_ask_dialog();
     if (g_equip_request && have({kRvaCompanionEquip})) { // companions' pieces from storage / the wardrobe
         void* t = reinterpret_cast<void*>(g_base + kRvaCompanionEquip);
@@ -270,6 +281,68 @@ bool in_game_process()
     return _wcsicmp(exe.c_str(), L"CrimsonDesert.exe") == 0;
 }
 
+// The outfits file's folder (2026-11-13): %LOCALAPPDATA%\Outfit Manager\, outside the game's folder (a game file check,
+// a mod manager's redeploy or MO2's overwrite folder no longer touch it). The plugin's folder when that can't be made.
+std::wstring g_data_dir;
+
+std::wstring data_dir(const std::wstring& plugin_dir)
+{
+    wchar_t local[MAX_PATH] = {};
+    if (!GetEnvironmentVariableW(L"LOCALAPPDATA", local, MAX_PATH)) return plugin_dir;
+    std::wstring d = std::wstring(local) + L"\\Outfit Manager\\";
+    if (!CreateDirectoryW(d.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) return plugin_dir;
+    return d;
+}
+
+U64 write_time(const std::wstring& f)
+{
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    if (!GetFileAttributesExW(f.c_str(), GetFileExInfoStandard, &a)) return 0;
+    return (U64(a.ftLastWriteTime.dwHighDateTime) << 32) | a.ftLastWriteTime.dwLowDateTime;
+}
+
+// An older version's outfits file next to the plugin moves to the data folder (the newer of the two is kept, the
+// other goes to the backups); its backups folder comes along.
+void move_old_files(const std::wstring& plugin_dir, const std::wstring& to)
+{
+    if (plugin_dir == to) return;
+    const std::wstring old = plugin_dir + L"OutfitManager.outfits", now = to + L"OutfitManager.outfits";
+    const std::wstring backups = to + L"OutfitManager_backups\\";
+    const U64 t_old = write_time(old), t_now = write_time(now);
+    if (t_old) {
+        CreateDirectoryW(backups.c_str(), nullptr);
+        if (t_now && t_now >= t_old) { // (the data folder's is newer: the old one is kept as a backup)
+            const bool ok = MoveFileExW(old.c_str(), (backups + L"OutfitManager.outfits.from-plugin-folder").c_str(),
+                                        MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED);
+            LOG("outfits file: an older copy next to the plugin %s", ok ? "moved to the backups" : "couldn't be moved");
+        } else {
+            if (t_now) MoveFileExW(now.c_str(), (backups + L"OutfitManager.outfits.replaced").c_str(),
+                                   MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED);
+            bool ok = MoveFileExW(old.c_str(), now.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED) != 0;
+            if (!ok && CopyFileW(old.c_str(), now.c_str(), FALSE)) // (a virtual folder may refuse a move: copied)
+                ok = true, DeleteFileW(old.c_str());
+            LOG("outfits file: moved from the plugin's folder to %%LOCALAPPDATA%%/Outfit Manager: %s", ok ? "done" : "FAILED (kept there)");
+        }
+    }
+    DeleteFileW((plugin_dir + L"OutfitManager.outfits.tmp").c_str());
+    // (the old backups folder: its files come along)
+    const std::wstring ob = plugin_dir + L"OutfitManager_backups\\";
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((ob + L"*").c_str(), &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        CreateDirectoryW(backups.c_str(), nullptr);
+        int n = 0;
+        do {
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+            n += MoveFileExW((ob + fd.cFileName).c_str(), (backups + fd.cFileName).c_str(),
+                             MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED) != 0;
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+        RemoveDirectoryW(ob.c_str());
+        if (n) LOG("outfits file: %d backup(s) moved to the data folder", n);
+    }
+}
+
 DWORD WINAPI init_thread(LPVOID)
 {
     wchar_t buf[MAX_PATH];
@@ -295,7 +368,11 @@ DWORD WINAPI init_thread(LPVOID)
         bool ok = install_ui_patch();
         LOG("gear wheel UI hook: %s%s", ok ? (at_load ? "in at load, " : "in (late), ") : "NOT in: ", g_ui_hook_note.c_str());
     }
-    g_store_path = path + L"OutfitManager.outfits";
+    g_data_dir = data_dir(path);
+    move_old_files(path, g_data_dir);
+    g_store_path = g_data_dir + L"OutfitManager.outfits";
+    LOG("outfits file: %s", g_data_dir == path ? "next to the plugin (no data folder)" // (no user name in the log)
+                                               : "%LOCALAPPDATA%/Outfit Manager/OutfitManager.outfits");
     g_cache_path = path + L"OutfitManager.cache"; // game addresses for this exe (rebuilt when the exe changes)
     load_outfits();
     {

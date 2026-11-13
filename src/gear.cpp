@@ -292,13 +292,14 @@ int read_worn(U64 self, WornRaw* out, int max)
     return n;
 }
 
-U64 back_shield_item()
+U64 display_item(U16 slot)
 {
     U64 list = equipment_list();
-    U64 e = list ? equipped_item(list, kBackShieldSlot) : 0;
+    U64 e = list ? equipped_item(list, slot) : 0;
     U16 key = 0xFFFF;
     return e && rd(e + 8, key) && key != 0xFFFF ? e : 0;
 }
+U64 back_shield_item() { return display_item(kBackShieldSlot); }
 
 int anchor_outfit()
 {
@@ -313,7 +314,7 @@ bool left_anchor(const Outfit& o, const WornRaw* w, int n)
 {
     int total = 0, kept = 0;
     for (const OutfitItem& it : o.items) {
-        if (is_weapon_slot(it.slot) || is_accessory_slot(it.slot) || it.slot == kBackShieldSlot) continue;
+        if (is_weapon_slot(it.slot) || is_accessory_slot(it.slot) || is_display_slot(it.slot)) continue;
         ++total;
         for (int k = 0; k < n; ++k)
             if (w[k].slot == it.slot && w[k].uid == it.uid && w[k].key == it.key) ++kept;
@@ -853,6 +854,21 @@ U64 g_missing_checked = 0;          // tick
 bool adopt_returned(Outfit& o, const std::vector<Owned>& owned)
 {
     bool changed = false;
+    // A piece owned under its uid with another key: the same item, its key moved since the outfit was saved - the outfit
+    // follows it (a uid is one item). For pieces the permanent-id repair can't cover (items.cpp): ones with no permanent
+    // id (expansion items never get one: their keys are handed out while the game runs) or with a run-time key. Keys
+    // move when a package or update adds items before them (2026-11-12, a player's log: every expansion piece 6 up).
+    for (OutfitItem& it : o.items) {
+        if (!it.uid || it.key == 0xFFFF || (it.pid && !key_assigned_at_run(it.key)) || find_owned(owned, it.uid, it.key)) continue;
+        for (const Owned& x : owned)
+            if (x.uid == it.uid && x.key != it.key && x.key != 0xFFFF) {
+                LOG("outfit \"%s\": equipment-%u uid %llX: its key moved %u -> %u (\"%s\")", o.name.c_str(), it.slot, it.uid,
+                    it.key, x.key, item_name(x.key).c_str());
+                it.key = x.key;
+                changed = true;
+                break;
+            }
+    }
     if (o.seen) {
         std::vector<U64> taken;
         for (const OutfitItem& it : o.items) taken.push_back(it.uid);

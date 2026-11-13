@@ -4,6 +4,7 @@
 #include "addrs.h"
 #include "ui.h"
 #include "gear.h"
+#include "looks_view.h"
 #include "store.h"
 #include "prompts.h"
 #include "settings.h"
@@ -12,6 +13,8 @@
 #include "setup.h"
 
 namespace om {
+extern std::wstring g_data_dir; // (setup.cpp: the outfits file's folder)
+
 
 std::string default_name()
 {
@@ -42,10 +45,12 @@ void save_new_outfit(U64 self)
             return;
         }
     o.name = default_name();
+    o.pin = 0; // (#32: not on the Outfit Arc's pinned ones; it shows among the recent ones, a press there pins it)
     g_unmanaged.erase(g_character); // (a save: what is worn is managed again, #21)
     if (int a = anchor_outfit(); a >= 0) carry_looks(g_outfits[size_t(a)], o); // (a changed outfit saved as new looks the same)
     g_outfits.push_back(o);
     g_outfit_count = static_cast<U32>(g_outfits.size());
+    page_show(page_count() - 1); // (#32: the new outfit's page, the last)
     LOG("saved \"%s\" (%zu items, chest %s)", o.name.c_str(), o.items.size(),
         o.chest_icon.empty() ? "none" : o.chest_icon.c_str());
     save_outfits();
@@ -117,6 +122,20 @@ void uninstall(U64 self)
     int failed = 0;
     for (const std::wstring& f : {g_store_path, g_store_path + L".tmp", g_cache_path, g_log_path})
         if (!f.empty() && !DeleteFileW(f.c_str()) && GetLastError() != ERROR_FILE_NOT_FOUND) ++failed;
+    { // (the data folder: its backups, then the folder itself - when it is ours, not the plugin's folder)
+        const std::wstring dir = g_store_path.substr(0, g_store_path.find_last_of(L"\\/") + 1);
+        const std::wstring b = dir + L"OutfitManager_backups\\";
+        WIN32_FIND_DATAW fd;
+        HANDLE h = FindFirstFileW((b + L"*").c_str(), &fd);
+        if (h != INVALID_HANDLE_VALUE) {
+            do
+                if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) DeleteFileW((b + fd.cFileName).c_str());
+            while (FindNextFileW(h, &fd));
+            FindClose(h);
+        }
+        RemoveDirectoryW(b.c_str());
+        if (dir == g_data_dir) RemoveDirectoryW(dir.c_str());
+    }
     refresh_wheel(self);
     center_restore();
     center_for_focus(self, focused_script(self), true);
@@ -225,11 +244,14 @@ void confirmed(U64 self, U32 index, int what, U32 other)
     const Outfit& was = g_outfits[index];
     o.name = was.name;
     o.worn = was.worn; // (whether it is the last loaded one: not a setting)
+    o.pin = was.pin, o.used = was.used; // (#32: its place on the Outfit Arc stays)
     bool keep = other == 0;
     if (keep) { // (its settings and looks stay; reset: as newly saved)
         if (was.has_weapons) o.load_weapons = was.load_weapons;
         o.climate = was.climate, o.stash = was.stash;
         o.hk_vk = was.hk_vk, o.hk_mods = was.hk_mods;
+        o.char_look = was.char_look, o.look_snap = was.look_snap; // (#35: its character look snapshot)
+        o.icon_slot = was.icon_slot; // (a weapon set's Icon)
         carry_looks(was, o);
     }
     g_outfits[index] = o;

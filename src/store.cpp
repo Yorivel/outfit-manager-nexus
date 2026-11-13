@@ -73,12 +73,45 @@ U64 fnv1a(const char* p, size_t n)
     return h;
 }
 
+// #35: a look's raw bytes as hex (and back; anything that isn't whole hex reads as none)
+std::string to_hex(const std::string& b)
+{
+    static const char* const d = "0123456789abcdef";
+    std::string h;
+    for (unsigned char c : b) h += d[c >> 4], h += d[c & 15];
+    return h;
+}
+std::string from_hex(const std::string& h)
+{
+    auto v = [](char c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1; };
+    std::string b;
+    if (h.size() % 2) return b;
+    for (size_t i = 0; i < h.size(); i += 2) {
+        const int x = v(h[i]), y = v(h[i + 1]);
+        if (x < 0 || y < 0) return std::string();
+        b += static_cast<char>(x * 16 + y);
+    }
+    return b;
+}
+
 void write_lists(std::string& out, const Store& s)
 {
     for (int pass = 0; pass < 2; ++pass) // the character-less list first (it has no header)
         for (const CharacterOutfits& c : s) {
-            if ((c.character == kNoCharacter) != (pass == 0) || c.outfits.empty()) continue;
+            if ((c.character == kNoCharacter) != (pass == 0) ||
+                (c.outfits.empty() && !c.helmet_pin && !c.no_outfit_set() && c.look_base.empty()))
+                continue;
             if (pass) put(out, "character\t%u\n", c.character);
+            if (pass && c.helmet_pin) put(out, "helmetpin\t%u\n", c.helmet_pin);
+            if (pass && !c.look_base.empty()) // (#35: the character's own look, the No Outfit one)
+                put(out, "lookbase\t%s\n", to_hex(c.look_base).c_str());
+            if (pass) { // (#33: the No Outfit looks; slot 23 the back shield, 30 the underwear, as the looks publish them)
+                const Outfit& n = c.no_outfit;
+                for (const auto& [slot, look] : n.empty_looks)
+                    if (look) put(out, "nolook\t%u\t%u\n", slot, look);
+                if (n.back_look) put(out, "nolook\t%u\t%u\n", kBackShieldSlot, n.back_look);
+                if (n.underwear_look) put(out, "nolook\t%u\t%u\n", kUnderwearSlot, n.underwear_look);
+            }
             for (const Outfit& o : c.outfits) {
                 put(out, "outfit\t%s\n", o.name.c_str());
                 if (!o.chest_icon.empty()) put(out, "chest\t%s\n", o.chest_icon.c_str());
@@ -86,10 +119,16 @@ void write_lists(std::string& out, const Store& s)
                 // (2 = Weapons only, #27: an older version reads it as Load)
                 if (o.has_weapons) put(out, "weapons\t%d\n", o.weapons_only ? 2 : o.load_weapons ? 1 : 0);
                 if (!o.weapon_icon.empty()) put(out, "weaponicon\t%s\n", o.weapon_icon.c_str());
+                if (o.icon_slot) put(out, "seticon\t%u\n", o.icon_slot); // (a weapon set's Icon setting)
                 if (o.climate) put(out, "climate\t%u\n", o.climate);
                 if (o.stash) put(out, "stash\t%u\n", o.stash);
+                if (o.activity) put(out, "activity\t%u\n", o.activity);
+                if (o.char_look || !o.look_snap.empty()) // (#35)
+                    put(out, "charlook\t%u\t%s\n", o.char_look, to_hex(o.look_snap).c_str());
                 if (o.hk_vk) put(out, "hotkey\t%u\t%u\n", o.hk_vk, o.hk_mods);
                 if (o.worn) put(out, "worn\t1\n");
+                if (o.pin >= 0) put(out, "pin\t%d\n", o.pin);
+                if (o.used) put(out, "used\t%u\n", o.used);
                 if (o.back_look) put(out, "backlook\t%u\n", o.back_look);
                 if (o.underwear_look) put(out, "underwear\t%u\n", o.underwear_look);
                 if (o.has_back) put(out, "backshield\t%u\n", o.has_back);
@@ -154,9 +193,14 @@ bool write_store_file()
     if (!g_language.empty()) put(out, "setting\tlanguage\t%s\n", g_language.c_str());
     if (const char* id = peek_key_id()) put(out, "setting\tpeekkey\t%s\n", id);
     if (g_peek_pad) put(out, "setting\tpeekpad\t1\n");
+    if (g_peek_weapons) put(out, "setting\tpeekmode\t1\n");
+    if (U32 hv = g_helmet_vk.load()) put(out, "setting\thelmetkey\t%u\t%u\n", hv, unsigned(g_helmet_mods.load()));
     write_lists(out, g_published);
     for (const auto& [slot, b] : g_bound) {
-        put(out, "save\t%u\t%llu\t%llX\t%llX\n", slot, b.id.size, b.id.time, b.id.hash);
+        if (b.id.clock) // (+ its world clock and place, savekey.cpp; older builds read the first fields only)
+            put(out, "save\t%u\t%llu\t%llX\t%llX\t%llX\t%X\n", slot, b.id.size, b.id.time, b.id.hash, b.id.clock, b.id.place);
+        else
+            put(out, "save\t%u\t%llu\t%llX\t%llX\n", slot, b.id.size, b.id.time, b.id.hash);
         write_lists(out, b.store);
     }
     for (const auto* list : {&g_pending_writes, &g_unfinished})
@@ -197,14 +241,29 @@ bool pull_active()
     return true;
 }
 
+// #32: outfits read from a file before pins were kept are pinned, after the pinned ones, in the wheel's order.
+void normalize_pins(std::vector<Outfit>& v)
+{
+    int top = 0;
+    for (const Outfit& o : v) top = std::max(top, o.pin);
+    for (Outfit& o : v)
+        if (o.pin < 0) o.pin = ++top;
+}
+
 void save_outfits()
 {
     std::lock_guard<std::mutex> lock(g_store_mu);
+    normalize_pins(g_outfits);
     if (g_generation.load() != g_seen_generation) {
         LOG("outfit change dropped: a save was loaded meanwhile");
         return;
     }
-    store_for(g_character).outfits = g_outfits;
+    { // (temporary outfits are never saved: sleep.cpp)
+        std::vector<Outfit>& kept = store_for(g_character).outfits;
+        kept.clear();
+        for (const Outfit& o : g_outfits)
+            if (!o.temp) kept.push_back(o);
+    }
     g_published = g_store;
     publish_looks(g_store);
     bool ok = write_store_file();
@@ -285,8 +344,8 @@ void load_outfits()
             }
             // (an outfit beyond the wheel's slots is dropped with every line of it, not merged into the one before)
             if (v[0] == "outfit") {
-                skipping = cur->outfits.size() >= kOutfitSlots;
-                if (skipping) LOG("outfit file: \"%s\" is beyond the wheel's %u slots; not read", v.size() >= 2 ? v[1].c_str() : "", kOutfitSlots);
+                skipping = cur->outfits.size() >= kMaxOutfits;
+                if (skipping) LOG("outfit file: \"%s\" is beyond the %u outfits a character can have; not read", v.size() >= 2 ? v[1].c_str() : "", kMaxOutfits);
                 if (skipping) continue;
             } else if (v[0] == "character" || v[0] == "save" || v[0] == "pending") {
                 skipping = false;
@@ -300,6 +359,9 @@ void load_outfits()
                     BoundSet& b = g_bound[slot];
                     b.id = {std::strtoull(v[2].c_str(), nullptr, 10), std::strtoull(v[3].c_str(), nullptr, 16),
                             std::strtoull(v[4].c_str(), nullptr, 16)};
+                    if (v.size() >= 7)
+                        b.id.clock = std::strtoull(v[5].c_str(), nullptr, 16),
+                        b.id.place = static_cast<U32>(std::strtoul(v[6].c_str(), nullptr, 16));
                     store = &b.store;
                 } else {
                     store = &legacy[slot];
@@ -349,9 +411,31 @@ void load_outfits()
                 else if (v[1] == "language") g_language = v[2];
                 else if (v[1] == "peekkey") peek_key_load(v[2]);
                 else if (v[1] == "peekpad") g_peek_pad = x != 0;
+                else if (v[1] == "peekmode") g_peek_weapons = x == 1;
+                else if (v[1] == "helmetkey") {
+                    g_helmet_vk = x > 0 && x < 256 ? U32(x) : 0;
+                    g_helmet_mods = static_cast<std::uint8_t>(v.size() >= 4 ? std::strtoul(v[3].c_str(), nullptr, 10) & 15 : 0);
+                }
                 // (other names: settings of another build, e.g. the dropped "hotkey": ignored)
             } else if (v[0] == "character" && v.size() >= 2) {
                 cur = &list_for(*store, static_cast<U16>(std::strtoul(v[1].c_str(), nullptr, 10)));
+            } else if (v[0] == "nolook" && v.size() >= 3) {
+                const U16 slot = static_cast<U16>(std::strtoul(v[1].c_str(), nullptr, 10));
+                const unsigned long look = std::strtoul(v[2].c_str(), nullptr, 10);
+                if (look > 0 && look < kLookCount) {
+                    Outfit& n = cur->no_outfit;
+                    if (slot == kBackShieldSlot) n.back_look = static_cast<std::uint8_t>(look);
+                    else if (slot == kUnderwearSlot) n.underwear_look = static_cast<std::uint8_t>(look);
+                    else if (slot < 32) n.empty_looks[slot] = static_cast<std::uint8_t>(look);
+                }
+            } else if (v[0] == "lookbase" && v.size() >= 2) { // (#35)
+                cur->look_base = from_hex(v[1]);
+            } else if (!list.empty() && v[0] == "charlook" && v.size() >= 2) {
+                list.back().char_look = v[1] == "1" ? 1 : 0;
+                list.back().look_snap = v.size() >= 3 ? from_hex(v[2]) : std::string();
+            } else if (v[0] == "helmetpin" && v.size() >= 2) {
+                const unsigned long p = std::strtoul(v[1].c_str(), nullptr, 10);
+                cur->helmet_pin = p == 1 || p == 2 ? static_cast<std::uint8_t>(p) : 0;
             } else if (v[0] == "outfit" && v.size() >= 2) {
                 list.push_back({v[1], {}, {}});
             } else if (!list.empty() && v[0] == "chest" && v.size() >= 2) {
@@ -363,6 +447,11 @@ void load_outfits()
                 list.back().has_weapons = true;
                 list.back().load_weapons = v[1] != "0";
                 list.back().weapons_only = v[1] == "2";
+            } else if (!list.empty() && (v[0] == "activity" || v[0] == "sleepwear") && v.size() >= 2) {
+                unsigned x = static_cast<unsigned>(std::strtoul(v[1].c_str(), nullptr, 10));
+                if (x < kActivityCount) list.back().activity = static_cast<std::uint8_t>(x); // (sleepwear 1 = Sleeping)
+            } else if (!list.empty() && v[0] == "seticon" && v.size() >= 2) {
+                list.back().icon_slot = static_cast<U16>(std::strtoul(v[1].c_str(), nullptr, 10) & 0xFF);
             } else if (!list.empty() && v[0] == "weaponicon" && v.size() >= 2) {
                 list.back().weapon_icon = v[1];
             } else if (!list.empty() && v[0] == "stash" && v.size() >= 2) {
@@ -376,6 +465,11 @@ void load_outfits()
                 unsigned vk = static_cast<unsigned>(std::strtoul(v[1].c_str(), nullptr, 10));
                 unsigned m = static_cast<unsigned>(std::strtoul(v[2].c_str(), nullptr, 10));
                 if (vk > 0 && vk < 256 && m < 8) list.back().hk_vk = static_cast<U16>(vk), list.back().hk_mods = static_cast<std::uint8_t>(m);
+            } else if (!list.empty() && v[0] == "pin" && v.size() >= 2) { // (#32)
+                const long p = std::strtol(v[1].c_str(), nullptr, 10);
+                list.back().pin = p < 0 ? -1 : int(p);
+            } else if (!list.empty() && v[0] == "used" && v.size() >= 2) {
+                list.back().used = U32(std::strtoul(v[1].c_str(), nullptr, 10));
             } else if (!list.empty() && v[0] == "worn") {
                 list.back().worn = true;
             } else if (!list.empty() && v[0] == "backlook" && v.size() >= 2) {

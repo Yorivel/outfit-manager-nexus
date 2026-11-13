@@ -2,6 +2,42 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
+## 0.7.0 (2026-11-13)
+
+- New: the helmet key. A hotkey (on the gear wheel's + settings page) that hides or shows your helmet whatever your outfit says; press it again, or change outfit, and the outfit decides again. On foot your character takes the helmet off or puts it on with the game's own animation, holding the helmet you wear, and it goes or comes the moment the hand reaches it. Works for Kliff, Damiane and Oongka and every helmet; on a mount it changes at once. It's saved with your game like your outfits: loading an older save brings back that save's helmet.
+- New: outfit pages. No more 11-outfit limit: from the 12th outfit on, the gear wheel shows 10 outfits per page with a Page slot next to the + slot. Scroll the Page slot to choose a page (its dots are the pages; the one holding the outfit you wear is gold) and click to open it. The wheel opens on the page you were last on, or on your outfit's page when it changed since (a hotkey, the Outfit Arc, a load). A new outfit lands on the last page; hotkeys work from any page.
+- Note: an older version of Outfit Manager reads only the first 11 outfits of each character.
+- New: the Outfit Arc keeps itself short. It lists No Outfit, then your pinned outfits, then the 3 you wore most recently (the label over the name says Pinned or Recent). Everything you had before starts pinned; new outfits start among the recent ones.
+- New: Edit Pins on the Outfit Arc (its first entry). Press it (left click, or A / Cross with a controller) and the Arc edits: a press pins or unpins the highlighted outfit, holding on a pinned outfit picks it up so you can scroll it to a new place (another press drops it), and letting go of the Arc saves without wearing anything. Back returns to the normal Arc with your changes in place. Pins are saved with your game like your outfits.
+- New: weapon sets on the Outfit Arc. Press No Outfit (left click, or A / Cross) and the Arc shows your weapon sets: pinned ones, then the 3 you loaded most recently; Outfits takes you back. Edit Pins works there too, and the Arc opens in whichever mode you left it in.
+- Fix: the Outfit Arc shows Damiane's and Oongka's outfits again. A character without weapon sets opens the Arc on outfits, even when it was last left on weapon sets.
+- The Outfit Arc's No Outfit, Edit Pins and Back icons match the gear wheel's badges and are drawn sharp at the Arc's size.
+- Fix: with the Outfit Arc open, a left click or A / Cross no longer reaches the game (no attack, no sprint).
+- New: visibility without an outfit. The gear wheel's + settings page has a Visibility entry: choose, per character, how each piece shows while no outfit is applied (after Unequip Outfit, or gear changed by hand), with the same choices as an outfit. The view shows what you're wearing in each slot. Any outfit you put on uses its own settings. Saved with your game like your outfits.
+- New: sleepwear. An outfit's new Activity setting (Off / Sleeping): an outfit set to Sleeping goes on when your character gets into bed, and what you wore (or No Outfit) comes back when you wake.
+- New: hidden armour is really off. A hidden piece is taken off the game's presentation while it stays equipped (stats unchanged), so the body under a hidden chest, the chest's physics and the straps a pack drops over heavy armour all behave as if it wasn't worn.
+- New: sounds follow what you see. Hidden armour and shields make no sound (no clinks, no metal knocking), hidden boots step like what's left on, and outfit changes don't play the game's equip sounds.
+- New: a hidden lantern shows while it burns, and while it pulses near a memory fragment.
+- New: visibility rows for the weapons carried on the body (display slots 22 and 24).
+- Fix: a hidden piece the game keeps putting back (Damiane's Visione after the helmet animation) made the hair flicker while Outfit Manager took it off again and again; it now stays hidden quietly instead.
+- Fix: hidden weapons' glow stays on the weapon itself, on every draw.
+- Fix: a pack-mounted launcher (the Boltspitter and its kin) brings its pack and straps with it.
+- Fix: expansion pieces (the diving suit) could go missing from outfits when the game renumbered its items; they now follow their item. Thanks for the report!
+- Fix: a save changed outside the game (a save editor) lost its outfits. Saves are now also recognised by the world time and place they were made. Thanks for the report!
+- Updated for Crimson Desert 2.05 (the game rebuilt its code): every game address found again, and the item, string, bag and quick slot lookups, their tables, the gear wheel's tab table and two values that moved are read the way 2.05 has them.
+- Fix (game 2.05): hidden weapons' glow plays again as they appear and go; its grey is a little lighter, as 2.05's weapon effect showed its own blue through the old dark grey.
+- New: Character Look. An outfit's settings have a Character Look entry: scroll it to Snapshot and click, and the outfit saves your character's look as it is now (hairstyle, beard, colours, tattoos, makeup, every barber choice). From then on that look comes with the outfit whenever you wear it, already from the loading screen; outfits without one, and No Outfit, show your own look. Click Off to stop it (the snapshot is kept); click Snapshot again to retake it.
+- New: the barber knows about outfit looks. Change your look at the barber while wearing an outfit that brings its own, and after you leave you're asked once: save the change to that outfit, or make it your own look (the outfit's comes back). Without one, the change is simply your own look, as before.
+- Changed: an outfit's badges (visibility, climate, Sleeping, Character Look) now show in the middle of the gear wheel under its name, in round frames like the abyss gear sockets, so the slots stay uncluttered. The slots keep the outfit's hotkey and its climate thermometer; a weapon set keeps its badge.
+- New: a weapon set's Icon setting. Scroll it to pick which of its weapons pictures the set on its slot and on the Outfit Arc (the main weapon by default); the slot shows the weapon as you scroll.
+- Changed: your outfits now live in %LOCALAPPDATA%\Outfit Manager instead of the game's bin64 folder, so a game file check or a mod manager redeploy can't touch them. An older version's file (and its backups) moves there by itself on the first start; Uninstall removes the folder too.
+- Fix: an outfit you unequipped no longer shows "Equipped" in the middle of the wheel when your gear still matches it.
+- Fix: after looking at the Page slot, the next outfit no longer kept the page's caption in the middle of the wheel.
+- Technical: the character look is the game's {16 mesh options, 250 values} record (the save's CustomizationSaveData), read from the actor's look component (+0x68 -> +0x20, +0x3B0) and applied through the barber reply's own call (+1933070); a load's look is swapped as the game builds the character; the barber reply (+CBA740) is hooked. Saved per outfit as "charlook", the No Outfit look per character as "lookbase", a weapon set's Icon as "seticon". The centre badge row is added to the tooltip's info wrap by its header bytes (uibin_patch.cpp).
+- Technical: the helmet animations play the chart states the way a chart branch does (anim.cpp); the helmet pin is saved per character as "helmetpin", the No Outfit looks as "nolook <slot> <look>" (23 the back shield, 30 the underwear). Item stat lists at +0x120 / +0x190 for the 2026-11-06 build; resolver recipes for the new addresses.
+- Translations: the new texts in all 15 languages.
+- Tested on: Crimson Desert 1.0.0.3663 (2.05, Steam build 26636972) with DMM 5.0.0.
+
 ## 0.6.0 (2026-11-08)
 
 - New: weapon sets. An outfit's Weapons setting has a third value, Weapons Only. A slot set to it is a weapon set: clicking it (or its hotkey) changes only your weapons; your armour, your outfit and its visibility settings stay. Keep your outfits on Leave and switch weapons with weapon sets on top of whatever you wear, without saving every combination.
