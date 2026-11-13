@@ -120,7 +120,7 @@ bool perm(U64 comp, bool on, U8 all)
         reinterpret_cast<void(__fastcall*)(void*, U64)>(g_base + kRvaMsgInit)(msg, g_base + kRvaPermKey);
         *reinterpret_cast<U64*>(msg) = g_base + kRvaMsgUintVtable;
         *reinterpret_cast<U32*>(msg + 0x30) = on ? 1u : 0u;
-        *reinterpret_cast<U32*>(msg + 0x34) = *reinterpret_cast<U32*>(rp(g_base + kRvaPermValue));
+        *reinterpret_cast<U32*>(msg + 0x34) = *reinterpret_cast<U32*>(g_base + kRvaPermValue); // (2.05: the u32 itself; was a pointer to it)
         U32 pid = *reinterpret_cast<U32*>(g_base + kRvaPermId);
         reinterpret_cast<void(__fastcall*)(U64, U32*, void*, U8)>(g_base + kRvaPermSet)(comp, &pid, msg, all);
         *reinterpret_cast<U64*>(msg) = g_base + kRvaMsgBaseVtable; // (as the game leaves it: the base message's vtable)

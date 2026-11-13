@@ -18,7 +18,7 @@ extern VoidFn g_restyle;
 extern std::atomic<U32> g_fake_key;
 extern U64 g_outfits_root;
 U64 qsi_table(U64 root_rva);
-U64 __fastcall qsi_get_hook(U64 unused, U32 key);
+U64 __fastcall qsi_get_hook(const U16* key);
 void collect_weapon_slots();
 bool prepare_fake_record();
 U32 outfit_slot_index(U64 self, U64 script);

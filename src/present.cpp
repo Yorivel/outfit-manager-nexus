@@ -46,7 +46,6 @@ using PresentFn = int*(__fastcall*)(U64 comp, int* err, void* puton, U8 flag, vo
 using RefreshFn = void(__fastcall*)(U64 comp, U16 slot, U16 key, void* item);
 using ItemFn = void*(__fastcall*)(void*);
 using ItemCopyFn = void*(__fastcall*)(void* dst, U64 src);
-using ItemInfoFn = U64(__fastcall*)(U64, U32 key);
 
 constexpr U16 kFootwearSlot = 6; // (equipment-6: the boots, for Kliff, Damiane and Oongka)
 struct Req { U64 inv; U16 slot; bool take_off; };
@@ -90,7 +89,7 @@ void fill_entry(unsigned char* e, U16 slot, U64 item) // (an entry for the equip
     reinterpret_cast<ItemFn>(g_base + kRvaItemInit)(e + 0x18);
     U16 key = 0xFFFF, alt = 0xFFFF, w40 = 0;
     rd(item + 8, key), rd(item + 0x90, alt), rd(item + 0x40, w40);
-    const U64 info = reinterpret_cast<ItemInfoFn>(g_base + kRvaItemInfo)(0, alt != 0xFFFF ? alt : key);
+    const U64 info = by_key(reinterpret_cast<RecordGetFn>(g_base + kRvaItemInfo), alt != 0xFFFF ? alt : key);
     U32 v = 0;
     if (info) rd(info + 8, v);
     *reinterpret_cast<U32*>(e + 4) = v;

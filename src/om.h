@@ -60,8 +60,14 @@ constexpr U32 kRecordSize = 0x30; // (copied whole; the 2026-10-30 header is 8 b
 constexpr U32 kRecSlotCount = 0x0c, kRecSlots = 0x18;
 constexpr U32 kSlotSize = 0x50;
 
-// The static-info getters take the key by value since the 2026-10-30 update (first argument unused; was const u16*).
-using RecordGetFn = U64(__fastcall*)(U64, U32);
+// The static-info getters take the key by pointer (const u16*) - as before 2026-10-30, again since game 2.05 (2026-11-13);
+// in between: (unused, u32 key). by_key calls one with a key.
+using RecordGetFn = U64(__fastcall*)(const U16* key);
+inline U64 by_key(RecordGetFn f, U32 key)
+{
+    const U16 k = static_cast<U16>(key);
+    return f(&k);
+}
 
 using OpenFn = U64(__fastcall*)(U64, U64, U64, U64);
 using TabFn = U64(__fastcall*)(U64, U64, U64, U64, U64, U64);
@@ -91,7 +97,7 @@ using ErrorTextFn = U64(__fastcall*)(U64, const int*);
 // (its entry +4 = the destination bag). It only sends the request: the game checks it a moment later (and says why
 // when it refuses), so whether a piece moved is seen in the bag afterwards.
 using ItemMoveFn = int*(__fastcall*)(U64, int*, U32, U32, short, U16, U64, U16, U16, U32);
-using BagInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
+using BagInfoFn = RecordGetFn; // (key)
 
 // Companions (actor kind != 1) only change gear through the game's UI requests (the wheel's / inventory's path):
 // equip takes an item copy {200-byte item, u16 +0xc8, u16 bag position +0xca} (its bag comes from the item type).
@@ -251,7 +257,7 @@ struct Busy {
 // Fire Resistance, 0x705 Ice, 0x706 Lightning; the others are other passives (0x70a fishing cooldown, 0x6xx ...).
 // Levels add up over the worn pieces; 5 / 10 / 15 each cancel one of the cold / heat gauge's three bars, 15 also gives
 // immunity to Freeze / Burn. Item data never changes in a session: cached per key.
-using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
+using ItemInfoFn = RecordGetFn; // (key)
 
 const char* const kBadges[] = {"om-plus-big", "om-cog-big", "om-plus-c", "om-cog-c", "om-flag-c", "om-cold-c", "om-heat-c",
                                "om-cold2-c", "om-heat2-c", "om-eye-c", "om-look-shown-c", "om-look-hidden-c",
@@ -400,7 +406,7 @@ struct PieceCheck {
     std::vector<std::pair<size_t, U64>> copies; // outfit item index -> uid of the copy offered for it
     std::vector<size_t> gone;                   // item indices with no copy
 };
-using ItemInfoFn = U64(__fastcall*)(U64, U32); // (unused, key)
+using ItemInfoFn = RecordGetFn; // (key)
 
 // A prompt takes the input while it is open, so the gear menu misses the release of the button that holds it open
 // and stays up afterwards. Once a prompt is gone, do what the game's release handler (0x1098f10, event 1) does.

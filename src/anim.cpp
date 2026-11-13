@@ -123,17 +123,16 @@ int* __fastcall ack_hook(U64 comp, U64 ctx, U64 records, U64 x)
     return g_ack_orig(comp, ctx, records, x);
 }
 
-using InfoFn = U64(__fastcall*)(U64, U64);
-InfoFn g_info_orig = nullptr;
-U64 __fastcall info_hook(U64 unused, U64 key)
+RecordGetFn g_info_orig = nullptr;
+U64 __fastcall info_hook(const U16* key)
 {
     const int p = g_phase.load();
-    if ((p == kRequested || p == kPlaying) && U16(key) == g_prop_from.load()) {
+    if ((p == kRequested || p == kPlaying) && key && *key == g_prop_from.load()) {
         const U16 to = g_prop_to.load();
         const U64 from = reinterpret_cast<U64>(_ReturnAddress()) - g_base;
-        if (to != 0xFFFF && from - kRvaItemCharges >= kItemChargesSize) return g_info_orig(unused, to);
+        if (to != 0xFFFF && from - kRvaItemCharges >= kItemChargesSize) return g_info_orig(&to);
     }
-    return g_info_orig(unused, key);
+    return g_info_orig(key);
 }
 
 // The animation's own moment for the helmet (ClientFrameEventSetVisualEquipItem, kRvaSetVisualEquipEv: this, int* out,

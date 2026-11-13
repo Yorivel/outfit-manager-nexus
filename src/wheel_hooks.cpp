@@ -45,20 +45,20 @@ std::atomic<U32> g_fake_key{0xFFFF}; // record index served from g_fake_rec (0xF
 U64 g_outfits_root = 0; // the menu the Outfits tab was injected into (build_hook)
 
 // --- Outfits tab --------------------------------------------------------------------------------
-// The count the body builder iterates: (***root + 8) -> +0x460 -> +8 (root depends on a TLS flag,
+// The count the body builder iterates: (***root + 8) -> +0x438 -> +0x28 (2.05; root depends on a TLS flag,
 // so both candidates are adjusted).
 U64 qsi_table(U64 root_rva)
 {
     U64 p = rp(g_base + root_rva);
     p = p ? rp(p) : 0;
     p = p ? rp(p + 8) : 0;
-    return p ? rp(p + 0x460) : 0;
+    return p ? rp(p + 0x438) : 0; // (game 2.05: +0x438, was +0x460; the count in it at +0x28, was +8)
 }
 
-U64 __fastcall qsi_get_hook(U64 unused, U32 key)
+U64 __fastcall qsi_get_hook(const U16* key)
 {
-    if (U16(key) == g_fake_key.load()) return reinterpret_cast<U64>(g_fake_rec);
-    return g_qsi_get(unused, key);
+    if (key && *key == g_fake_key.load()) return reinterpret_cast<U64>(g_fake_rec);
+    return g_qsi_get(key);
 }
 
 // Equip slot ids of the template (Armor) record's slots, read before the fake slots are cleared.
@@ -80,7 +80,7 @@ constexpr U16 kWeaponRecord = 0;
 void collect_weapon_slots()
 {
     U16 key = kWeaponRecord;
-    U64 rec = g_qsi_get(0, key);
+    U64 rec = by_key(g_qsi_get, key);
     U64 slots = rec ? rp(rec + kRecSlots) : 0;
     U32 n = rec ? r32(rec + kRecSlotCount) : 0;
     // (read on the UI thread and, at the loading screen, the game's: filled whole, then counted; the same values)
@@ -105,7 +105,7 @@ void collect_weapon_slots()
 bool prepare_fake_record()
 {
     U16 key = kTemplateRecord;
-    U64 rec = g_qsi_get(0, key);
+    U64 rec = by_key(g_qsi_get, key);
     U64 slots = rec ? rp(rec + kRecSlots) : 0;
     if (!slots || r32(rec + kRecSlotCount) != kOutfitSlots) {
         LOG("template record %u unusable (rec %llX slots %u)", key, rec, rec ? r32(rec + kRecSlotCount) : 0);

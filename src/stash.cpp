@@ -17,7 +17,7 @@ namespace om {
 int stash_rule(U16 from, U16 to) // the source bag's transfer rule to `to` (-1: none, e.g. no wardrobe yet)
 {
     __try {
-        U64 info = g_bag_info(0, from);
+        U64 info = by_key(g_bag_info, from);
         U64 rules = info ? *reinterpret_cast<U64*>(info + 0x38) : 0;
         U32 n = info ? *reinterpret_cast<U32*>(info + 0x40) : 0;
         for (U32 i = 0; rules && i < n && i < 256; ++i) {
