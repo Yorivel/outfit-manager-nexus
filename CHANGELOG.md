@@ -2,7 +2,7 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
-## Unreleased
+## 0.7.0 (2026-11-13)
 
 - New: the helmet key. A hotkey (on the gear wheel's + settings page) that hides or shows your helmet whatever your outfit says; press it again, or change outfit, and the outfit decides again. On foot your character takes the helmet off or puts it on with the game's own animation, holding the helmet you wear, and it goes or comes the moment the hand reaches it. Works for Kliff, Damiane and Oongka and every helmet; on a mount it changes at once. It's saved with your game like your outfits: loading an older save brings back that save's helmet.
 - New: outfit pages. No more 11-outfit limit: from the 12th outfit on, the gear wheel shows 10 outfits per page with a Page slot next to the + slot. Scroll the Page slot to choose a page (its dots are the pages; the one holding the outfit you wear is gold) and click to open it. The wheel opens on the page you were last on, or on your outfit's page when it changed since (a hotkey, the Outfit Arc, a load). A new outfit lands on the last page; hotkeys work from any page.
@@ -35,6 +35,8 @@ Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods
 - Fix: after looking at the Page slot, the next outfit no longer kept the page's caption in the middle of the wheel.
 - Technical: the character look is the game's {16 mesh options, 250 values} record (the save's CustomizationSaveData), read from the actor's look component (+0x68 -> +0x20, +0x3B0) and applied through the barber reply's own call (+1933070); a load's look is swapped as the game builds the character; the barber reply (+CBA740) is hooked. Saved per outfit as "charlook", the No Outfit look per character as "lookbase", a weapon set's Icon as "seticon". The centre badge row is added to the tooltip's info wrap by its header bytes (uibin_patch.cpp).
 - Technical: the helmet animations play the chart states the way a chart branch does (anim.cpp); the helmet pin is saved per character as "helmetpin", the No Outfit looks as "nolook <slot> <look>" (23 the back shield, 30 the underwear). Item stat lists at +0x120 / +0x190 for the 2026-11-06 build; resolver recipes for the new addresses.
+- Translations: the new texts in all 15 languages.
+- Tested on: Crimson Desert 1.0.0.3663 (2.05, Steam build 26636972) with DMM 5.0.0.
 
 ## 0.6.0 (2026-11-08)
 
