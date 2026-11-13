@@ -184,6 +184,7 @@ bool write_store_file()
     }
     put(out, "setting\tstash\t%d\nsetting\tcompanions\t%d\nsetting\tmessages\t%d\n", g_stash ? 1 : 0,
         g_take_from_companions ? 1 : 0, g_messages ? 1 : 0);
+    if (g_shared_outfits) put(out, "setting\tsharedoutfits\t1\n"); // (Outfits: Same in every save)
     put(out, "setting\teffects\t%d\n", int(g_effects));
     if (!g_unmanaged.empty()) {
         std::string u;
@@ -393,6 +394,7 @@ void load_outfits()
                 if (v[1] == "stash" || v[1] == "keep" || v[1] == "pull") g_stash = x > 0;
                 // (other names: settings of another build, e.g. the dropped "hotkey" / "wardrobe_bonus": ignored)
                 else if (v[1] == "companions") g_take_from_companions = x != 0;
+                else if (v[1] == "sharedoutfits") g_shared_outfits = x != 0;
                 else if (v[1] == "messages") g_messages = x != 0;
                 else if (v[1] == "unmanaged") {
                     g_unmanaged.clear();

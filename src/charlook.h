@@ -15,6 +15,8 @@ void charlook_follow();
 void charlook_tick();
 // The barber question's answer (to_outfit: the change becomes the outfit's look; else the character's own).
 void charlook_barber_answer(bool to_outfit);
+// A character's model was built (looks.cpp's look_sync): after a load, the right look goes on there.
+void charlook_built(U64 actor, U16 character);
 // Hooks the barber's reply (setup).
 void charlook_install();
 extern std::atomic<U64> g_hud_root;

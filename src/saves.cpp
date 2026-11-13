@@ -1,4 +1,5 @@
 // Save binding: watching the game's save files and which save is loaded.
+#include "settings.h"
 #include "om.h"
 #include "saves.h"
 #include "store.h"
@@ -101,6 +102,18 @@ int slot_of_name(const std::wstring& name)
 
 std::wstring slot_save_path(U32 slot) { return g_save_root + L"slot" + std::to_wstring(slot) + L"\\save.save"; }
 
+// Outfits carried into a save from elsewhere (a save the mod never saw written, or Outfits: Same in every save): what
+// belongs to one save is dropped - which outfit was applied, the helmet key's pin, the No Outfit look (learnt from
+// this save once in the game) (2026-11-13: a player's saves made while the mod was off came up with no outfits).
+void carry_over(Store& s)
+{
+    for (CharacterOutfits& c : s) {
+        for (Outfit& o : c.outfits) o.worn = false;
+        c.helmet_pin = 0;
+        c.look_base.clear();
+    }
+}
+
 // The pending read becomes the active set (g_store_mu held).
 constexpr U64 kNewGameSaveMax = 64 * 1024; // (a save this small is a new game's starting save)
 void apply_load(const char* why)
@@ -129,7 +142,11 @@ void apply_load(const char* why)
     // it at once - no save of the player's is read. Without this it took the outfits of the save played before, and
     // the new game's first autosave kept them (2026-11-06).
     U64 size = now.size ? now.size : id.size;
-    if (size && size < kNewGameSaveMax) {
+    if (g_shared_outfits) { // (Outfits: Same in every save - the current ones, whatever this save had)
+        carry_over(g_published);
+        g_bound[slot] = {id, g_published};
+        how = "Outfits: Same in every save - the current outfits";
+    } else if (size && size < kNewGameSaveMax) {
         g_published.clear();
         if (pw != g_pending_writes.end()) pw->store.clear(); // (the starting save itself keeps none either)
         g_bound[slot] = {id, g_published};
@@ -145,9 +162,10 @@ void apply_load(const char* why)
         g_bound[slot] = {id, g_published};
         how = edited ? "restored (the same save, changed outside the game: its world clock and place match)"
                      : U32(from) == slot ? "restored" : "restored (same save as another slot)";
-    } else {
-        g_published.clear();
-        how = "the mod never saw this save written: no outfits";
+    } else { // (made while the mod was off, or elsewhere: the current outfits rather than none)
+        carry_over(g_published);
+        g_bound[slot] = {id, g_published};
+        how = "the mod never saw this save written: it takes the current outfits";
     }
     g_loaded_id = id, g_loaded_known = true;
     ++g_generation;

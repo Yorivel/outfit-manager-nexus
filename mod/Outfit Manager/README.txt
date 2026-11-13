@@ -1,4 +1,4 @@
-Outfit Manager 0.7.0 by Strahlimeier
+Outfit Manager 0.7.1 by Strahlimeier
 Adds an Outfits tab to Crimson Desert's gear wheel: save what you wear, switch outfits with one click.
 
 INSTALL (DMM)
@@ -57,6 +57,10 @@ CHARACTER LOOK
   (hairstyle, beard, colours, tattoos, makeup). The outfit brings that look whenever you wear it; other outfits and
   No Outfit show your own look. Changing your look at the barber while such an outfit is on asks once, after you
   leave, whether the change goes to that outfit or becomes your own look.
+
+OUTFITS PER SAVE
+  Your outfits are saved with each game save. The + page's Outfits setting can make them the same in every save
+  instead. A save made while the mod was off takes your current outfits.
 
 NO OUTFIT VISIBILITY
   The + page's Visibility entry: how each piece shows while no outfit is applied, per character.

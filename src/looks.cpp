@@ -423,6 +423,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
     U64 model = look_model(actor);
     if (!model) return;
     U16 ch = character_of(actor);
+    charlook_built(actor, ch); // (#35: after a load, the outfit's look or the character's own, already now)
     std::vector<LookPiece> pieces;
     {
         std::lock_guard<std::mutex> lock(g_looks_mu);

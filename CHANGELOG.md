@@ -2,6 +2,15 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
+## 0.7.1 (2026-11-13)
+
+- Fix: a Character Look didn't go on during loading: the look the game had saved (often another outfit's, after a barber visit saved to it) showed until a moment after the world appeared. The right look now goes on as the game builds your character, behind the loading screen.
+- Fix: a save made while the mod was off (waiting for an update, say) came up with no outfits. It now takes your current outfits. Thanks for the report!
+- New: an Outfits setting on the + page: Per save (each save keeps its own outfits, as before) or Same in every save (one list everywhere: loading any save keeps the outfits you have).
+- Translations: the new texts in all 15 languages.
+- Technical: the look is applied from looks.cpp's look_sync (the model build, on the game's thread) once per character and load; the loading-screen hook on the look apply's body now waits until the game has unpacked that code.
+- Tested on: Crimson Desert 1.0.0.3663 (2.05, Steam build 26636972).
+
 ## 0.7.0 (2026-11-13)
 
 - New: the helmet key. A hotkey (on the gear wheel's + settings page) that hides or shows your helmet whatever your outfit says; press it again, or change outfit, and the outfit decides again. On foot your character takes the helmet off or puts it on with the game's own animation, holding the helmet you wear, and it goes or comes the moment the hand reaches it. Works for Kliff, Damiane and Oongka and every helmet; on a mount it changes at once. It's saved with your game like your outfits: loading an older save brings back that save's helmet.

@@ -26,6 +26,8 @@
 
 #include <MinHook.h>
 #include <atomic>
+#include <map>
+#include <mutex>
 #include <cstring>
 #include <intrin.h>
 
@@ -225,9 +227,15 @@ std::atomic<U64> g_swap_until{0};
 std::atomic<U32> g_swap_gen{0xFFFFFFFF};
 
 // The look a loaded save wants for a character: its applied outfit's snapshot, else its No Outfit look ("" unknown).
-std::string load_want(U16 character)
+std::string load_want(U16 character, bool* busy = nullptr)
 {
-    std::lock_guard<std::mutex> lock(g_store_mu);
+    std::unique_lock<std::mutex> lock(g_store_mu, std::defer_lock);
+    if (busy) { // (try only: the caller may run while another part of OM holds the outfits)
+        *busy = !lock.try_lock();
+        if (*busy) return {};
+    } else {
+        lock.lock();
+    }
     for (const CharacterOutfits& c : g_published) {
         if (c.character != character) continue;
         for (const Outfit& o : c.outfits)
@@ -293,17 +301,91 @@ std::string charlook_read()
     return l;
 }
 
+// A function start the compiler writes (mov [rsp+..], reg / push / sub rsp / mov rax, rsp ...): the unpacked code.
+bool looks_like_code(const unsigned char* b)
+{
+    return (b[0] == 0x48 && (b[1] == 0x89 || b[1] == 0x8B || b[1] == 0x83)) || (b[0] == 0x40 && b[1] >= 0x53 && b[1] <= 0x57) ||
+           (b[0] == 0x4C && b[1] == 0x8B) || (b[0] >= 0x53 && b[0] <= 0x57) || (b[0] == 0x41 && b[1] >= 0x54 && b[1] <= 0x57);
+}
+
+DWORD WINAPI hook_body_when_unpacked(LPVOID)
+{
+    unsigned char last[16] = {};
+    for (int i = 0; i < 1200; ++i, Sleep(100)) { // (up to 2 minutes; the game unpacks within seconds of starting)
+        const U64 body = apply_body();
+        unsigned char now[16] = {};
+        bool read = body != 0;
+        for (int k = 0; read && k < 16; ++k) read = rd(g_base + body + k, now[k]);
+        if (!read || !looks_like_code(now) || std::memcmp(now, last, 16) != 0) {
+            std::memcpy(last, now, 16);
+            continue;
+        }
+        void* st = reinterpret_cast<void*>(g_base + body);
+        if (MH_CreateHook(st, reinterpret_cast<void*>(&apply_hook), reinterpret_cast<void**>(&g_apply_orig)) != MH_OK ||
+            MH_EnableHook(st) != MH_OK) {
+            LOG("character look: loading screen hook at +%llX failed - the look follows once in the game", body);
+            return 0;
+        }
+        LOG("character look: loading screen hook in at +%llX (after %d ms)", body, i * 100);
+        // (the game writes that code again later - a second unpacking or its integrity check - which took the hook out:
+        // kept watching, the hook goes back in whenever its jump is gone)
+        int again = 0;
+        for (;; Sleep(200)) {
+            unsigned char op = 0;
+            if (!rd(g_base + body, op) || op == 0xE9) continue;
+            MH_RemoveHook(st);
+            if (MH_CreateHook(st, reinterpret_cast<void*>(&apply_hook), reinterpret_cast<void**>(&g_apply_orig)) != MH_OK ||
+                MH_EnableHook(st) != MH_OK) {
+                LOG("character look: the game wrote over the loading screen hook and it couldn't go back in");
+                return 0;
+            }
+            if (++again <= 20) LOG("character look: the game wrote over the loading screen hook; it is back in (%d)", again);
+        }
+    }
+    LOG("character look: the look apply never looked unpacked - the look follows once in the game");
+    return 0;
+}
+
+void charlook_built(U64 actor, U16 character)
+{
+    // (a load builds the character from the save's look - 40 s before the HUD, and OM's fallback, start: the right look
+    // goes on as the character is built, where its visibility looks do; once per character and load)
+    if (!actor || character == kNoCharacter || !usable()) return;
+    { // (the played character only: companions are built too)
+        U64 ctx[4] = {};
+        const U64 player = acquire_player(ctx);
+        if (ctx[0]) release_player(ctx);
+        if (player != actor) return;
+    }
+    static std::mutex mu;
+    static std::map<U16, U32> done;
+    const U32 gen = g_generation.load();
+    {
+        std::lock_guard<std::mutex> lock(mu);
+        if (done.count(character) && done[character] == gen) return;
+    }
+    const std::string live = read_look(actor);
+    if (live.empty()) return; // (not there yet: the next build)
+    bool busy = false;
+    const std::string want = load_want(character, &busy);
+    if (busy) return; // (the outfits are busy: the next build)
+    {
+        std::lock_guard<std::mutex> lock(mu);
+        done[character] = gen;
+    }
+    if (want.size() != kLookBytes || want == live) return;
+    LOG("character look: character %u built: OM's look on it (%s; the save had %s)", character, brief(want).c_str(),
+        brief(live).c_str());
+    apply_look(actor, want);
+}
+
 void charlook_install()
 {
     if (!usable()) return;
-    if (const U64 body = apply_body()) { // (the look from the loading screen)
-        void* st = reinterpret_cast<void*>(g_base + body);
-        if (MH_CreateHook(st, reinterpret_cast<void*>(&apply_hook), reinterpret_cast<void**>(&g_apply_orig)) != MH_OK ||
-            MH_EnableHook(st) != MH_OK)
-            LOG("character look: loading screen hook at +%llX failed - the look follows once in the game", body);
-    } else {
-        LOG("character look: the look apply's target wasn't read - the look follows once in the game");
-    }
+    // (the look from the loading screen: the apply's body is protected code the game unpacks after it starts - hooked
+    // before that, the unpacking wrote over the hook and loads kept the save's look, 0.7.0. So a thread waits until
+    // the body reads as a function start, the same twice in a row, then hooks it)
+    CloseHandle(CreateThread(nullptr, 0, &hook_body_when_unpacked, nullptr, 0, nullptr));
     if (!have({kRvaBarberAck})) {
         LOG("character look: the barber's reply wasn't found - barber changes are the character's own look");
         return;
@@ -330,7 +412,7 @@ void charlook_tick()
         const U32 gen = g_generation.load();
         if (gen != seen_gen || g_character != seen_char) {
             seen_gen = gen, seen_char = g_character;
-            if (g_character != kNoCharacter) schedule(g_character, 2500);
+            if (g_character != kNoCharacter) schedule(g_character, 500);
         }
     }
     // (on the HUD frame again: out of the barber - its change sorted out, a moment later)
