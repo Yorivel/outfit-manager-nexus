@@ -155,6 +155,9 @@ struct Peek {
     U64 press_at = 0;
     bool press_used = false;
     bool fx_b = false;               // the press animations' class set (a / b alternate: a press right after restarts)
+    // this opening's mode: the remembered one (g_peek_weapons), but the outfits for a character without weapon sets -
+    // Damiane / Oongka opened on an empty weapon arc after Kliff's (2026-11-13); the remembered mode stays
+    bool weapons = false;
 } g_peek;
 std::atomic<int> g_peek_clicks{0};    // left clicks taken from the game while the arc is open (input.cpp's mouse hook)
 constexpr size_t kPeekRecent = 3;     // the recent outfits on the arc
@@ -180,11 +183,11 @@ bool peek_elements()
     {
         std::vector<std::uint8_t> group = p.group;
         std::set<int> toggled = p.toggled;
-        const bool editing = p.edit, landed = p.landed;
+        const bool editing = p.edit, landed = p.landed, weapons = p.weapons;
         const int opened_on = p.opened_on;
         p = Peek{p.open, p.entries, p.sel, p.worn, p.applied, p.sel0};
         p.group = std::move(group), p.toggled = std::move(toggled), p.edit = editing;
-        p.opened_on = opened_on, p.landed = landed;
+        p.opened_on = opened_on, p.landed = landed, p.weapons = weapons;
     }
     p.wrap = find_by_class(g_peek_root, "om-peek-wrap", 8);
     if (!p.wrap) return false;
@@ -429,7 +432,7 @@ U32 riding_mount(); // (below: the mount being ridden, 0 on foot)
 // with the weapon sets (#27), and Outfits (back to the outfits) in No outfit's place.
 void peek_build(Peek& p)
 {
-    const bool weapons = g_peek_weapons;
+    const bool weapons = p.weapons;
     p.entries.assign(1, kPeekEdit), p.group.assign(1, 0);
     if (!p.edit) p.entries.push_back(weapons ? kPeekSwitch : -1), p.group.push_back(0);
     normalize_pins(g_outfits);
@@ -475,7 +478,7 @@ void peek_apply_pins(Peek& p)
 // The arc on the state there is now (opening, or its mode switched): letting go there changes nothing.
 void peek_land(Peek& p)
 {
-    if (g_peek_weapons) {
+    if (p.weapons) {
         const int set = worn_weapon_set(p.self);
         p.opened_on = set >= 0 ? set : kPeekSwitch;
     } else {
@@ -498,6 +501,9 @@ void peek_open(U64 self)
     g_peek_clicks = 0, g_peek_ups = 0;
     const int anchor = anchor_outfit();
     p.applied = anchor >= 0;
+    p.weapons = false;
+    if (g_peek_weapons)
+        for (const Outfit& o : g_outfits) p.weapons |= is_weapon_set(o);
     peek_build(p);
     // (on the outfit applied - also when some of its pieces were changed since -, else on No outfit; the weapon sets:
     // on the one worn, else on Outfits)
@@ -520,7 +526,7 @@ void peek_open(U64 self)
     set_class(p.wrap, "om-peek-veil", p.reveal_at != 0);
     set_class(p.wrap, "!cpp-none", false);
     LOG("Outfit Arc: open (character %d, %zu outfit(s), worn %d, %zu entries%s)", int(g_character), g_outfits.size(), p.worn,
-        p.entries.size(), g_peek_weapons ? ", weapon sets" : "");
+        p.entries.size(), p.weapons ? ", weapon sets" : g_peek_weapons ? ", outfits (no weapon sets)" : "");
 }
 
 // #32: a picked-up outfit moved one place among the pinned ones (dir +1: down the arc); the arc follows it.
@@ -562,10 +568,11 @@ void peek_toggle(U64 self)
     };
     if (!p.edit && (e == -1 || e == kPeekSwitch)) { // (No Outfit: the weapon sets; Outfits: the outfits again)
         g_peek_weapons = e == -1;
+        p.weapons = g_peek_weapons;
         peek_build(p);
         peek_land(p); // (what is worn in this mode: letting go there changes nothing)
         p.sel = p.sel0 = 1, p.landed = true; // (on the other mode's switch: Outfits / No Outfit, the user's call)
-        LOG("Outfit Arc: %s", g_peek_weapons ? "the weapon sets" : "the outfits");
+        LOG("Outfit Arc: %s", p.weapons ? "the weapon sets" : "the outfits");
         save_outfits(); // (the mode is kept)
         peek_draw(self);
         peek_slide(e == -1 ? 1 : -1);
