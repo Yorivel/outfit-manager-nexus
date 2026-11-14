@@ -2,12 +2,13 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
-## Unreleased
+## 0.7.2 (2026-11-14)
 
 - Fix: a hidden lantern came out of hiding near a fire (a campfire lights the characters around it the way your own lantern does). It now shows only while your own lantern burns.
 - Fix: changing outfit, pieces the new outfit hides no longer flash on for a moment before they go; they never appear.
 - Fix: changing to an outfit without visibility settings (or to No Outfit), the pieces the old outfit hid no longer came back before the new pieces were on: the old outfit's hidden armour showed for a few frames. They now come back as the change finishes, together with the new pieces, and a piece the game has already put on isn't put on twice.
 - Technical: the light action (ClientGimmickActorComponent slot 168) is watched for lights from a gimmick docked to the played character; the presentation change leaves a slot's put-on out while its look wants it off the presentation (only slots the current outfit has a look for); pieces come back once the load's steps are in, not once its last part has loaded.
+- Tested on: Crimson Desert 1.0.0.3663 (2.05, Steam build 26636972).
 
 ## 0.7.1 (2026-11-13)
 
