@@ -43,6 +43,7 @@ std::set<U64> g_look_swapped;                     // ... of those, the rebuilt o
 // across pieces, so a look set now lands on whichever mesh is there). Until then looks only hide: nothing is shown or
 // let go of, so neither the old pieces nor the new ones flash.
 std::set<U64> g_look_hold;
+std::set<U64> g_look_steps_in; // (held, and the load's steps are in: the game has put the new pieces on)
 U64 player_inventory(); // (below)
 U64 g_sheathe_refresh_at = 0;
 U64 g_case_wait_since = 0; // (a drawn hidden weapon's scabbard waits for its hologram: since then; 0 = none waiting)
@@ -442,9 +443,24 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
     if (g_look_hold.count(inv) && g_look_swap_seen.count(inv) && !model_loading(model))
         g_look_hold.erase(inv), g_look_swap_seen.erase(inv); // (the last part is in: the looks apply in full)
     bool hold = g_look_hold.count(inv) != 0;
+    if (!hold) g_look_steps_in.erase(inv);
+    // (bringing pieces back to the presentation waits for the load's steps, not for its last part: by then the game
+    // has put the new pieces on itself - skipped as already presented - and the pieces that stay, a circlet, earrings,
+    // come back with them; waiting for the last part brought them in apart from the new helm: the head flickered)
+    const bool steps_in = hold && g_look_steps_in.count(inv) != 0;
     // (a character without looks - every NPC the headgear switch runs for - is not kept at all)
     auto ap = g_look_applied.find(inv);
-    if (pieces.empty()) // (nothing has a look - No outfit: whatever was taken off the presentation comes back)
+    { // (only the slots with a look now may be kept off: a slot the outfit before hid, which this one doesn't, is put
+      // on by the game as it comes - left out, it blinked: dropped, then presented again a frame later)
+        U32 with_look = 0;
+        for (const LookPiece& p : pieces)
+            if (p.slot < 32) with_look |= 1u << p.slot;
+        present_want_only(inv, with_look);
+    }
+    // (nothing has a look - No outfit, or an outfit without looks: whatever was taken off the presentation comes back;
+    // mid outfit change only once the model has swapped - at once, the old outfit's hidden pieces came back for a few
+    // frames before the game swapped in the new ones: a flicker under the transition)
+    if (pieces.empty() && (!hold || steps_in))
         for (auto& [key, asked] : g_present_asked)
             if (key.first == inv && asked != 0 && asked != 1) asked = 1, present_request(inv, key.second, false);
     if (pieces.empty() && (ap == g_look_applied.end() || ap->second.empty())) {
@@ -652,6 +668,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
             const U64 part = look_part(model, h);
             const bool off = present_on() && !shown && !flying && sleep != 2;
             U64& asked = g_present_asked[{inv, p.slot}];
+            present_want(inv, p.slot, off); // (from now on its put-on is left out: it never shows for a moment)
             if (off && part && asked != part) asked = part, present_request(inv, p.slot, true), state += " (taking it off)";
             else if (!off && !part && asked != 1 && !hold) asked = 1, present_request(inv, p.slot, false), state += " (presenting it again)";
             else if (!off && part) asked = 0;
@@ -683,13 +700,13 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
     }
     // (a slot taken off the presentation whose look is gone - an outfit without it - comes back: the loop above only
     // sees the slots that have a look now)
-    if (!hold)
+    if (!hold || steps_in)
         for (auto& [key, asked] : g_present_asked) {
             if (key.first != inv || asked == 0 || asked == 1) continue;
             bool has_look = false;
             for (const LookPiece& p : pieces) has_look |= p.slot == key.second;
             if (has_look) continue;
-            asked = 1, present_request(inv, key.second, false);
+            asked = 1, present_request(inv, key.second, false), present_want(inv, key.second, false);
             state += " equipment-" + std::to_string(key.second) + " (no look any more: presenting it again)";
         }
     for (const auto& [slot, h] : applied) // (handles let go of since: the flight's too; mid change: kept till the swap)
@@ -938,7 +955,7 @@ void look_hold(bool on)
     U64 inv = player_inventory();
     if (!inv) return;
     std::lock_guard<std::mutex> lock(g_appear_mu);
-    g_look_swap_seen.erase(inv);
+    g_look_swap_seen.erase(inv), g_look_steps_in.erase(inv);
     if (on) g_look_hold.insert(inv);
     else g_look_hold.erase(inv);
 }
@@ -960,13 +977,18 @@ void look_settled()
     U64 model = actor ? look_model(actor) : 0;
     if (ctx[0]) release_player(ctx);
     if (!inv || !model) return;
+    bool refresh = false;
     {
         std::lock_guard<std::mutex> lock(g_appear_mu);
         if (!g_look_hold.count(inv)) return;
-        if (model_loading(model)) return; // (its last swaps let go)
-        g_look_hold.erase(inv), g_look_swap_seen.erase(inv);
+        if (model_loading(model)) { // (its last swaps let go; what comes back to the presentation goes now)
+            refresh = g_look_steps_in.insert(inv).second;
+        } else {
+            g_look_hold.erase(inv), g_look_swap_seen.erase(inv), g_look_steps_in.erase(inv);
+            refresh = true;
+        }
     }
-    look_refresh();
+    if (refresh) look_refresh();
 }
 
 void look_refresh()

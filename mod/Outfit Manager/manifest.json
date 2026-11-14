@@ -3,7 +3,7 @@
     "id": "OutfitManager",
     "title": "Outfit Manager",
     "author": "Strahlimeier",
-    "version": "0.7.1",
+    "version": "0.7.2",
     "description": "Adds an Outfits tab to the gear wheel: save what you wear and switch outfits with one click. Needs OutfitManager.asi (installed from the same archive).",
     "enabled": true,
     "priority": 0,

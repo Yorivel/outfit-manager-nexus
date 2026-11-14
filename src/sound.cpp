@@ -1,6 +1,6 @@
 // Sounds (2026-11-11): the played character's gear sounds follow his looks - a piece hidden by its look sounds as if it
 // weren't worn, by the game's own rules - and an outfit change doesn't play the game's equip sounds. Also the lantern's
-// lit state (a hidden lantern shows while it burns).
+// lit state (a hidden lantern shows while it burns - his own lantern, not a fire near him).
 //
 // The game's audio is Wwise, and its exe exports the Wwise API by name (AK::SoundEngine::PostEvent, SetSwitch, ...):
 // those exports are hooked. Wwise ids are FNV-1 (32 bit) of the lowercase names; the names come from the game's
@@ -252,8 +252,37 @@ U64 __fastcall effsw_hook(U64 data, U64 res, U64 a3, U64 actor, U64 a5, U64 a6)
     return g_effsw_orig(data, res, a3, actor, a5, a6);
 }
 
+// The played character's own lantern (2026-11-14). His lit counter (kOffLanternLit) counts every light on him: his
+// lantern, and also a fire near him - a campfire lights the characters around it through the same light action, and
+// a hidden lantern showed while he stood by one (reported in play: out again once the fire was put out). The light
+// action is a gimmick component's method (kRvaGimmickLightRun); a light from a gimmick docked to him
+// (kOffGimmickParent) is his lantern, anything else isn't. Without the hook the counter alone decides, as before.
+std::atomic<U64> g_own_light{0};      // (the gimmick component of his lantern while it burns, else 0)
+std::atomic<bool> g_light_watched{false};
+using LightFn = U64(__fastcall*)(U64, U64, U64, U64, U64, U64);
+LightFn g_light_orig = nullptr;
+U64 __fastcall light_hook(U64 comp, U64 res, U64 on, U64 targets, U64 data, U64 a6)
+{
+    U32 parent = 0;
+    const U32 me = g_player_id.load();
+    if (comp && me && rd(comp + kOffGimmickParent, parent) && parent == me) {
+        if (on & 0xFF) g_own_light = comp;
+        else {
+            U64 was = comp;
+            g_own_light.compare_exchange_strong(was, 0);
+        }
+    }
+    return g_light_orig(comp, res, on, targets, data, a6);
+}
+
 void sound_install()
 {
+    if (have({kRvaGimmickLightRun}) && kOffGimmickParent) { // (whose light lit him: his lantern, or a fire near him)
+        void* t = reinterpret_cast<void*>(g_base + kRvaGimmickLightRun);
+        g_light_watched = MH_CreateHook(t, reinterpret_cast<void*>(&light_hook), reinterpret_cast<void**>(&g_light_orig)) == MH_OK &&
+                          MH_EnableHook(t) == MH_OK;
+        if (!g_light_watched) LOG("sounds: the light action could not be watched (a fire near him shows a hidden lantern)");
+    }
     if (have({kRvaEffectSwitchRun}) && kOffSwitchEvent && kOffHolderGimmick && kOffGimmickParent) { // (the lantern's pulse near a memory fragment)
         void* t = reinterpret_cast<void*>(g_base + kRvaEffectSwitchRun);
         if (MH_CreateHook(t, reinterpret_cast<void*>(&effsw_hook), reinterpret_cast<void**>(&g_effsw_orig)) != MH_OK || MH_EnableHook(t) != MH_OK)
@@ -302,7 +331,19 @@ void sound_tick()
         U64 comp = actor ? rp(actor + kOffActorComp) : 0;
         U64 holder = comp && kOffCompLantern ? rp(comp + kOffCompLantern) : 0;
         U32 v = 0;
-        const bool lit = kOffLanternLit && holder && rd(holder + kOffLanternLit, v) && v > 0 && v < 64;
+        const bool lit_any = kOffLanternLit && holder && rd(holder + kOffLanternLit, v) && v > 0 && v < 64;
+        bool own = true; // (his own lantern lit him: a light from a gimmick docked to him, still docked)
+        if (g_light_watched.load()) {
+            const U64 oc = g_own_light.load();
+            U32 parent = 0;
+            own = oc && rd(oc + kOffGimmickParent, parent) && parent == (actor ? r32(actor + 0x60) : 0);
+        }
+        const bool lit = lit_any && own;
+        static bool was_other = false; // (lit by something else: logged once per change)
+        if (const bool other = lit_any && !own; other != was_other) {
+            was_other = other;
+            if (other) LOG("sounds: he is lit by something else (a fire near him?) - a hidden lantern stays hidden");
+        }
         { // the fragment pulse: whose lantern counts (a new character drops it), still docked to him (else it is over)
             const U32 id = actor ? r32(actor + 0x60) : 0;
             if (g_player_id.exchange(id) != id && g_near_comp.exchange(0)) g_near_changed = true;

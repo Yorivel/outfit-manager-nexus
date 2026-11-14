@@ -401,7 +401,8 @@ void resolve_addresses()
 
 
 // Sounds and the lantern (sound.cpp; game build of 2026-11-06). Witnesses: the game functions that use the offsets below.
-U64 kRvaLanternLight = 0x6171e0;     // (lights the character's lantern: +0x68 -> +0x50 -> +0x18C counter += 1)
+U64 kRvaLanternLight = 0x6171e0;     // (lights a character: +0x68 -> +0x50 -> +0x184 counter += 1 - his own lantern, and
+                                     // also a fire near him: the counter alone is not "his lantern burns")
 U64 kRvaLanternDim = 0x617380;       // (puts it out: the counter -= 1)
 U64 kRvaLanternCheck = 0x189da30;    // (the game's "is it lit": counter > 0)
 U64 kRvaEffectSwitchVt = 0x5db2828;  // GimmickEventHandlerData_EffectSwitch (anchor for its slot)
@@ -414,6 +415,11 @@ U64 kRvaSearchNearRun = 0x26670f0;   // (its slot 4: actor +kOffActorComp -> +kO
 U64 kRvaSendGimEvVt = 0x5df7fb0;     // GimmickEventHandlerData_SendGimmickEvent
 U64 kRvaSendGimEvRun = 0x2655e20;    // (its slot 4: the same path)
 U64 kRvaGimmickCompVt = 0x59c3768;   // ClientGimmickActorComponent
+U64 kRvaGimmickLightRun = 0xa1ab80; // (its slot 168, a jump: runs a light action - component, result*, u8 on, targets,
+                                     // data - lighting / putting out the characters it names through kRvaLanternLight / Dim;
+                                     // hooked: sound.cpp counts only the played character's own lantern, not a fire near him)
+U64 kRvaGimmickCompSlot167 = 0xa1aac0; // (its slots 167 / 169: witnesses either side of the light action's jump - place it)
+U64 kRvaGimmickCompSlot169 = 0xa1ad00;
 U64 kRvaGimmickCompLoad = 0x23314a0; // (its slots 11 / 25: read / write its fields, +kOffGimmickParent among them)
 U64 kRvaGimmickCompSave = 0x23305c0;
 U64 kOffSwitchEvent = 0x44;          // gimmick event handler data -> u32 the chart event that runs it (name hash)

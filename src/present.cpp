@@ -64,8 +64,8 @@ void mark(U64 inv, U16 slot, bool off)
     OffSlots* e = nullptr;
     for (OffSlots& x : g_off)
         if (x.inv.load() == inv) e = &x;
-    for (OffSlots& x : g_off)
-        if (!e && !x.mask.load()) e = &x, x.inv = inv;
+    for (OffSlots& x : g_off) // (a new entry only to mark a slot off: "presented" for a character we never touched -
+        if (!e && off && !x.mask.load()) e = &x, x.inv = inv; // every NPC goes through the hook - is nothing to note)
     if (!e) return;
     if (off) e->mask |= 1u << slot;
     else e->mask &= ~(1u << slot);
@@ -81,6 +81,57 @@ U32 __fastcall footwear_hook(U64 actor, U64 a2, U64 slot)
 }
 std::mutex g_mu;
 std::vector<Req> g_reqs;
+
+// Kept off as it is put on (2026-11-14). Taken off only once the model held it, a piece a look hides showed for a few
+// frames at an outfit change (the game presents it, the part loads, the look sees it, then the take-off) - pieces
+// popped in and out under the transition, and every part change restarted its hologram. Now the looks publish which
+// slots they want off the presentation (present_want), and the presentation change (kRvaPresentChange, hooked) leaves
+// such a slot's entry out of its put-on list: the part never loads. The entry is moved past the list's count for the
+// call and the count restored after, so the game frees every entry as before. Our own presenting again is never
+// filtered (its slot's look is shown).
+struct Want { std::atomic<U64> inv{0}; std::atomic<U32> mask{0}; };
+Want g_want[16];
+thread_local bool t_ours = false; // (our own change() is running on this thread)
+U32 want_mask(U64 inv)
+{
+    for (const Want& w : g_want)
+        if (w.inv.load() == inv) return w.mask.load();
+    return 0;
+}
+PresentFn g_present_orig = nullptr;
+int* __fastcall present_hook(U64 comp, int* err, void* puton, U8 flag, void* takeoff)
+{
+    const U32 want = t_ours || !puton ? 0 : want_mask(comp);
+    PresList* l = !t_ours && puton ? *reinterpret_cast<PresList**>(puton) : nullptr;
+    U32 kept = 0, full = 0;
+    if (l && l->ptr && l->count && l->count <= 64) {
+        full = l->count;
+        auto* e = reinterpret_cast<unsigned char*>(l->ptr);
+        U32 n = full;
+        for (U32 i = 0; i < n;) {
+            const U16 slot = *reinterpret_cast<U16*>(e + i * 0xE0ull);
+            if (slot < 32 && ((want >> slot) & 1)) {
+                --n;
+                if (i != n) { // (swap it past the end: the bytes move, nothing is copied or freed)
+                    unsigned char tmp[0xE0];
+                    std::memcpy(tmp, e + i * 0xE0ull, 0xE0);
+                    std::memcpy(e + i * 0xE0ull, e + n * 0xE0ull, 0xE0);
+                    std::memcpy(e + n * 0xE0ull, tmp, 0xE0);
+                }
+                mark(comp, slot, true);
+                LOG("presentation: equipment-%u kept off as it is put on (its look hides it)", slot);
+                continue;
+            }
+            if (slot < 32) mark(comp, slot, false); // (the game presents it itself: nothing for us to present again)
+            ++i;
+        }
+        kept = n;
+        l->count = n;
+    }
+    int* r = g_present_orig(comp, err, puton, flag, takeoff);
+    if (l && full && l->count == kept) l->count = full; // (the game frees them all, as it would have)
+    return r;
+}
 
 void fill_entry(unsigned char* e, U16 slot, U64 item) // (an entry for the equipped item, as the game's +A94F60 fills it)
 {
@@ -114,10 +165,13 @@ int change(U64 comp, U16 slot, U64 item, bool take_off) // -> the game's error c
         } else {
             fill_entry(on.store, slot, item), on.count = 1;
             struct { PresList* list; U64 zero; } arg{&on, 0};
+            t_ours = true;
             reinterpret_cast<PresentFn>(g_base + kRvaPresentChange)(comp, &err, &arg, 0, &off);
+            t_ours = false;
             reinterpret_cast<ItemFn>(g_base + kRvaItemFree)(on.store + 0x18);
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
+        t_ours = false;
         return -1;
     }
     return err;
@@ -134,12 +188,38 @@ bool present_on()
     return ok;
 }
 
+// (the looks: whether a slot's look wants it off the presentation - its put-on is then left out; all = every slot)
+void present_want(U64 inv, U16 slot, bool off)
+{
+    if (!inv || slot >= 32) return;
+    Want* w = nullptr;
+    for (Want& x : g_want)
+        if (x.inv.load() == inv) w = &x;
+    for (Want& x : g_want)
+        if (!w && off && !x.mask.load()) w = &x, x.inv = inv;
+    if (!w) return;
+    if (off) w->mask |= 1u << slot;
+    else w->mask &= ~(1u << slot);
+}
+void present_want_only(U64 inv, U32 slots) // (drops the wishes of every slot outside `slots`)
+{
+    for (Want& x : g_want)
+        if (x.inv.load() == inv) x.mask &= slots;
+}
+
 // (a piece seen presented again without our asking - the game built it anew: it sounds as worn until taken off again)
 void present_seen(U64 inv, U16 slot) { mark(inv, slot, false); }
 
 void present_install()
 {
-    if (!present_on() || !have({kRvaFootwearSound})) return;
+    if (!present_on()) return;
+    { // (pieces a look hides kept off as they are put on)
+        void* t = reinterpret_cast<void*>(g_base + kRvaPresentChange);
+        if (MH_CreateHook(t, reinterpret_cast<void*>(&present_hook), reinterpret_cast<void**>(&g_present_orig)) != MH_OK ||
+            MH_EnableHook(t) != MH_OK)
+            LOG("presentation: the put-on could not be watched (hidden pieces show for a moment when put on)");
+    }
+    if (!have({kRvaFootwearSound})) return;
     void* t = reinterpret_cast<void*>(g_base + kRvaFootwearSound);
     const bool ok = MH_CreateHook(t, reinterpret_cast<void*>(&footwear_hook), reinterpret_cast<void**>(&g_footwear_orig)) == MH_OK &&
                     MH_EnableHook(t) == MH_OK;
@@ -189,6 +269,10 @@ void present_game_thread()
         const U64 item = list ? equipped_item(list, r.slot) : 0;
         U16 key = 0xFFFF;
         if (!item || !rd(item + 8, key) || key == 0xFFFF) continue;
+        if (!r.take_off && !((off_mask(r.inv) >> r.slot) & 1)) { // (the game presented it since: once is enough)
+            LOG("presentation: equipment-%u (item %u) already presented by the game", r.slot, key);
+            continue;
+        }
         const int err = change(r.inv, r.slot, item, r.take_off);
         if (err != -1) mark(r.inv, r.slot, r.take_off);
         if (err == -1) faulted = true; // (once: no more changes this session, the looks keep hiding on their layer)
