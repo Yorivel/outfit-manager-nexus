@@ -2,6 +2,12 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
+## Unreleased
+
+- Fix: Camp Happens and Master Looter work alongside Outfit Manager again. Placed beds and campfires vanished (and went back to your inventory), Camp Happens' armour durability turned itself off, and older Master Looter versions failed their scan. The helmet animation's hook on the game's item lookup stayed in place the whole session, and those mods read that function to find the item table; it's now only there while a helmet animation plays. Thanks for the reports!
+- Fix: pre-order and expansion pieces (the Charter diving suits and others) stay right when their item numbers move. A mod that adds items (Camp Happens adds 9) or a newly installed package renumbers them; an outfit then showed other items in those slots and could put on the wrong one (a ship part as boots). Outfits now follow them by the item's own id, the way base-game items already survive game patches. Outfits saved with an older version follow them once you re-save them (or as soon as the piece is seen in your inventory).
+- Technical: the four helmet-animation hooks (branch try, start-action ack, item info, set visual equip) are created when an animation starts and removed (MH_RemoveHook, original bytes back) when it ends; the permanent-id lookup (pid_of / key_of_pid) covers the run-time rows of the item table too when their ids are set, unique and not a data-file row's (game 2.05: 1311 rows, all unique), rebuilt when the table grows; "came back" needs a matching permanent id, and a run-time key without one is followed by uid only.
+
 ## 0.7.2 (2026-11-14)
 
 - Fix: a hidden lantern came out of hiding near a fire (a campfire lights the characters around it the way your own lantern does). It now shows only while your own lantern burns.
