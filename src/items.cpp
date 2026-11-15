@@ -16,8 +16,9 @@ U32 kPassiveFire = 0x74e, kPassiveIce = 0x74f; // (0x704 / 0x705 before 2026-10-
 U32 kBaseFire = 0x72, kBaseIce = 0x73; // (0x68 / 0x69 before 2026-10-30: Scout Cloak Ice 3 = 0x73, Hungering Fang Lightning 7 = 0x74)
 
 // The game's item table: a key is a row, and a patch that adds items renumbers the rows; the permanent id in each row
-// stays. Only the first block is used: the rows from the data file, whose body offsets grow from row to row. After it the
-// table has room for rows the game fills while it runs (they come and go, and repeat ids). Checked: ids all different.
+// stays. The first block is the rows from the data file, whose body offsets grow from row to row (checked: ids all
+// different). After it come the rows the game adds while it starts - expansion and pre-order items, ids of their own
+// (row_ids below). A mod's new items sit in the data file, before them: they shift every run-time key.
 // (game 2.05: rows at +0x20, 24 bytes each - u32 permanent id, u32 body offset, the record -, the count at +0x28; before:
 // rows at +0x28, 8 bytes each, the count at +8)
 constexpr U64 kItemRowsAt = 0x20, kItemCountAt = 0x28, kItemRowSize = 0x18;
@@ -50,32 +51,61 @@ U64 item_rows(U32* count = nullptr)
 }
 
 // True for a key the game hands out while it runs (after the data file's rows: expansion and pre-order items). Such a
-// key can name another item next session (a newly added package lands before it: 2026-11-12, a player's log, every
-// expansion piece 6 keys up), so a saved piece of that kind is found by its uid (gear.cpp, adopt_returned).
+// key can name another item next session (a newly added package, or a mod's new items in the data file, lands before it:
+// 2026-11-12, a player's log, every expansion piece 6 keys up; 2026-11-15, Camp Happens' 9 items, every one 9 up).
 bool key_assigned_at_run(U16 key)
 {
     U32 n = 0;
     return item_rows(&n) && key >= n && key != 0xFFFF;
 }
 
+// The ids of every row, the run-time ones too (expansion and pre-order items: they do carry their permanent id - checked
+// 2026-11-15, game 2.05: 1311 run-time rows, every id set, none repeated, none a data-file row's). Rebuilt when the
+// table grows; a run-time row whose id is zero, repeated or a data-file row's has none here (pid 0: found by uid only).
+struct RowIds {
+    U32 total = 0;
+    std::vector<U32> pid;         // key -> permanent id (0: none to trust)
+    std::map<U32, U16> key;       // permanent id -> key
+};
+std::mutex g_row_ids_mu; // (held around row_ids and the read of its answer: the UI and game threads both ask)
+const RowIds& row_ids()
+{
+    static RowIds ids;
+    U32 block = 0;
+    U64 rows = item_rows(&block);
+    U64 table = rows ? rp(g_base + kRvaItemTable) : 0;
+    U32 n = table ? r32(table + kItemCountAt) : 0;
+    if (!rows || n < block || n > 60000) return ids = RowIds{};
+    if (n == ids.total) return ids;
+    RowIds fresh;
+    fresh.total = n;
+    fresh.pid.resize(n);
+    std::map<U32, int> seen;
+    for (U32 i = 0; i < n; ++i)
+        if (U32 id = r32(rows + i * kItemRowSize)) fresh.pid[i] = id, ++seen[id];
+    U32 dropped = 0;
+    for (U32 i = block; i < n; ++i)
+        if (fresh.pid[i] && seen[fresh.pid[i]] > 1) fresh.pid[i] = 0, ++dropped;
+    for (U32 i = 0; i < n && i < 0xFFFF; ++i)
+        if (fresh.pid[i] && (i < block || seen[fresh.pid[i]] == 1)) fresh.key[fresh.pid[i]] = static_cast<U16>(i);
+    LOG("item ids: %u rows (%u from the data file, %u added at run time%s)", n, block, n - block,
+        dropped ? (", " + std::to_string(dropped) + " of them with a repeated id: found by uid only").c_str() : "");
+    return ids = std::move(fresh);
+}
+
 U32 pid_of(U16 key)
 {
-    U32 n = 0;
-    U64 rows = item_rows(&n);
-    return rows && key < n ? r32(rows + key * kItemRowSize) : 0;
+    std::lock_guard<std::mutex> lock(g_row_ids_mu);
+    const RowIds& ids = row_ids();
+    return key < ids.pid.size() ? ids.pid[key] : 0;
 }
 
 U16 key_of_pid(U32 pid)
 {
-    static std::map<U32, U16> keys;
-    U32 n = 0;
-    U64 rows = item_rows(&n);
-    if (!rows) return 0xFFFF;
-    if (keys.empty())
-        for (U32 i = 0; i < n && i < 0xFFFF; ++i)
-            if (U32 id = r32(rows + i * kItemRowSize)) keys[id] = static_cast<U16>(i);
-    auto f = keys.find(pid);
-    return f != keys.end() ? f->second : U16(0xFFFF);
+    std::lock_guard<std::mutex> lock(g_row_ids_mu);
+    const RowIds& ids = row_ids();
+    auto f = ids.key.find(pid);
+    return f != ids.key.end() ? f->second : U16(0xFFFF);
 }
 
 // An item info's passive list (base false) or base stat list (true, from the first refinement row) at `off`.

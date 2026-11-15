@@ -876,8 +876,13 @@ bool adopt_returned(Outfit& o, const std::vector<Owned>& owned)
             bool have = false;
             for (const Owned& x : owned) have |= x.uid == it.uid && x.key == it.key;
             if (have || stash_pending(it.uid)) continue;
+            // (a run-time key alone is no proof of the item: once a package or mod adds items before them, the key
+            // names another item - 2026-11-15, Camp Happens' 9 new items made a pre-order boots key a ship's stern,
+            // adopted as the boots. With its permanent id the item is checked below; without one, uid only, above.)
+            if (!it.pid && key_assigned_at_run(it.key)) continue;
             for (const Owned& x : owned)
-                if (x.key == it.key && x.uid > o.seen && std::find(taken.begin(), taken.end(), x.uid) == taken.end()) {
+                if (x.key == it.key && (!it.pid || pid_of(x.key) == it.pid) && x.uid > o.seen &&
+                    std::find(taken.begin(), taken.end(), x.uid) == taken.end()) {
                     LOG("outfit \"%s\": equipment-%u key %u came back (uid %llX -> %llX)", o.name.c_str(), it.slot,
                         it.key, it.uid, x.uid);
                     it.uid = x.uid;
