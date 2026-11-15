@@ -43,6 +43,8 @@ std::set<U64> g_look_swapped;                     // ... of those, the rebuilt o
 // across pieces, so a look set now lands on whichever mesh is there). Until then looks only hide: nothing is shown or
 // let go of, so neither the old pieces nor the new ones flash.
 std::set<U64> g_look_hold;
+// The weapon slots drawn (in hand) when a hold began: those get no call until the load is over (look_sync)
+std::map<U64, std::set<U16>> g_hold_drawn;
 std::set<U64> g_look_steps_in; // (held, and the load's steps are in: the game has put the new pieces on)
 U64 player_inventory(); // (below)
 U64 g_sheathe_refresh_at = 0;
@@ -446,7 +448,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
     if (g_look_hold.count(inv) && g_look_swap_seen.count(inv) && !model_loading(model))
         g_look_hold.erase(inv), g_look_swap_seen.erase(inv); // (the last part is in: the looks apply in full)
     bool hold = g_look_hold.count(inv) != 0;
-    if (!hold) g_look_steps_in.erase(inv);
+    if (!hold) g_look_steps_in.erase(inv), g_hold_drawn.erase(inv);
     // (bringing pieces back to the presentation waits for the load's steps, not for its last part: by then the game
     // has put the new pieces on itself - skipped as already presented - and the pieces that stay, a circlet, earrings,
     // come back with them; waiting for the last part brought them in apart from the new helm: the head flickered)
@@ -707,7 +709,13 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
             continue;
         }
         // (mid outfit change: only hiding; what is shown waits for the model swap, kept as it was meanwhile)
-        if (!(hold && (shown || drawn)) && look_call(model, h, shown || drawn ? 1 : 0)) now[p.slot] = h;
+        // (a weapon in hand as the change began - its new model still loading - gets no call at all, a hide included:
+        // hidden while it loaded, a weapon swapped in while drawn stayed invisible in the hand for good, whatever was
+        // shown after - 2026-11-16, tested by switch both ways. Once the model has loaded, the game's draw reports
+        // decide. Sheathed weapons and the display slots still hide at once, so they never flash on)
+        const bool weapon_hold = hold && is_weapon_slot(p.slot) && g_hold_drawn[inv].count(p.slot);
+        if (weapon_hold) state += " (loading: untouched)";
+        if (!weapon_hold && !(hold && (shown || drawn)) && look_call(model, h, shown || drawn ? 1 : 0)) now[p.slot] = h;
         if (shown || drawn) forced.insert(h);
         state += shown || drawn ? hold ? " shown once on" : " shown" : " hidden";
         if (!(shown || drawn) && p.slot < 32) hidden_mask |= 1u << p.slot;
@@ -982,8 +990,15 @@ void look_hold(bool on)
     if (!inv) return;
     std::lock_guard<std::mutex> lock(g_appear_mu);
     g_look_swap_seen.erase(inv), g_look_steps_in.erase(inv);
-    if (on) g_look_hold.insert(inv);
-    else g_look_hold.erase(inv);
+    if (on) {
+        g_look_hold.insert(inv);
+        std::set<U16>& drawn = g_hold_drawn[inv]; // (the weapons in hand as the change begins)
+        drawn.clear();
+        for (const auto& [owner, d] : g_drawn)
+            if (owner.first == inv && d) drawn.insert(owner.second);
+    } else {
+        g_look_hold.erase(inv);
+    }
 }
 
 // The player's outfit is still going on the model (from the requests until its last part swapped in).
