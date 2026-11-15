@@ -59,6 +59,9 @@ std::map<std::pair<U64, U16>, U64> g_draw_wait;
 // until the glow's hold ends (1.9 s). The player only, not mid outfit change. (g_appear_mu)
 std::map<std::pair<U64, U16>, bool> g_fx_was_shown;
 constexpr U16 kBowSlot = 2; // (equipment-2: the bow - its part renders like armour on the back: the hologram on it too)
+// (equipment-14: the tools. The weapon glow doesn't show on them - an arm tool, the Knuckledrills and the Chainsaw, has
+// no part it takes - so a hidden tool has no glow and no hold: it goes as it is put away, 2026-11-16: it lingered ~2 s)
+constexpr U16 kToolSlot = 14;
 std::map<std::pair<U64, U16>, U64> g_look_appear_at, g_look_go_at; // (a drawn hidden weapon: since when its scabbard waits; g_appear_mu)
 std::map<std::pair<U64, U16>, FxTargets> g_fx_targets; // (the player's hidden weapons, from the last sync; g_appear_mu) // (a sheathed hidden weapon stays until its glow's peak: the looks again then)
 std::map<std::pair<U64, U16>, bool> g_fx_was_drawn; // (the player's hidden weapons: drawn at the last sync)
@@ -523,12 +526,34 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
                             }
                         searched = true;
                     }
-                    std::string names;
-                    for (U64 q : look_parts(model, h)) {
-                        bool fresh = g_weapon_parts.insert_or_assign({vc, r32(q + 0x48)}, std::make_pair(inv, p.slot)).second;
-                        if (fresh) names += " " + part_name(r32(q + 0x48));
+                    std::string names, dropped;
+                    std::set<U32> current;
+                    for (U64 q : look_parts(model, h)) current.insert(r32(q + 0x48));
+                    // (the parts of a piece that has left the slot stop counting: a tool slot kept every earlier tool's
+                    // parts, and one of them reported drawn with no put-away after it held the new tool shown until the
+                    // model was rebuilt - 2026-11-16, a hidden Knuckledrill stayed out after it was put away)
+                    for (auto it = g_weapon_parts.begin(); it != g_weapon_parts.end();) {
+                        if (it->first.first == vc && it->second == std::make_pair(inv, p.slot) && !current.count(it->first.second)) {
+                            dropped += " " + part_name(it->first.second);
+                            g_part_drawn.erase(it->first);
+                            it = g_weapon_parts.erase(it);
+                        } else {
+                            ++it;
+                        }
                     }
-                    if (!names.empty()) LOG("appearance: equipment-%u's parts watched for drawing:%s", p.slot, names.c_str());
+                    for (U32 nm : current) {
+                        bool fresh = g_weapon_parts.insert_or_assign({vc, nm}, std::make_pair(inv, p.slot)).second;
+                        if (fresh) names += " " + part_name(nm);
+                    }
+                    if (!dropped.empty()) { // (drawn only through a dropped part: not drawn any more)
+                        bool now = false;
+                        for (U32 nm : current)
+                            if (auto d = g_part_drawn.find({vc, nm}); d != g_part_drawn.end()) now |= d->second;
+                        if (!now) g_drawn[{inv, p.slot}] = false;
+                    }
+                    if (!names.empty() || !dropped.empty())
+                        LOG("appearance: equipment-%u's parts watched for drawing:%s%s%s", p.slot, names.c_str(),
+                            dropped.empty() ? "" : "; no longer:", dropped.c_str());
                     pi = {part, tab, count, case_handle(model, own), extra_case_handles(model, own)};
                     log_model_parts(model, ch);
                 }
@@ -568,7 +593,8 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
                         }
                     }
                 }
-                if (was != g_fx_was_drawn.end() && was->second != drawn && !drawn && transition_on()) { // (sheathed; drawn: in the hook)
+                if (was != g_fx_was_drawn.end() && was->second != drawn && !drawn && transition_on() &&
+                    p.slot != kToolSlot) { // (sheathed; drawn: in the hook)
                     std::vector<U32> names;
                     for (const auto& [k2, own] : g_weapon_parts)
                         if (own == key) names.push_back(k2.second);
@@ -613,7 +639,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
             // (an outfit change and its transition change looks too: only noted then, no effect of its own)
             const bool quiet = hold || hide_wait || fx_transition_busy() || !transition_on();
             auto was = g_fx_was_shown.find(key);
-            const bool weapon = is_weapon_slot(p.slot) || is_display_slot(p.slot); // (weapons only - user, 2026-11-07)
+            const bool weapon = (is_weapon_slot(p.slot) || is_display_slot(p.slot)) && p.slot != kToolSlot; // (weapons only - user, 2026-11-07)
             if (weapon && !quiet && was != g_fx_was_shown.end() && was->second != vis) {
                 std::vector<U32> holo;
                 std::vector<U32> names;
@@ -877,7 +903,7 @@ float __fastcall equip_vis_check_hook(U64 vc, const U32* part, std::uint8_t* rec
         return r;
     }
     d = true;
-    if (transition_on()) // (a hidden weapon drawn: its effects start on this frame - from the looks a frame
+    if (transition_on() && owner.second != kToolSlot) // (a hidden weapon drawn: its effects start on this frame - from the looks a frame
                                 // later, its scabbard showed plain first)
         if (auto tg = g_fx_targets.find(owner); tg != g_fx_targets.end()) {
             fx_weapon_glow(tg->second.names, false);
