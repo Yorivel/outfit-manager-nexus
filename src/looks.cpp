@@ -113,6 +113,7 @@ struct PartInfo {
     U32 count = 0;
     int ch_case = 0;
     std::vector<int> extras;
+    bool armour_like = false; // (renders like armour, so the glow doesn't show on it: the hologram on it - bow, shield)
 };
 std::map<std::pair<U64, int>, PartInfo> g_part_info; // (model, handle) -> what was found
 
@@ -510,6 +511,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
         bool drawn = false;
         int ch_case = 0;
         std::vector<int> extras;
+        bool armour_like = false;
         if (is_weapon_slot(p.slot) || is_display_slot(p.slot)) { // (drawn: always shown; its parts are watched)
             if (U64 part = look_part(model, h); part && vc) {
                 PartInfo& pi = g_part_info[{model, h}];
@@ -556,11 +558,15 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
                     if (!names.empty() || !dropped.empty())
                         LOG("appearance: equipment-%u's parts watched for drawing:%s%s%s", p.slot, names.c_str(),
                             dropped.empty() ? "" : "; no longer:", dropped.c_str());
-                    pi = {part, tab, count, case_handle(model, own), extra_case_handles(model, own)};
+                    // (the bow and shields render like armour: the glow doesn't show on them, the hologram does. A shield
+                    // is told by its part's name - the game's MainWeapon_Shield_L / _R - in any slot it sits in)
+                    const bool like = p.slot == kBowSlot || own.rfind("MainWeapon_Shield", 0) == 0;
+                    pi = {part, tab, count, case_handle(model, own), extra_case_handles(model, own), like};
                     log_model_parts(model, ch);
                 }
                 ch_case = pi.ch_case;
                 extras = pi.extras;
+                armour_like = pi.armour_like;
             }
             if (auto it = g_drawn.find({inv, p.slot}); it != g_drawn.end() && it->second) drawn = true;
             // (a lit lantern shows, on the hip too: hidden only while it is out - sound.cpp)
@@ -585,7 +591,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
                     tg.holo.clear();
                     std::vector<int> hh = extras; // (the scabbard and the extras: they appear with it)
                     if (ch_case) hh.push_back(ch_case);
-                    if (p.slot == kBowSlot) hh.push_back(h); // (the bow itself: drawn like armour on the back)
+                    if (armour_like) hh.push_back(h); // (the bow / a shield itself: drawn like armour)
                     for (int x : hh) {
                         tg.holo.push_back(static_cast<U32>(x));
                         for (U64 q : look_parts(model, x)) {
@@ -615,7 +621,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
                         std::vector<U32> hl;
                         for (int x : extras) hl.push_back(static_cast<U32>(x));
                         if (ch_case) hl.push_back(static_cast<U32>(ch_case));
-                        if (p.slot == kBowSlot) hl.push_back(static_cast<U32>(h)); // (the bow: drawn like armour on the back)
+                        if (armour_like) hl.push_back(static_cast<U32>(h)); // (the bow / a shield: drawn like armour)
                         if (!hl.empty()) fx_scabbard_holo(hl, !drawn);
                     }
                     if (!drawn) {
@@ -649,7 +655,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
                     if (own == key) names.push_back(k2.second);
                 std::vector<int> hh = extras; // (the scabbard and the extras - a bow's quiver and arrows)
                 if (ch_case) hh.push_back(ch_case);
-                if (p.slot == kBowSlot) hh.push_back(h); // (the bow itself: drawn like armour on the back)
+                if (armour_like) hh.push_back(h); // (the bow / a shield itself: drawn like armour)
                 for (int x : hh) {
                     holo.push_back(static_cast<U32>(x));
                     for (U64 q : look_parts(model, x))
