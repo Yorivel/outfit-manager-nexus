@@ -386,7 +386,13 @@ void resolve_addresses()
                            // (not written, but what the game plays and shows follows them: off rather than wrong)
                            &kOffCompLantern, &kOffLanternLit, &kOffCompEffects, &kOffEffectsSound, &kOffSoundHandle,
                            &kOffHandleObject, &kOffContactBody, &kOffEventId, &kOffEventAlt, &kOffCompModel, &kOffModelScenes,
-                           &kOffSwitchEvent, &kOffHolderGimmick, &kOffGimmickParent, &kOffSceneObjPart};
+                           &kOffSwitchEvent, &kOffHolderGimmick, &kOffGimmickParent, &kOffSceneObjPart,
+                           // (Visibility Extras calls game functions with them; their witnesses also hold the call shapes)
+                           &kOffInvActor, &kOffPartsComp, &kOffPartsBodyArg, &kOffPartsBodyId, &kOffEquipListEntries,
+                           &kOffEquipListCount, &kOffEquipEntrySize, &kOffEntryShownKey, &kOffEntryKey, &kOffPartsG,
+                           &kOffPartsG1, &kOffPartsG2, &kOffPartsG3, &kOffPartsMap, &kOffPrefabRecKey,
+                           // (the working-parts check calls the cast on what they reach)
+                           &kOffPartScene, &kOffSceneInner, &kOffSceneSkip, &kOffSceneCastAdj, &kOffCastTable};
     for (std::size_t i = 0; i < kOffsetCount; ++i) {
         *kOffsetVars[i] = values[i];
         bool unsure = status[i] == resolver::OffsetStatus::Doubtful ||
@@ -482,5 +488,41 @@ U64 kRvaCompStoreLook = 0x1932f80;   // (component, look*): the component keeps 
 U64 kOffCompLook = 0x3b0;            // the actor's look component (+kOffActorComp -> +0x20) -> its look record
 U64 kRvaBarberAckVt = 0x5a170b8;     // TrocTrCharacterCustomizationAck
 U64 kRvaBarberAck = 0xcba740;        // (its slot 2: the barber's reply, applies the confirmed look - hooked)
+
+// Visibility Extras (parts.cpp; game 2.05): the model parts a worn piece brings, asked for as kRvaSlotHandle does. Its
+// own code is the witness of every offset below, at the instruction that uses it (the call shapes come with it: on
+// 2.04 the body getter took a u16 by value, on 1.0.0 the body id sat at +0 - their witnesses don't match there, and
+// parts.cpp stays off). The item info and the prefab record are kRvaItemInfo / kRvaStringInfoGet (same functions).
+U64 kRvaPartsBody = 0x3db330;        // (character's component +kOffPartsComp, +kOffPartsBodyArg) -> body: u32 id +kOffPartsBodyId
+U64 kRvaPrefabIds = 0x267ab70;       // (item info, u32 body id, u32 slot, {0, {u16* ids, u32 count}*}*): the item's prefab ids
+U64 kRvaPartsMapFind = 0x45f300;     // (map, key*) -> node: -> {u32 handle, u32}[] entries, u32 count (the parts' handles)
+U64 kRvaPartsGlobal = 0x72451c0;     // -> G: [[[G+kOffPartsG]+kOffPartsG1]+kOffPartsG2]+kOffPartsG3 + kOffPartsMap = the map
+U64 kOffInvActor = 0x8;              // inventory (equip component) -> its actor
+U64 kOffPartsComp = 0x20;            // actor component (+kOffActorComp) -> the one the body getter takes
+U64 kOffPartsBodyArg = 0x30;         // ... + this is the body getter's argument
+U64 kOffPartsBodyId = 0x8;           // body -> u32 its id (the prefab ids' argument)
+U64 kOffEquipListEntries = 0x8;      // equipment list (inventory +kOffInvEquipList) -> entries (kOffEquipEntrySize each)
+U64 kOffEquipListCount = 0x10;       // equipment list: u32 entry count
+U64 kOffEquipEntrySize = 0xd0;       // equipment entry size (the u16 slot at +kOffEntrySlot)
+U64 kOffEntryShownKey = 0x90;        // equipment entry: u16 the shown item's key (0xFFFF: the equipped one's)
+U64 kOffEntryKey = 0x8;              // equipment entry: u16 the equipped item's key (0xFFFF: empty)
+U64 kOffPartsG = 0xd8;               // G -> x
+U64 kOffPartsG1 = 0x8;               // x -> y
+U64 kOffPartsG2 = 0x2c0;             // y -> z
+U64 kOffPartsG3 = 0x40068;           // z -> the map's holder (the map at +kOffPartsMap)
+U64 kOffPartsMap = 0x50;
+U64 kOffPrefabRecKey = 0x10;         // prefab record (kRvaStringInfoGet) + this = the map's key
+
+// Working parts (2026-11-16, the Tech Gloves crash; wired in parts.cpp by its own change): the chest path's check in
+// kRvaChestPartCheck (+0x135 on 2.05): part +kOffPartScene -> +kOffSceneInner = q; q's u8 +kOffSceneSkip == 0, then
+// kRvaPartCast(q - kOffSceneCastAdj) -> object, its table +kOffCastTable (then +3BBF420: (table, 27)). The function is
+// plain code on disk (only .data1 holds code the game unpacks); its offsets are witnessed there, at their instructions.
+U64 kRvaChestPartCheck = 0x3044690;  // (witness only) the function holding the check
+U64 kRvaPartCast = 0x5b4f60;         // (object) -> the object if it is of the type the chest path wants, else 0
+U64 kOffPartScene = 0x28;            // part -> a
+U64 kOffSceneInner = 0x8;            // a -> q
+U64 kOffSceneSkip = 0x15;            // q: u8, nonzero = the chest path skips it
+U64 kOffSceneCastAdj = 0x28;         // the cast takes q - this (the code adds -0x28; its witness reads it negated)
+U64 kOffCastTable = 0x228;           // cast object -> the table (null: the part has no working component)
 
 } // namespace om

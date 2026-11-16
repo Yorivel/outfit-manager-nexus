@@ -658,6 +658,7 @@ std::size_t resolver::resolve_offsets(const Offset* o, std::size_t n, const Resu
                 std::memcpy(&d, img.at(site + a.disp_at), 4);
                 v = d;
             }
+            if (a.neg) v = -v;
             if (v > 0) vals.push_back(U64(v));
         }
         if (vals.empty()) {
