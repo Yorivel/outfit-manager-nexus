@@ -102,7 +102,7 @@ void into_bed(U64 ctx0, U64 ctx1, const char* why)
 }
 void sleep_began(U32 state)
 {
-    if (!g_slept.exchange(true)) LOG("sleep: the sleep itself began (state %08X)", state);
+    if (!g_slept.exchange(true)) LOG("sleep: the sleep itself began (state %08X)", state), post(); // (the looks step back)
 }
 
 U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64 a7, const U64* link, U64 a9, U64 a10)
@@ -248,7 +248,10 @@ int worn_index()
 void update_look_mode()
 {
     int w = worn_index();
-    int mode = !g_asleep ? 0 : (w >= 0 && g_outfits[size_t(w)].activity == kActivitySleep && !g_outfits[size_t(w)].temp) ? 2 : 1;
+    // In bed, the looks change only once the sleepwear is on or the sleep itself began: getting in, the hidden pieces
+    // would show while he climbs in - and a sleep the game refuses would blink them (2026-11-17).
+    const bool sleepwear = w >= 0 && g_outfits[size_t(w)].activity == kActivitySleep && !g_outfits[size_t(w)].temp;
+    int mode = !g_asleep ? 0 : sleepwear ? 2 : g_slept.load() ? 1 : 0;
     if (mode != g_sleep_look.load()) {
         g_sleep_look = mode;
         LOG("sleep: looks %s", mode == 0 ? "as usual" : mode == 1 ? "left to the game's in-bed hiding" : "the sleepwear outfit's own");
