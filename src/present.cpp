@@ -98,6 +98,19 @@ U32 want_mask(U64 inv)
         if (w.inv.load() == inv) return w.mask.load();
     return 0;
 }
+// Slots whose piece our own call presented again (and the game hasn't presented itself since): such a build lacks
+// what the game's own adds to some parts (the Tech Gloves' arm component, parts.cpp), so it isn't checked.
+std::mutex g_om_mu;
+std::map<U64, U32> g_om_built; // inventory -> slot bits
+void by_om(U64 inv, U16 slot, bool on)
+{
+    if (slot >= 32) return;
+    std::lock_guard<std::mutex> lock(g_om_mu);
+    auto it = g_om_built.find(inv);
+    if (!on && it == g_om_built.end()) return;
+    U32& m = g_om_built[inv];
+    m = on ? m | (1u << slot) : m & ~(1u << slot);
+}
 PresentFn g_present_orig = nullptr;
 // Before the game's put-on: the entries of slots a look hides leave its list for good - each freed as the game frees
 // one after the call (its item at +0x18, kRvaItemFree), the rest moved up - so nothing is left to restore afterwards
@@ -119,7 +132,8 @@ void present_pre(U64 comp, int* /*err*/, void* puton, U64 /*flag*/)
             LOG("presentation: equipment-%u kept off as it is put on (its look hides it)", slot);
             continue;
         }
-        if (slot < 32) mark(comp, slot, false); // (the game presents it itself: nothing for us to present again)
+        if (slot < 32) mark(comp, slot, false), by_om(comp, slot, false); // (the game presents it itself: nothing for us
+                                                                          // to present again; its build is the game's)
         if (n != i) std::memcpy(e + n * 0xE0ull, at, 0xE0); // (the bytes move; the freed entry's are overwritten)
         ++n;
     }
@@ -208,6 +222,13 @@ void present_want_only(U64 inv, U32 slots) // (drops the wishes of every slot ou
 
 // (a piece seen presented again without our asking - the game built it anew: it sounds as worn until taken off again)
 void present_seen(U64 inv, U16 slot) { mark(inv, slot, false); }
+// The slot's piece was built by our own call (presented again by us), not by the game since.
+bool present_built_by_om(U64 inv, U16 slot)
+{
+    std::lock_guard<std::mutex> lock(g_om_mu);
+    auto it = g_om_built.find(inv);
+    return slot < 32 && it != g_om_built.end() && ((it->second >> slot) & 1);
+}
 // The slot is off the presentation (taken off, or kept off as put on) and not presented since.
 bool present_is_off(U64 inv, U16 slot) { return slot < 32 && ((off_mask(inv) >> slot) & 1); }
 
@@ -283,6 +304,7 @@ void present_game_thread()
         }
         const int err = change(r.inv, r.slot, item, r.take_off);
         if (err != -1) mark(r.inv, r.slot, r.take_off);
+        if (!err && !r.take_off) by_om(r.inv, r.slot, true); // (built by our call: not the game's own build - parts.cpp)
         if (err == -1) faulted = true; // (once: no more changes this session, the looks keep hiding on their layer)
         LOG("presentation: equipment-%u (item %u) %s%s", r.slot, key, r.take_off ? "taken off" : "presented again",
             err == -1 ? ": the game's function FAULTED, no more changes this session" : err ? ": the game answered an error" : "");

@@ -283,7 +283,6 @@ desc.visibility.extras = Wähle, wie die Extra-Teile der Teile dieses Outfits an
 value.pieces = Teile
 value.extras = Extra-Teile
 extras.row = {look} ({item})
-extras.piece = Klicke, um festzulegen, wie seine Teile angezeigt werden.
 extras.back = Zurück zu den Teilen
 extras.back_desc = Zurück zu den Teilen dieser Seite.
 extras.none_here = Keine Extra-Teile auf dieser Seite.

@@ -283,7 +283,6 @@ desc.visibility.extras = Bu kıyafetin parçalarının ek parçalarının nasıl
 value.pieces = Parçalar
 value.extras = Ek parçalar
 extras.row = {look} ({item})
-extras.piece = Parçalarının nasıl görüneceğini seçmek için tıkla.
 extras.back = Parçalara dön
 extras.back_desc = Bu sayfanın parçalarına dön.
 extras.none_here = Bu sayfada ek parça yok.

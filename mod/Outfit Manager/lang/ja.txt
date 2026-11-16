@@ -280,7 +280,6 @@ desc.visibility.extras = この衣装の各部位の追加パーツの表示方�
 value.pieces = 部位
 value.extras = 追加パーツ
 extras.row = {look}（{item}）
-extras.piece = クリックしてパーツの表示方法を選びます。
 extras.back = 部位に戻る
 extras.back_desc = このページの部位に戻ります。
 extras.none_here = このページに追加パーツはありません。

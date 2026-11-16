@@ -18,6 +18,8 @@
 #include "looks.h"
 #include "log.h"
 #include "mem.h"
+#include "items.h"
+#include <atomic>
 #include <cstring>
 #include <map>
 #include <mutex>
@@ -221,5 +223,146 @@ std::string part_group(const std::string& name)
     if (e < name.size() && e > 0 && name[e - 1] == '_') return name.substr(0, e - 1);
     return name;
 }
+
+// --- Working parts (2026-11-16, the Tech Gloves crash) ------------------------------------------------------------
+// Some pieces have a part the game builds with a component of its own (the Tech Gloves' All-Purpose Arm; ordinary
+// gloves, the Great Thief's Gloves don't - checked in play): opening a chest with them reaches into it (the part's
+// scene object, type-cast, its table +228, entry 27). Taken off the presentation, or presented again by our own call,
+// that part exists without it (the bare body's Hand, or our build's), and the game crashed reading a null table
+// (full dump, 2026-11-16). Such pieces are never taken off: hidden on our layer instead (looks.cpp). Which ones is
+// read from the game's own build: the chest path's check (part +28 -> +8, flag +15 == 0, the cast of it -28, the
+// table +228), its offsets and cast function taken from that code's bytes; found once the game has unpacked it.
+// Known per item's permanent id, kept in the outfits file: true = has a working part.
+namespace {
+using CastFn = U64(__fastcall*)(U64);
+struct LiveCheck {
+    bool ok = false;
+    U32 o_part = 0, o_obj = 0, o_flag = 0, o_table = 0;
+    std::int32_t o_adj = 0;
+    CastFn cast = nullptr;
+} g_live;
+std::mutex g_kind_mu;
+std::map<U32, bool> g_kind; // permanent id -> has a working part
+std::atomic<bool> g_kind_dirty{false};
+
+// the pattern in [p, p+n) (wildcards -1); no C++ objects here: read under __try
+U64 scan_raw(const int* pat, size_t len, const unsigned char* p, U64 n)
+{
+    __try {
+        for (U64 i = 0; i + len <= n; ++i) {
+            if (p[i] != pat[0]) continue;
+            size_t k = 1;
+            while (k < len && (pat[k] < 0 || p[i + k] == pat[k])) ++k;
+            if (k == len) return reinterpret_cast<U64>(p + i);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    return 0;
+}
+
+bool live_check_ready()
+{
+    if (g_live.ok) return true;
+    static U64 next_try = 0; // (the code is packed until the game unpacks it: tried again now and then, not each frame)
+    const U64 now = GetTickCount64();
+    if (now < next_try) return false;
+    next_try = now + 5000;
+    static const char* const kPat = "48 8B 4F ?? 48 85 C9 74 ?? 48 8B 49 ?? 48 85 C9 74 ?? 80 79 ?? 00 75 ?? 48 83 C1 ?? E8 "
+                                    "?? ?? ?? ?? 48 85 C0 74 ?? C5 F8 28 DE 44 0F B6 C5 49 8B D6 48 8B 88";
+    int pat[64];
+    size_t len = 0;
+    for (const char* s = kPat; *s && len < 64;) {
+        while (*s == ' ') ++s;
+        if (!*s) break;
+        pat[len++] = s[0] == '?' ? -1 : static_cast<int>(std::strtoul(std::string(s, 2).c_str(), nullptr, 16));
+        s += 2;
+    }
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(g_base);
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(g_base + dos->e_lfanew);
+    const IMAGE_SECTION_HEADER* sec = IMAGE_FIRST_SECTION(nt);
+    U64 at = 0;
+    for (WORD i = 0; i < nt->FileHeader.NumberOfSections && !at; ++i)
+        if (sec[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)
+            at = scan_raw(pat, len, reinterpret_cast<const unsigned char*>(g_base + sec[i].VirtualAddress), sec[i].Misc.VirtualSize);
+    if (!at) return false;
+    g_live.o_part = d8(at + 3), g_live.o_obj = d8(at + 12), g_live.o_flag = d8(at + 20);
+    g_live.o_adj = static_cast<std::int8_t>(d8(at + 27));
+    g_live.cast = reinterpret_cast<CastFn>(call_target(at + 28));
+    g_live.o_table = d32(at + 52);
+    g_live.ok = true;
+    LOG("working parts: the game's check found at +%llX (part +%X -> +%X, flag +%X, cast +%llX, table +%X)", at - g_base,
+        g_live.o_part, g_live.o_obj, g_live.o_flag, reinterpret_cast<U64>(g_live.cast) - g_base, g_live.o_table);
+    return true;
+}
+
+// 1: the part has the component, 0: it hasn't, -1: can't tell (no scene object, or the read faulted)
+int part_has_component_raw(U64 part)
+{
+    __try {
+        const U64 a = rp(part + g_live.o_part);
+        const U64 q = a ? rp(a + g_live.o_obj) : 0;
+        if (!q) return -1;
+        if (*reinterpret_cast<const unsigned char*>(q + g_live.o_flag) != 0) return 0; // (the chest path skips it)
+        const U64 obj = g_live.cast(q + g_live.o_adj);
+        return obj && rp(obj + g_live.o_table) ? 1 : 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return -1;
+    }
+}
+} // namespace
+
+U64 look_part(U64 model, int handle); // (looks.cpp)
+
+int working_part_known(U16 key)
+{
+    const U32 pid = key != 0xFFFF ? pid_of(key) : 0;
+    if (!pid) return -1;
+    std::lock_guard<std::mutex> lock(g_kind_mu);
+    auto it = g_kind.find(pid);
+    return it == g_kind.end() ? -1 : it->second ? 1 : 0;
+}
+
+int working_part_check(U64 inv, U64 model, U16 slot, U16 key)
+{
+    const U32 pid = key != 0xFFFF ? pid_of(key) : 0;
+    if (!pid || !live_check_ready()) return -1;
+    const std::vector<ItemPart> parts = item_parts(inv, model, slot);
+    if (parts.empty()) return -1; // (not built yet)
+    int result = 0;
+    for (const ItemPart& p : parts) {
+        const int r = part_has_component_raw(look_part(model, p.handle));
+        if (r < 0) return -1;
+        if (r > 0) result = 1;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_kind_mu);
+        g_kind[pid] = result != 0;
+    }
+    g_kind_dirty = true;
+    LOG("working parts: item %u (id %X) %s (checked in the world)", key, pid,
+        result ? "has a working part: hidden on the look layer only, never taken off" : "is plain: can be taken off");
+    return result;
+}
+
+std::string working_parts_line(bool working)
+{
+    std::lock_guard<std::mutex> lock(g_kind_mu);
+    std::string s;
+    char b[16];
+    for (const auto& [pid, w] : g_kind)
+        if (w == working) std::snprintf(b, sizeof b, "%s%X", s.empty() ? "" : " ", pid), s += b;
+    return s;
+}
+
+void working_parts_read(const std::string& ids, bool working)
+{
+    std::lock_guard<std::mutex> lock(g_kind_mu);
+    const char* q = ids.c_str();
+    char* e = nullptr;
+    for (unsigned long v = std::strtoul(q, &e, 16); e != q; v = std::strtoul(q = e, &e, 16))
+        if (v) g_kind[U32(v)] = working;
+}
+
+bool working_parts_dirty() { return g_kind_dirty.exchange(false); }
 
 } // namespace om

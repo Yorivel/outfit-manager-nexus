@@ -58,7 +58,6 @@
 {"value.pieces", "Pieces"},
 {"value.extras", "Extra Parts"},
 {"extras.row", "{look} ({item})"},
-{"extras.piece", "Click to choose how its parts show."},
 {"extras.back", "Back to the Pieces"},
 {"extras.back_desc", "Back to this page's pieces."},
 {"extras.none_here", "No extra parts on this page."},

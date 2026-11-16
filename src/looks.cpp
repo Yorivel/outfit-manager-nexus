@@ -737,7 +737,16 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
             // chest's Upperbody, the gloves' Hand, the boots' Foot share their names with the body's. Taken for the
             // piece, the slot was taken off a second time as a load ended: a blink on the loading screen, 2026-11-16)
             const U64 part = present_is_off(inv, p.slot) ? 0 : look_part(model, h);
-            const bool off = present_on() && !shown && !flying && sleep != 2;
+            // (a piece with a working part - the Tech Gloves' arm - is never taken off: hidden on our layer, the game's
+            // build untouched; one not checked yet stays on too, so the game builds it and parts.cpp can tell)
+            U16 ekey = 0xFFFF;
+            if (e) rd(e + 8, ekey);
+            int kind = ekey != 0xFFFF ? working_part_known(ekey) : 0;
+            if (kind < 0 && part && world_up() && !present_built_by_om(inv, p.slot) && !model_loading(model))
+                kind = working_part_check(inv, model, p.slot, ekey);
+            const bool keep = kind != 0;
+            if (keep && !shown) state += kind > 0 ? " (working part: on its layer only)" : " (not checked yet: on its layer)";
+            const bool off = present_on() && !shown && !flying && sleep != 2 && !keep;
             U64& asked = g_present_asked[{inv, p.slot}];
             present_want(inv, p.slot, off); // (from now on its put-on is left out: it never shows for a moment)
             if (off && part && asked != part) asked = part, present_request(inv, p.slot, true), state += " (taking it off)";
@@ -989,6 +998,7 @@ float __fastcall equip_vis_check_hook(U64 vc, const U32* part, std::uint8_t* rec
 }
 ModelSwapFn g_model_swap_orig = nullptr;
 std::atomic<bool> g_worn_dirty{true}; // a model swapped (gear changed somewhere): the wheel rechecks what is worn
+std::atomic<bool> g_look_dirty_world{false}; // (the world just came up: the looks again, on the UI thread)
 std::atomic<bool> g_anchor_dirty{false}; // ... and, with the menu closed, the anchor (anchor_recheck)
 
 void __fastcall model_swap_hook(U64 job, U64 a, U64 b, char c, std::uint8_t* state)
@@ -1008,6 +1018,11 @@ void __fastcall model_swap_hook(U64 job, U64 a, U64 b, char c, std::uint8_t* sta
 // UI thread, every frame: the characters whose model was rebuilt.
 void look_pending()
 {
+    if (g_look_dirty_world.exchange(false)) look_refresh(); // (the world is up: unchecked pieces get their check)
+    if (working_parts_dirty()) { // (a piece's working part found or ruled out: into the outfits file now)
+        std::lock_guard<std::mutex> lock(g_store_mu);
+        write_store_file();
+    }
     struct Todo {
         U64 inv;
         bool battle, swapped;
@@ -1291,8 +1306,13 @@ void bag_use_tick()
     shown = want;
 }
 
+std::atomic<U32> g_world_gen{~0u}; // (the load whose world is up: a HUD frame ran since it - parts.cpp's checks wait)
+bool world_up() { return g_world_gen.load() == g_generation.load(); }
 float __fastcall hud_frame_hook(U64 self)
 {
+    // (HUD frames only run in the world, never on a loading screen; the first one after a load syncs the looks, so the
+    // pieces left on for their working-part check get it now - parts.cpp)
+    if (const U32 gen = g_generation.load(); g_world_gen.exchange(gen) != gen) g_look_dirty_world = true;
     bag_use_tick();
     if (GetCurrentThreadId() == g_ui_thread) {
         if (g_stash_check.at) stash_verify(self);

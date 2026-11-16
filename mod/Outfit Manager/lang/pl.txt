@@ -297,7 +297,6 @@ desc.visibility.extras = Wybierz, jak widać dodatkowe elementy części tego st
 value.pieces = Części
 value.extras = Dodatkowe elementy
 extras.row = {look} ({item})
-extras.piece = Kliknij, aby wybrać, jak widać jej elementy.
 extras.back = Wróć do części
 extras.back_desc = Wróć do części tej strony.
 extras.none_here = Brak dodatkowych elementów na tej stronie.

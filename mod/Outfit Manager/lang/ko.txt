@@ -280,7 +280,6 @@ desc.visibility.extras = 이 의상 부위의 추가 파츠가 어떻게 보일�
 value.pieces = 부위
 value.extras = 추가 파츠
 extras.row = {look} ({item})
-extras.piece = 클릭해서 파츠가 어떻게 보일지 선택합니다.
 extras.back = 부위로 돌아가기
 extras.back_desc = 이 페이지의 부위로 돌아갑니다.
 extras.none_here = 이 페이지에는 추가 파츠가 없습니다.
