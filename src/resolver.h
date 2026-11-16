@@ -60,12 +60,14 @@ const char* how_name(How h);
 std::size_t resolve(const Recipe* recipes, std::size_t n, Result* out, const wchar_t* cache_path, bool ignore_known);
 
 // Struct offsets read from the game's code: each anchor is the nth match of a pattern within a witness function
-// (recipe index) whose displacement (1 or 4 bytes at disp_at) holds the offset.
+// (recipe index) whose displacement or immediate (1 or 4 bytes at disp_at, signed) holds the offset; neg: the code
+// subtracts it (add reg, -0x28), so the value is negated.
 struct OffAnchor {
     std::int16_t fn;
     const char* pattern;
     std::uint16_t nth;
     std::uint8_t disp_at, disp_size;
+    std::uint8_t neg = 0;
 };
 
 struct Offset {
