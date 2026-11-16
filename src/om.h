@@ -542,6 +542,7 @@ extern U32 g_armor_slot_count;
 extern U16 g_weapon_slots[kMaxWeaponSlots];
 extern std::atomic<U32> g_weapon_slot_count;
 bool is_weapon_slot(U16 slot);
+int redirect_calls(U64 target, void* pre); // (core.cpp: pre(rcx, rdx, r8, r9) before every direct call of a game function, its entry left free)
 void log_unlisted_slots(); // (the log: equipped items in slots on neither wheel - ammo, the DLC's gear)
 void log_weapon_wheel(U64 self); // (the log: what each Weapons wheel position holds, also ones with no equip slot)
 bool uses_weapons(const Outfit& o);

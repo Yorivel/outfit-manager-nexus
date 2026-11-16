@@ -99,38 +99,37 @@ U32 want_mask(U64 inv)
     return 0;
 }
 PresentFn g_present_orig = nullptr;
-int* __fastcall present_hook(U64 comp, int* err, void* puton, U8 flag, void* takeoff)
+// Before the game's put-on: the entries of slots a look hides leave its list for good - each freed as the game frees
+// one after the call (its item at +0x18, kRvaItemFree), the rest moved up - so nothing is left to restore afterwards
+// and nothing of ours runs after the game's function: it is called from its own call sites with the game's return
+// address (redirect_calls), and another mod hooking it sees the game as its caller (Combat Evolved, 2026-11-16).
+void present_pre(U64 comp, int* /*err*/, void* puton, U64 /*flag*/)
 {
     const U32 want = t_ours || !puton ? 0 : want_mask(comp);
     PresList* l = !t_ours && puton ? *reinterpret_cast<PresList**>(puton) : nullptr;
-    U32 kept = 0, full = 0;
-    if (l && l->ptr && l->count && l->count <= 64) {
-        full = l->count;
-        auto* e = reinterpret_cast<unsigned char*>(l->ptr);
-        U32 n = full;
-        for (U32 i = 0; i < n;) {
-            const U16 slot = *reinterpret_cast<U16*>(e + i * 0xE0ull);
-            if (slot < 32 && ((want >> slot) & 1)) {
-                --n;
-                if (i != n) { // (swap it past the end: the bytes move, nothing is copied or freed)
-                    unsigned char tmp[0xE0];
-                    std::memcpy(tmp, e + i * 0xE0ull, 0xE0);
-                    std::memcpy(e + i * 0xE0ull, e + n * 0xE0ull, 0xE0);
-                    std::memcpy(e + n * 0xE0ull, tmp, 0xE0);
-                }
-                mark(comp, slot, true);
-                LOG("presentation: equipment-%u kept off as it is put on (its look hides it)", slot);
-                continue;
-            }
-            if (slot < 32) mark(comp, slot, false); // (the game presents it itself: nothing for us to present again)
-            ++i;
+    if (!l || !l->ptr || !l->count || l->count > 64) return;
+    auto* e = reinterpret_cast<unsigned char*>(l->ptr);
+    U32 n = 0;
+    for (U32 i = 0; i < l->count; ++i) {
+        unsigned char* at = e + i * 0xE0ull;
+        const U16 slot = *reinterpret_cast<U16*>(at);
+        if (slot < 32 && ((want >> slot) & 1)) {
+            reinterpret_cast<ItemFn>(g_base + kRvaItemFree)(at + 0x18);
+            mark(comp, slot, true);
+            LOG("presentation: equipment-%u kept off as it is put on (its look hides it)", slot);
+            continue;
         }
-        kept = n;
-        l->count = n;
+        if (slot < 32) mark(comp, slot, false); // (the game presents it itself: nothing for us to present again)
+        if (n != i) std::memcpy(e + n * 0xE0ull, at, 0xE0); // (the bytes move; the freed entry's are overwritten)
+        ++n;
     }
-    int* r = g_present_orig(comp, err, puton, flag, takeoff);
-    if (l && full && l->count == kept) l->count = full; // (the game frees them all, as it would have)
-    return r;
+    l->count = n;
+}
+// (the fallback, when the call sites aren't found: the same pre-step in an entry hook)
+int* __fastcall present_hook(U64 comp, int* err, void* puton, U8 flag, void* takeoff)
+{
+    present_pre(comp, err, puton, flag);
+    return g_present_orig(comp, err, puton, flag, takeoff);
 }
 
 void fill_entry(unsigned char* e, U16 slot, U64 item) // (an entry for the equipped item, as the game's +A94F60 fills it)
@@ -214,10 +213,17 @@ void present_install()
 {
     if (!present_on()) return;
     { // (pieces a look hides kept off as they are put on)
+        // (at its call sites, its entry left as it is: Combat Evolved finds it by its first bytes and hooks it for
+        // its jetpack - under our entry hook it found nothing, 2026-11-16. Our own call below uses the entry.)
         void* t = reinterpret_cast<void*>(g_base + kRvaPresentChange);
-        if (MH_CreateHook(t, reinterpret_cast<void*>(&present_hook), reinterpret_cast<void**>(&g_present_orig)) != MH_OK ||
-            MH_EnableHook(t) != MH_OK)
+        g_present_orig = reinterpret_cast<PresentFn>(t);
+        if (const int n = redirect_calls(g_base + kRvaPresentChange, reinterpret_cast<void*>(&present_pre)))
+            LOG("presentation: the put-on watched at its %d call site(s), its entry left free for other mods", n);
+        else if (MH_CreateHook(t, reinterpret_cast<void*>(&present_hook), reinterpret_cast<void**>(&g_present_orig)) != MH_OK ||
+                 MH_EnableHook(t) != MH_OK)
             LOG("presentation: the put-on could not be watched (hidden pieces show for a moment when put on)");
+        else
+            LOG("presentation: the put-on watched at its entry (its call sites not found)");
     }
     if (!have({kRvaFootwearSound})) return;
     void* t = reinterpret_cast<void*>(g_base + kRvaFootwearSound);
