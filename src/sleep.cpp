@@ -8,8 +8,11 @@
 // reader's open slot, class ResourceLoadWorker_Package) is hooked and watches for those paths.
 // Whose bed: the game takes the character over for the interaction - a branch into one of ai_basic_lower's one-step
 // states (kStep), taken by the played character's chart contexts just before; those contexts are remembered.
-// Getting out: one of them takes a branch into a state outside the scripted / hand-over ones (kQuiet: the player-only
-// sequencer charts and ai_basic_lower's idles) - control is back (cancelled at the hours menu, or awake).
+// Getting out: one of them takes the bed interaction's way out, kGotUp (common_gimmick_action's state 930, entered on
+// the chart event "wait" from the interaction's states 519 / 704) - after a sleep and after a sleep the game refused
+// alike (user's logs, 2026-11-17: +2.1 s refused, +25 s slept). Before, any state outside the scripted / hand-over ones
+// (kQuiet) at least kOutAfterMs into the bed counted, and the played character's plain idle 662EC8AD at +22.4 s of a
+// sleep ended it 2.6 s before he got up.
 // The branch evaluator (kRvaBranchEval) is hooked for those branches (result 0 = taken). A sleep that begins without a
 // known bed scene (a sleeping spot with another scene) is still seen at the sleep itself: bed_sleep start / loop
 // (sequencer_action_pc).
@@ -59,7 +62,8 @@ constexpr U32 kStep[] = {0x00D286FD, 0x2CAC00E9, 0x7D527861, 0x96A64775, 0xEF3C2
 const char* const kBedScenes[] = {"gimmick_sleep_bed_", "gimmick_camp_straw"};
 constexpr U64 kStepWindowMs = 4000; // (the step before the scene: within this)
 constexpr U32 kPlayerIdle = 0x662EC8AD; // (basic_upper s109: the played character's plain idle, taken by his context only)
-constexpr U64 kOutAfterMs = 1500;   // (getting out needs the bed to have lasted: the states around getting in aren't it)
+constexpr U32 kGotUp = 0x804A069D;  // (common_gimmick_action s930: the bed interaction's way out - out of bed)
+constexpr U64 kOutAfterMs = 1500;   // (DIAG only: the old rule's wait, to log where it would have ended the sleep)
 
 using EvalFn = U32*(__fastcall*)(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64 a7, const U64* link, U64 a9,
                                  U64 a10);
@@ -138,8 +142,14 @@ U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64
             sleep_began(target);
             if (g_hook_ctx[0].load() != ctx && !g_hook_ctx[1].load()) g_hook_ctx[1] = ctx;
         } else if (g_hook_asleep.load() && (ctx == g_hook_ctx[0].load() || ctx == g_hook_ctx[1].load()) &&
-                   now - g_hook_since.load() >= kOutAfterMs &&
-                   !std::binary_search(std::begin(kQuiet), std::end(kQuiet), target)) {
+                   target != kGotUp) {
+            // DIAG (sleep-out, 2026-11-17; remove): where the old rule (any state outside kQuiet after kOutAfterMs)
+            // would have ended the sleep - kGotUp should follow in every bed (camp straw, either side of a bed)
+            if (now - g_hook_since.load() >= kOutAfterMs && !std::binary_search(std::begin(kQuiet), std::end(kQuiet), target))
+                LOG("DIAG sleep-out: state %08X (ctx %llX, %llu ms in bed): the old rule would have ended the sleep here",
+                    target, ctx, now - g_hook_since.load());
+        } else if (g_hook_asleep.load() && (ctx == g_hook_ctx[0].load() || ctx == g_hook_ctx[1].load()) &&
+                   target == kGotUp) {
             if (g_hook_asleep.exchange(false)) {
                 g_woke = true;
                 g_out_at = now;
@@ -164,7 +174,12 @@ bool __fastcall find_hook(U64 map, U64 key, U64* out_path, std::uint8_t* out_rec
                     for (const char* scene : kBedScenes)
                         if (_strnicmp(g + 17, scene, std::strlen(scene)) == 0) {
                             U64 now = GetTickCount64();
-                            if (now - g_out_at.load() < 5000) break; // (getting up)
+                            if (now - g_out_at.load() < 5000) { // (getting up)
+                                // DIAG (sleep-scene, 2026-11-17; remove): how long after kGotUp the scene is read again
+                                LOG("DIAG sleep-scene: bed scene %s read %llu ms after getting up: ignored", g + 17,
+                                    now - g_out_at.load());
+                                break;
+                            }
                             U64 pc = g_player_ctx.load();
                             bool stepped = now - g_step_at.load() < kStepWindowMs && g_step_ctx[0].load();
                             if (!pc && !stepped) {
