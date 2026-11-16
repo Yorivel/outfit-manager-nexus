@@ -540,12 +540,14 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
             // (the game shows another item there than the one equipped - a visual item: the Visione it puts on for a
             // memory over any helmet. That is the game's for the moment: not hidden, not kept off the presentation.
             // Hidden as the helmet, it vanished, and its take-off afterwards took off nothing - Emophaze, 2026-11-17)
-            U16 shown_key = 0xFFFF;
-            if (kOffEntryShownKey) rd(e + kOffEntryShownKey, shown_key);
+            // (the item the game last put on there - its presentation change brings the Visione over the equipped helmet;
+            // the slot's record keeps the helmet, seen in play)
+            U16 shown_key = p.slot < 32 ? present_put_on(inv, p.slot) : U16(0xFFFF);
             // (only the Visione, by its permanent id: other visual items - a transmog mod's - keep the slot's look)
             if (shown_key != 0xFFFF && shown_key != key) {
                 if (pid_of(shown_key) == kPidVisionePropItem) {
-                    if (p.slot < 32) present_want(inv, p.slot, false);
+                    // (its "keep off" stays: the put-on filter lets the Visione through by its id, and the helmet the game puts
+                    // back as the memory ends stays off - no flash)
                     state += " left to the game (it shows the Visione, item " + std::to_string(shown_key) + ")";
                     continue;
                 }

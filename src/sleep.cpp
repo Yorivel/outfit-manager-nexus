@@ -84,24 +84,25 @@ void post()
     if (HWND w = g_game_hwnd.load()) PostMessageW(w, kWmSleep, 0, 0); // (now, not at the next HUD frame)
 }
 
-// In bed: noted (getting out is watched from here). The sleepwear waits for the sleep itself - a kSleepStart state -
-// which a sleep the game refuses never reaches: getting in alone swapped, and a refused sleep (the game's, not the
-// player's) put the sleepwear on and off again (user, 2026-11-17: states logged for both, ing_02 E2B2EE2F only in
-// the accepted one).
-std::atomic<bool> g_slept{false}; // (this bed's sleep has begun: the sleepwear went on)
+// In bed: the sleepwear starts going on (its effect's glow rises first). A sleep the game refuses shows right after:
+// the character back in his plain idle (kPlayerIdle) while in bed, before the sleep itself began - about 0.1 s in
+// (states logged for both, 2026-11-17: refused 662EC8AD at +94 ms; accepted: nothing until ing_02 E2B2EE2F at +13.9 s,
+// idle only when getting up). The refusal calls the pending load off while the glow still rises, so a refused sleep
+// changes nothing (user: the game's refusal must not swap; getting into bed still does).
+std::atomic<bool> g_slept{false};   // (this bed's sleep has begun)
+std::atomic<bool> g_refused{false}; // (back to idle in bed before the sleep began: the game refused it)
 void into_bed(U64 ctx0, U64 ctx1, const char* why)
 {
     if (g_hook_asleep.exchange(true)) return;
     g_hook_ctx[0] = ctx0, g_hook_ctx[1] = ctx1, g_hook_since = GetTickCount64();
-    g_slept = false;
+    g_slept = false, g_refused = false;
+    g_fell = true;
+    post();
     LOG("sleep: into bed (%s; ctx %llX %llX)", why, ctx0, ctx1);
 }
 void sleep_began(U32 state)
 {
-    if (g_slept.exchange(true)) return;
-    g_fell = true;
-    post();
-    LOG("sleep: the sleep itself began (state %08X)", state);
+    if (!g_slept.exchange(true)) LOG("sleep: the sleep itself began (state %08X)", state);
 }
 
 U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64 a7, const U64* link, U64 a9, U64 a10)
@@ -121,6 +122,11 @@ U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64
             U32 i = g_player_ring_at.load();
             if (U32(g_player_ring[(i + 7) % 8].load() >> 32) != target)
                 g_player_ring[i % 8] = U64(target) << 32 | U32(now), g_player_ring_at = i + 1;
+        }
+        if (target == kPlayerIdle && g_hook_asleep.load() && !g_slept.load() &&
+            (ctx == g_hook_ctx[0].load() || ctx == g_hook_ctx[1].load()) && !g_refused.exchange(true)) {
+            post(); // (the game refused the sleep: sleep_tick calls the sleepwear off)
+            LOG("sleep: back to idle in bed before the sleep began: the game refused it");
         }
         if (std::find(std::begin(kStep), std::end(kStep), target) != std::end(kStep)) {
             if (now - g_step_at.load() > 500) g_step_ctx[0] = ctx, g_step_ctx[1] = 0; // (a new take-over)
@@ -420,6 +426,11 @@ void sleep_tick(U64 self)
         else end(self, g_combat_swap);
     }
     if (g_fell.exchange(false) && !g_asleep) fell_asleep(self);
+    if (g_refused.exchange(false) && g_asleep && g_sleep_swap.swapped && fx_cancel_pending()) {
+        g_sleep_swap.swapped = false, g_sleep_swap.pending_end = false, g_asleep = false; // (nothing was put on)
+        LOG("sleep: refused before the sleepwear went on: nothing changes");
+        update_look_mode();
+    }
     if (g_woke.exchange(false) && g_asleep) woke_up(self);
     for (Swap* s : {&g_combat_swap, &g_sleep_swap}) // (an end held for a running change: now that it is over)
         if (s->pending_end && !change_running()) end(self, *s);

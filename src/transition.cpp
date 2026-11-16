@@ -635,6 +635,16 @@ void fx_tick(U64 screen)
     }
 }
 
+// The load the effect waits to start at its peak, called off while the glow still rises (a sleep the game refuses
+// right after getting into bed): the glow goes down from where it got to, nothing is loaded. False: too late (loaded).
+bool fx_cancel_pending()
+{
+    if (g_state != State::In) return false;
+    const U64 now = GetTickCount64();
+    const float k = std::min(1.0f, float(now - g_t) / float(kInMs));
+    g_state = State::Out, g_t = now - U64((1.0f - k) * float(kOutMs)); // (Out's k = 1 - dt / kOutMs: starts at k)
+    return true;
+}
 bool fx_transition_busy() { return g_state != State::Idle; }
 int fx_busy_target() { return g_state == State::Idle ? -1 : g_index == kRelease ? -2 : int(g_index); }
 

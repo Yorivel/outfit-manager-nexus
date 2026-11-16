@@ -38,6 +38,7 @@ void fx_weapon_glow(const std::vector<U32>& names, bool sheathe);
 void fx_scabbard_holo(const std::vector<U32>& handles, bool sheathe);
 bool fx_scab_applied_after(U64 t);
 bool fx_transition_busy(); // (an outfit transition runs)
+bool fx_cancel_pending(); // (the glow still rising: the load it waits for is called off)
 bool transition_on();      // (the Effects setting isn't Off, and they work)
  // (the scabbard hologram went out after tick t)
 extern U64 g_case_wait_since; // (GetTickCount64: until then, weapons about to be hidden stay - the transition's glow)
@@ -65,6 +66,7 @@ void present_game_thread();
 void present_seen(U64 inv, U16 slot);
 bool present_is_off(U64 inv, U16 slot);
 bool present_built_by_om(U64 inv, U16 slot);
+U16 present_put_on(U64 inv, U16 slot); // (the item the game last put on there: 0xFFFF none seen)
 bool world_up(); // (a HUD frame since the last load: the character is in the world, not on a loading screen)
 void present_want(U64 inv, U16 slot, bool off); // (present.cpp: a look wants the slot off: its put-on is left out)
 void present_want_only(U64 inv, U32 slots);

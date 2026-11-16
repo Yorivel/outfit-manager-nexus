@@ -30,6 +30,7 @@
 #include "gear.h"
 #include "looks.h"
 #include "parts.h"
+#include "items.h"
 #include "log.h"
 #include <MinHook.h>
 #include <atomic>
@@ -112,6 +113,18 @@ void by_om(U64 inv, U16 slot, bool on)
     U32& m = g_om_built[inv];
     m = on ? m | (1u << slot) : m & ~(1u << slot);
 }
+// The item the game last put on in each slot (its own put-ons, not ours): over the equipped one when it presents a
+// visual item - the Visione it puts on the helmet slot for a memory (seen in play 2026-11-17: the slot's record keeps
+// the helmet, the put-on brings the Visione; its parts Helm_Small + Helm_Visione_Belt come and go with the memory).
+std::mutex g_seen_mu;
+std::map<std::pair<U64, U16>, U16> g_put_on; // (inventory, slot) -> item key
+void put_on_seen(U64 inv, U16 slot, U16 key)
+{
+    std::lock_guard<std::mutex> lock(g_seen_mu);
+    U16& k = g_put_on[{inv, slot}];
+    if (k != key && pid_of(key) == kPidVisionePropItem) LOG("presentation: equipment-%u gets the Visione (item %u) from the game", slot, key);
+    k = key;
+}
 PresentFn g_present_orig = nullptr;
 // Before the game's put-on: the entries of slots a look hides leave its list for good - each freed as the game frees
 // one after the call (its item at +0x18, kRvaItemFree), the rest moved up - so nothing is left to restore afterwards
@@ -132,7 +145,9 @@ void present_pre(U64 comp, int* /*err*/, void* puton, U64 /*flag*/)
         // wardrobe, 2026-11-17 - or one not checked yet; the game builds those, the look hides them on its layer)
         U16 key = 0xFFFF;
         rd(reinterpret_cast<U64>(at) + 0x18 + 8, key);
-        const bool plain = key != 0xFFFF && working_part_known(key) == 0;
+        if (slot < 32) put_on_seen(comp, slot, key); // (what the game puts on there: the Visione for a memory - looks.cpp)
+        const bool visione = key != 0xFFFF && pid_of(key) == kPidVisionePropItem; // (never kept off: the game's for now)
+        const bool plain = key != 0xFFFF && !visione && working_part_known(key) == 0;
         if (slot < 32 && ((want >> slot) & 1) && plain) {
             reinterpret_cast<ItemFn>(g_base + kRvaItemFree)(at + 0x18);
             mark(comp, slot, true);
@@ -230,6 +245,12 @@ void present_want_only(U64 inv, U32 slots) // (drops the wishes of every slot ou
 // (a piece seen presented again without our asking - the game built it anew: it sounds as worn until taken off again)
 void present_seen(U64 inv, U16 slot) { mark(inv, slot, false); }
 // The slot's piece was built by our own call (presented again by us), not by the game since.
+U16 present_put_on(U64 inv, U16 slot)
+{
+    std::lock_guard<std::mutex> lock(g_seen_mu);
+    auto it = g_put_on.find({inv, slot});
+    return it != g_put_on.end() ? it->second : U16(0xFFFF);
+}
 bool present_built_by_om(U64 inv, U16 slot)
 {
     std::lock_guard<std::mutex> lock(g_om_mu);
