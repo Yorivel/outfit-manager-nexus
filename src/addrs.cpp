@@ -392,7 +392,9 @@ void resolve_addresses()
                            &kOffEquipListCount, &kOffEquipEntrySize, &kOffEntryShownKey, &kOffEntryKey, &kOffPartsG,
                            &kOffPartsG1, &kOffPartsG2, &kOffPartsG3, &kOffPartsMap, &kOffPrefabRecKey,
                            // (the working-parts check calls the cast on what they reach)
-                           &kOffPartScene, &kOffSceneInner, &kOffSceneSkip, &kOffSceneCastAdj, &kOffCastTable};
+                           &kOffPartScene, &kOffSceneInner, &kOffSceneSkip, &kOffSceneCastAdj, &kOffCastTable,
+                           // (what shows a hidden piece while its working part is in use)
+                           &kOffArmEntry, &kOffArmEnabled, &kOffArmUnbound, &kOffArmInUse};
     for (std::size_t i = 0; i < kOffsetCount; ++i) {
         *kOffsetVars[i] = values[i];
         bool unsure = status[i] == resolver::OffsetStatus::Doubtful ||
@@ -524,5 +526,22 @@ U64 kOffSceneInner = 0x8;            // a -> q
 U64 kOffSceneSkip = 0x15;            // q: u8, nonzero = the chest path skips it
 U64 kOffSceneCastAdj = 0x28;         // the cast takes q - this (the code adds -0x28; its witness reads it negated)
 U64 kOffCastTable = 0x228;           // cast object -> the table (null: the part has no working component)
+
+// The working part in use (2026-11-17, the Tech Gloves' arm out): the table's entry the chest path asks for is a
+// pa::engineScript::PoseModifierManipulatorIK (the arm's IK). Its constructor sets +kOffArmUnbound = 1 (+kOffArmInUse 0).
+// The chest path hands it its parameters (vtable slot 87: target +74, the enabled u8 +kOffArmEnabled, blend-out time
+// +50). Its update (slot 90): +kOffArmUnbound == 1 -> looks its bones up (kRvaPoseIKBind, which sets it to 0); then, if
+// enabled, runs the IK and sets +kOffArmInUse = 1; if not, at +kOffArmInUse 0 it does nothing (weights reset), at 1 it
+// blends out (+58 += 2*dt up to +50) and then sets it back to 0. Only 0 and 1 are written to all three.
+U64 kRvaPartUseTable = 0x3bbf420;    // (witness only) what the chest path hands the table to: (table, kOffArmEntry, ...)
+U64 kOffArmEntry = 0x1b;             // the table's entry (an index, not a byte offset) the chest path asks for: the arm's IK
+                                     // (26 on 1.0.0.2976; read from "mov edx, N; call" in kRvaPartUseTable)
+U64 kRvaPoseIKVt = 0x5b155c8;        // pa::engineScript::PoseModifierManipulatorIK (anchor for its slots)
+U64 kRvaPoseIKParams = 0x1351f00;    // (witness only) its slot 87: takes the parameters (writes +kOffArmEnabled)
+U64 kRvaPoseIKUpdate = 0x1352890;    // (witness only) its slot 90: the update (reads all three, keeps +kOffArmInUse)
+U64 kRvaPoseIKBind = 0x1351f70;      // (witness only) the update's bone lookup (clears +kOffArmUnbound)
+U64 kOffArmEnabled = 0x80;           // IK: u8, 1 while the chest path has it on (set on every use)
+U64 kOffArmUnbound = 0x81;           // IK: u8, 1 from its construction until its first update (bones not looked up yet)
+U64 kOffArmInUse = 0x82;             // IK: u8, 1 once the update has posed the arm, until it has blended out; 0 at rest
 
 } // namespace om

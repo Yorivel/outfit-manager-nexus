@@ -234,6 +234,8 @@ extern U64 kOffInvActor, kOffPartsComp, kOffPartsBodyArg, kOffPartsBodyId, kOffE
     kOffEquipEntrySize, kOffEntryShownKey, kOffEntryKey, kOffPartsG, kOffPartsG1, kOffPartsG2, kOffPartsG3, kOffPartsMap,
     kOffPrefabRecKey;
 extern U64 kRvaChestPartCheck, kRvaPartCast, kOffPartScene, kOffSceneInner, kOffSceneSkip, kOffSceneCastAdj, kOffCastTable;
+extern U64 kRvaPartUseTable, kOffArmEntry, kRvaPoseIKVt, kRvaPoseIKParams, kRvaPoseIKUpdate, kRvaPoseIKBind, kOffArmEnabled,
+    kOffArmUnbound, kOffArmInUse;
 void resolve_addresses();
 
 } // namespace om

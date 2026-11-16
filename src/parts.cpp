@@ -49,12 +49,6 @@ struct Chain {
 } g_chain;
 bool g_ok = false;
 
-// (the working-parts check below still reads its offsets from the code with these; the resolver has them as
-// kRvaPartCast / kOffPartScene.. kOffCastTable)
-U64 call_target(U64 at) { return at + 5 + static_cast<std::int64_t>(*reinterpret_cast<const std::int32_t*>(at + 1)); }
-U32 d8(U64 at) { return *reinterpret_cast<const unsigned char*>(at); }
-U32 d32(U64 at) { return *reinterpret_cast<const U32*>(at); }
-
 struct Vec { U64 ptr; U32 count, cap; };
 
 U16 r16(U64 at)
@@ -211,35 +205,21 @@ std::string part_group(const std::string& name)
 // that part exists without it (the bare body's Hand, or our build's), and the game crashed reading a null table
 // (full dump, 2026-11-16). Such pieces are never taken off: hidden on our layer instead (looks.cpp). Which ones is
 // read from the game's own build: the chest path's check (part +28 -> +8, flag +15 == 0, the cast of it -28, the
-// table +228), its offsets and cast function taken from that code's bytes; found once the game has unpacked it.
+// table +228), its offsets and cast function from the resolver (witnessed in that code).
 // Known per item's permanent id, kept in the outfits file: true = has a working part.
 namespace {
 using CastFn = U64(__fastcall*)(U64);
 struct LiveCheck {
     bool ok = false;
     U32 o_part = 0, o_obj = 0, o_flag = 0, o_table = 0;
-    U32 entry = ~0u; // (the table entry the chest path asks for: the part in use - the arm out; ~0: not found)
+    U32 entry = ~0u; // (the table entry the chest path asks for: the part in use - the arm out; ~0: not known)
+    U32 o_flags[3] = {}; // (that entry's enabled / unbound / in-use bytes; 0: not known)
     std::int32_t o_adj = 0;
     CastFn cast = nullptr;
 } g_live;
 std::mutex g_kind_mu;
 std::map<U32, bool> g_kind; // permanent id -> has a working part
 std::atomic<bool> g_kind_dirty{false};
-
-// the pattern in [p, p+n) (wildcards -1); no C++ objects here: read under __try
-U64 scan_raw(const int* pat, size_t len, const unsigned char* p, U64 n)
-{
-    __try {
-        for (U64 i = 0; i + len <= n; ++i) {
-            if (p[i] != pat[0]) continue;
-            size_t k = 1;
-            while (k < len && (pat[k] < 0 || p[i + k] == pat[k])) ++k;
-            if (k == len) return reinterpret_cast<U64>(p + i);
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-    }
-    return 0;
-}
 
 bool live_check_ready()
 {
@@ -258,21 +238,16 @@ bool live_check_ready()
     g_live.o_adj = -static_cast<std::int32_t>(kOffSceneCastAdj);
     g_live.cast = reinterpret_cast<CastFn>(g_base + kRvaPartCast);
     g_live.o_table = U32(kOffCastTable);
-    { // (the in-use entry: the function the check hands the table to - "mov rcx, [rax+table]; call" - loads it into
-      // edx before its lookup: "mov edx, <entry>; call")
-        const U32 t = g_live.o_table;
-        const int kCall[] = {0x48, 0x8B, 0x88, int(t & 0xFF), int(t >> 8 & 0xFF), int(t >> 16 & 0xFF), int(t >> 24 & 0xFF), 0xE8};
-        static const int kEntry[] = {0xBA, -1, -1, -1, -1, 0xE8};
-        const U64 fnc = g_base + kRvaChestPartCheck;
-        if (const U64 m = scan_raw(kCall, 8, reinterpret_cast<const unsigned char*>(fnc), 0x300)) {
-            const U64 fn = call_target(m + 7);
-            if (const U64 e = scan_raw(kEntry, 6, reinterpret_cast<const unsigned char*>(fn), 0x60)) g_live.entry = d32(e + 1);
-        }
+    // (the part in use, from the resolver too: the entry the chest path asks for - witnessed at its "mov edx, N" - and
+    // that entry's flags, witnessed in the arm IK's own code; any unknown: hidden pieces don't show while in use)
+    if (kOffArmEntry && kOffArmEnabled && kOffArmUnbound && kOffArmInUse) {
+        g_live.entry = U32(kOffArmEntry);
+        g_live.o_flags[0] = U32(kOffArmEnabled), g_live.o_flags[1] = U32(kOffArmUnbound), g_live.o_flags[2] = U32(kOffArmInUse);
     }
     g_live.ok = true;
-    LOG("working parts: the game's check at +%llX (part +%X -> +%X, flag +%X, cast +%llX, table +%X, in use: entry %d)",
+    LOG("working parts: the game's check at +%llX (part +%X -> +%X, flag +%X, cast +%llX, table +%X, in use: entry %d +%X +%X +%X)",
         kRvaChestPartCheck, g_live.o_part, g_live.o_obj, g_live.o_flag, kRvaPartCast, g_live.o_table,
-        g_live.entry == ~0u ? -1 : int(g_live.entry));
+        g_live.entry == ~0u ? -1 : int(g_live.entry), g_live.o_flags[0], g_live.o_flags[1], g_live.o_flags[2]);
     return true;
 }
 
@@ -349,10 +324,11 @@ void working_parts_read(const std::string& ids, bool working)
 bool working_parts_dirty() { return g_kind_dirty.exchange(false); }
 
 namespace {
-// The part's in-use entry (0: none) and its working flags (logged in play, 2026-11-17, three uses in a row on one entry:
-// it appears with +81 set as the arm comes out; +80 is set while the arm works on EVERY use, about 3 s; +82 only on
-// the first; all three 0 between uses). Its "state" here: those three bytes, 0 at rest. -1: can't tell.
-constexpr U32 kInUseState = 0x80;
+// The part's in-use entry (0: none) and its flags. The entry is the arm's IK (PoseModifierManipulatorIK, see addrs.cpp):
+// enabled (+kOffArmEnabled: set by the chest path on every use), unbound (+kOffArmUnbound: from its construction to its
+// first update) and in use (+kOffArmInUse: from the update's first pose to the end of its blend-out). Polled in play,
+// 2026-11-17, three uses in a row on one entry: first use unbound, then enabled + in use, then in use alone, then all
+// 0; later uses only enabled, about 3 s. Its "state" here: the three ORed, 0 at rest. -1: can't tell.
 constexpr unsigned char kAtRest = 0;
 int part_in_use_raw(U64 part, U64* entry, unsigned char* state)
 {
@@ -364,8 +340,9 @@ int part_in_use_raw(U64 part, U64* entry, unsigned char* state)
         const U64 t = obj ? rp(obj + g_live.o_table) : 0;
         if (!t) return -1;
         *entry = rp(t + U64(g_live.entry) * 8);
-        const unsigned char* f = *entry ? reinterpret_cast<const unsigned char*>(*entry + kInUseState) : nullptr;
-        *state = f ? static_cast<unsigned char>(f[0] | f[1] | f[2]) : kAtRest; // (+80 | +81 | +82)
+        *state = kAtRest;
+        if (*entry)
+            for (const U32 o : g_live.o_flags) *state |= *reinterpret_cast<const unsigned char*>(*entry + o);
         return *entry ? 1 : 0;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return -1;
