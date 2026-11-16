@@ -299,6 +299,7 @@ void show_side_badges(U64 root, const char* const kind[2], int where)
         if (!b) continue;
         const char* t = kind ? kind[k] : nullptr;
         set_class(b, "om-sb-bed", t && !std::strcmp(t, "bed"));
+        set_class(b, "om-sb-combat", t && !std::strcmp(t, "combat"));
         set_class(b, "om-sb-look", t && !std::strcmp(t, "look"));
         set_class(b, "om-sb-plain", t && where == 1);
         set_class(b, "om-sb-eye", t && where == 2);
@@ -535,9 +536,10 @@ void apply_outfit_slots(U64 self, U32 only)
             if (const char* c = climate_only(ro)) row[n++] = c; // (the thermometer stays on the slot, user 2026-11-13)
             if (!kBadgesInCentre) { // (else the bed and the look: in the centre only)
                 if (ro.activity == kActivitySleep) row[n++] = "om-sleep-c";
+                if (ro.activity == kActivityCombat) row[n++] = "om-combat-c";
                 if (charlook_on(ro)) row[n++] = "om-lookmain-c";
             }
-            for (int k = 1; k < n; ++k) side[k - 1] = !std::strcmp(row[k], "om-sleep-c") ? "bed" : "look";
+            for (int k = 1; k < n; ++k) side[k - 1] = !std::strcmp(row[k], "om-sleep-c") ? "bed" : !std::strcmp(row[k], "om-combat-c") ? "combat" : "look";
         }
         // (the "+" slot: the worn chest, whatever is worn - what it unequips / what saving would keep)
         const bool set = saved && is_weapon_set(g_outfits[slot_outfit(i)]); // (a weapon set, #27)
@@ -578,7 +580,8 @@ void apply_outfit_slots(U64 self, U32 only)
                 for (U16 s = 0; s < 32; ++s) looks |= slot_look(g_outfits[slot_outfit(i)], s) != kLookDefault;
             if (!kBadgesInCentre && saved && !set && mode == kModeMain) looks |= g_outfits[slot_outfit(i)].underwear_look != kLookDefault;
             bool climate = want && (!std::strncmp(want, "om-cold", 7) || !std::strncmp(want, "om-heat", 7) ||
-                                    !std::strcmp(want, "om-sleep-c") || !std::strcmp(want, "om-lookmain-c"));
+                                    !std::strcmp(want, "om-sleep-c") || !std::strcmp(want, "om-combat-c") ||
+                                    !std::strcmp(want, "om-lookmain-c"));
             stacked = looks && climate;
             badge_ok &= set_class(mark, "self-center", true);
             badge_ok &= set_class(mark, "om-eye-c", looks && !stacked);
@@ -955,7 +958,7 @@ void center_show(U64 self)
 U64 g_cb_row = 0, g_cb_host = 0; // (the row, and the caption holding it)
 std::vector<const char*> g_cb_kinds;
 const char* const kCbAll[] = {"om-cbi-eye", "om-cbi-cold", "om-cbi-heat", "om-cbi-cold2", "om-cbi-heat2", "om-cbi-bed",
-                              "om-cbi-look"};
+                              "om-cbi-combat", "om-cbi-look"};
 
 void keep_center_badges()
 {
@@ -989,6 +992,7 @@ bool show_center_badges(U64 te, const Outfit* o)
             kinds.push_back(!std::strcmp(c, "om-cold-c") ? "om-cbi-cold" : !std::strcmp(c, "om-heat-c") ? "om-cbi-heat"
                             : !std::strcmp(c, "om-cold2-c") ? "om-cbi-cold2" : "om-cbi-heat2");
         if (o->activity == kActivitySleep) kinds.push_back("om-cbi-bed");
+        if (o->activity == kActivityCombat) kinds.push_back("om-cbi-combat");
         if (charlook_on(*o)) kinds.push_back("om-cbi-look");
     }
     if (kinds != g_cb_kinds) {

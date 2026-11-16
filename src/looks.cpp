@@ -17,6 +17,7 @@
 namespace om {
 
 int sleep_looks(); // (sleep.cpp)
+void combat_changed(bool in); // (sleep.cpp: the played character's combat began / ended - Activity: Combat)
 
 VisSetFn g_vis_set = nullptr;
 VisReleaseFn g_vis_release = nullptr;
@@ -560,7 +561,8 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
                             dropped.empty() ? "" : "; no longer:", dropped.c_str());
                     // (the bow and shields render like armour: the glow doesn't show on them, the hologram does. A shield
                     // is told by its part's name - the game's MainWeapon_Shield_L / _R - in any slot it sits in)
-                    const bool like = p.slot == kBowSlot || own.rfind("MainWeapon_Shield", 0) == 0;
+                    // (and the rocket pack, Bag_Rocket: it renders like armour too - #46)
+                    const bool like = p.slot == kBowSlot || own.rfind("MainWeapon_Shield", 0) == 0 || own == "Bag_Rocket";
                     pi = {part, tab, count, case_handle(model, own), extra_case_handles(model, own), like};
                     log_model_parts(model, ch);
                 }
@@ -783,6 +785,13 @@ void __fastcall battle_vis_hook(U64 inv, std::uint8_t show, std::uint8_t show2)
 {
     g_battle_vis_orig(inv, show, show2);
     int battle = in_battle_of(inv); // (its argument is the headgear option's verdict: "always shown" makes it 1 for good)
+    { // (the played character's combat beginning / ending: Activity: Combat's outfit, sleep.cpp - #45)
+        static std::atomic<int> was{-1};
+        if (battle >= 0 && inv == player_inventory()) {
+            const int prev = was.exchange(battle);
+            if (prev != battle && (prev >= 0 || battle)) combat_changed(battle != 0); // (the first report: only a fight)
+        }
+    }
     look_sync(inv, battle >= 0 ? battle != 0 : show != 0);
 }
 
@@ -987,6 +996,56 @@ U64 player_inventory()
     U64 inv = actor ? rp(rp(actor + kOffActorComp) + kOffCompInventory) : 0;
     if (ctx[0]) release_player(ctx);
     return inv;
+}
+
+// A chart layer's state change (sleep.cpp's evaluator hook, every layer): one entering the glide chart's states is a body
+// in the air under a glider or the rocket pack; the same layer entering any other state has landed. While the played
+// character is in the air, a rocket pack (Bag_Rocket) in one of his slots counts as a flight tool in use - shown like a
+// drawn weapon though its look hides it. Oongka's flight was told by his flight helmet showing (game_layer); on Kliff
+// with Combat Evolved's jetpack there is no flight helmet, and its hidden pack stayed hidden in flight (#46, 2026-11-16).
+// (the glide states run on the upper and the lower body's layers at once - one of them the played character's own
+// upper body, checked 2026-11-16 on Kliff and Oongka: every layer in a glide state is tracked, in the air while any is)
+#include "glide_states.inc"
+std::atomic<U64> g_glide_ctx[4] = {}; // (the layers in a glide state now)
+void look_glide(U64 ctx, U32 target)
+{
+    const bool glide = std::binary_search(std::begin(kGlideStates), std::end(kGlideStates), target);
+    int at = -1, free = -1, airborne = 0;
+    for (int i = 0; i < 4; ++i) {
+        const U64 c = g_glide_ctx[i].load();
+        if (c == ctx) at = i;
+        if (!c && free < 0) free = i;
+        airborne += c != 0;
+    }
+    if (glide == (at >= 0)) return; // (no change for this layer: the common case, nothing more done)
+    const bool was = airborne > 0;
+    if (glide) {
+        if (free < 0) return;
+        g_glide_ctx[free] = ctx, ++airborne;
+    } else {
+        g_glide_ctx[at] = 0, --airborne;
+    }
+    const bool now = airborne > 0;
+    if (now == was) return; // (another layer of the same flight)
+    const U64 inv = player_inventory();
+    if (!inv) return;
+    std::lock_guard<std::mutex> lock(g_appear_mu);
+    U64 model = 0;
+    for (const auto& [m, i] : g_look_model_inv)
+        if (i == inv) model = m;
+    if (!model) return;
+    for (U16 sl = 0; sl < 32; ++sl) {
+        const int h = look_handle(inv, sl);
+        const U64 part = h ? look_part(model, h) : 0;
+        if (!part || part_name(r32(part + 0x48)) != "Bag_Rocket") continue;
+        bool& f = g_flight_tool[{inv, h}];
+        if (f == now) continue;
+        f = now;
+        LOG("appearance: equipment-%u's rocket pack %s", sl, now ? "shown in flight" : "landed: its look decides again");
+        // (taking off: it shows at once - in the hologram it took longer than a short flight lasts and never showed in
+        // full, 2026-11-16; landing: the sheathe path in look_sync fades it out - armour_like)
+        if (std::find(g_look_pending.begin(), g_look_pending.end(), inv) == g_look_pending.end()) g_look_pending.push_back(inv);
+    }
 }
 
 // The player's outfit is about to change (true: looks only hide until the model swaps) or didn't after all (false).

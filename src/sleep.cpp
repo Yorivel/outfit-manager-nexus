@@ -103,6 +103,7 @@ U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64
     __try {
         if (!r || *r != 0 || !link || !link[0]) return r;
         U32 target = *reinterpret_cast<const U32*>(link[0] + 0x14);
+        look_glide(ctx, target); // (looks.cpp: in the air under a glider or the rocket pack)
         U64 now = GetTickCount64();
         if (target == kPlayerIdle) g_player_ctx = ctx;
         if (ctx == g_player_ctx.load()) {
@@ -199,15 +200,24 @@ U64 find_pack_lookup()
 U64 g_sleep_self = 0; // (the status screen the HUD frame last gave: its object outlives a hidden HUD)
 bool g_asleep = false;
 std::atomic<int> g_sleep_look{0}; // what sleep_looks() answers: 0 awake, 1 step back, 2 sleepwear wins (read by look_sync)
-bool g_swapped = false;        // a sleepwear outfit was put on for this sleep: something to give back on waking
-int g_before = -1;             // the outfit worn before (-1: none; then g_before_items)
-Outfit g_before_items;         // the pieces worn before, when no outfit was
-bool g_have_items = false;
-bool g_temp_loading = false;   // the pieces worn before are going back on, as a temporary outfit (removed after)
-std::string g_before_name;     // (the outfit worn before, found again by name: the list may change while asleep)
-U16 g_sleep_char = kNoCharacter;
-bool g_before_let_go = false;  // ("No outfit" was on before the sleep (Unequip Outfit, #21): it comes back on waking)
-int g_before_let_go_of = -1;   // (its g_unmanaged value: the outfit let go)
+// An activity's outfit swap (Sleeping, Combat - #45): what was worn when it began, given back when it ends. Combat wins
+// over Sleeping: begun in bed, its "before" is the sleepwear, which comes back first; a sleep doesn't swap during combat.
+struct Swap {
+    const char* what, * began, * ended, * temp_name; // (the log's words; the pieces' temporary outfit's name)
+    std::uint8_t activity;
+    bool swapped = false;   // its outfit was put on: something to give back when it ends
+    std::string before_name; // (the outfit worn before, found again by name: the list may change meanwhile; "": none)
+    Outfit before_items;    // the pieces worn before, when no outfit was
+    bool have_items = false;
+    U16 ch = kNoCharacter;
+    bool let_go = false;    // ("No outfit" was on before (Unequip Outfit, #21): it comes back at the end)
+    int let_go_of = -1;     // (its g_unmanaged value: the outfit let go)
+};
+Swap g_sleep_swap{"sleep", "asleep", "awake", "(before sleep)", kActivitySleep};
+Swap g_combat_swap{"combat", "in combat", "out of combat", "(before combat)", kActivityCombat};
+Swap* g_temp_for = nullptr;    // the swap whose pieces are going back on as a temporary outfit (removed after)
+bool g_in_combat = false;      // (the played character's combat, as the HUD side last took it)
+std::atomic<bool> g_combat_now{false}; // (the in-battle switch's last report, looks.cpp: the tick follows it)
 
 int worn_index()
 {
@@ -238,92 +248,109 @@ void fx_carry()
     if (HWND w = g_game_hwnd.load()) SetTimer(w, kFxTimer, 15, nullptr);
 }
 
-void fell_asleep(U64 self)
+// Begins an activity: its outfit (one at random) goes on, what was worn noted to come back.
+void begin(U64 self, Swap& s)
 {
-    g_asleep = true;
-    g_swapped = false;
+    s.swapped = false;
     prepare_outfits(); // (the character's own outfits)
-    g_sleep_char = g_character;
+    s.ch = g_character;
     std::vector<U32> wear;
     for (size_t i = 0; i < g_outfits.size(); ++i)
-        if (g_outfits[i].activity == kActivitySleep && !g_outfits[i].temp && !is_weapon_set(g_outfits[i])) wear.push_back(U32(i));
+        if (g_outfits[i].activity == s.activity && !g_outfits[i].temp && !is_weapon_set(g_outfits[i])) wear.push_back(U32(i));
     int worn = find_worn_outfit(self);
-    g_before_let_go = false;
+    s.let_go = false;
     if (auto u = g_unmanaged.find(g_character); u != g_unmanaged.end()) { // ("No outfit": the pieces, not an outfit)
-        g_before_let_go = true, g_before_let_go_of = u->second;
+        s.let_go = true, s.let_go_of = u->second;
         worn = -1;
     }
-    LOG("sleep: asleep (character %u, %zu sleepwear outfit(s), worn outfit %d%s)", g_character, wear.size(), worn,
-        g_before_let_go ? ", No outfit" : "");
-    if (wear.empty()) return; // (the looks step back; nothing to change)
-    if (worn >= 0 && g_outfits[size_t(worn)].activity == kActivitySleep) {
-        LOG("sleep: \"%s\" is sleepwear already: kept", g_outfits[size_t(worn)].name.c_str());
+    LOG("%s: %s (character %u, %zu %s outfit(s), worn outfit %d%s)", s.what, s.began, g_character, wear.size(), s.what,
+        worn, s.let_go ? ", No outfit" : "");
+    if (wear.empty()) return; // (nothing to change)
+    if (worn >= 0 && g_outfits[size_t(worn)].activity == s.activity) {
+        LOG("%s: \"%s\" is its outfit already: kept", s.what, g_outfits[size_t(worn)].name.c_str());
         return;
     }
-    g_before = worn;
-    g_before_name = worn >= 0 ? g_outfits[size_t(worn)].name : std::string();
-    g_have_items = false;
+    s.before_name = worn >= 0 ? g_outfits[size_t(worn)].name : std::string();
+    s.have_items = false;
     if (worn < 0) {
-        g_before_items = Outfit{};
-        g_have_items = snapshot(self, g_before_items) && !g_before_items.items.empty();
-        LOG("sleep: no outfit worn; %zu pieces noted to come back", g_have_items ? g_before_items.items.size() : size_t(0));
+        s.before_items = Outfit{};
+        s.have_items = snapshot(self, s.before_items) && !s.before_items.items.empty();
+        LOG("%s: no outfit worn; %zu pieces noted to come back", s.what, s.have_items ? s.before_items.items.size() : size_t(0));
     }
     static std::mt19937 rng{std::random_device{}()};
     U32 pick = wear[std::uniform_int_distribution<size_t>(0, wear.size() - 1)(rng)];
-    LOG("sleep: putting on \"%s\"%s", g_outfits[pick].name.c_str(), wear.size() > 1 ? " (picked at random)" : "");
-    g_swapped = true;
+    LOG("%s: putting on \"%s\"%s", s.what, g_outfits[pick].name.c_str(), wear.size() > 1 ? " (picked at random)" : "");
+    s.swapped = true;
     start_loading(self, pick);
     fx_carry();
+}
+
+// Ends an activity: what was worn before it goes back on (an outfit, or the pieces as a temporary outfit).
+void end(U64 self, Swap& s)
+{
+    if (!s.swapped) {
+        LOG("%s: %s", s.what, s.ended);
+        return;
+    }
+    s.swapped = false;
+    if (g_character != s.ch) {
+        LOG("%s: %s as another character: nothing given back", s.what, s.ended);
+        return;
+    }
+    prepare_outfits();
+    int back = -1;
+    if (!s.before_name.empty())
+        for (size_t i = 0; i < g_outfits.size(); ++i)
+            if (g_outfits[i].name == s.before_name && !g_outfits[i].temp) back = int(i);
+    if (back >= 0) {
+        LOG("%s: %s; \"%s\" goes back on", s.what, s.ended, g_outfits[size_t(back)].name.c_str());
+        start_loading(self, U32(back));
+        fx_carry();
+    } else if (s.have_items) {
+        // (the pieces as a temporary outfit: loaded like any other, never saved, removed once it is on)
+        Outfit t = s.before_items;
+        t.name = s.temp_name;
+        t.temp = true;
+        t.load_weapons = t.has_weapons;
+        g_outfits.push_back(t);
+        g_temp_for = &s;
+        LOG("%s: %s; the %zu pieces worn before go back on", s.what, s.ended, t.items.size());
+        start_loading(self, U32(g_outfits.size() - 1));
+        fx_carry();
+    } else {
+        LOG("%s: %s; the outfit worn before (\"%s\") is gone: nothing given back", s.what, s.ended, s.before_name.c_str());
+    }
+    s.have_items = false;
+}
+
+void fell_asleep(U64 self)
+{
+    g_asleep = true;
+    if (g_in_combat) { // (Combat wins: no sleepwear during a fight - next to impossible anyway)
+        g_sleep_swap.swapped = false;
+        LOG("sleep: asleep in combat: the combat outfit stays");
+        return;
+    }
+    begin(self, g_sleep_swap);
 }
 
 void woke_up(U64 self)
 {
     g_asleep = false;
-    if (!g_swapped) {
-        LOG("sleep: awake");
-        return;
-    }
-    g_swapped = false;
-    if (g_character != g_sleep_char) {
-        LOG("sleep: awake as another character: nothing given back");
-        return;
-    }
-    prepare_outfits();
-    int back = -1;
-    if (!g_before_name.empty())
-        for (size_t i = 0; i < g_outfits.size(); ++i)
-            if (g_outfits[i].name == g_before_name && !g_outfits[i].temp) back = int(i);
-    if (back >= 0) {
-        LOG("sleep: awake; \"%s\" goes back on", g_outfits[size_t(back)].name.c_str());
-        start_loading(self, U32(back));
-        fx_carry();
-    } else if (g_have_items) {
-        // (the pieces as a temporary outfit: loaded like any other, never saved, removed once it is on)
-        Outfit t = g_before_items;
-        t.name = "(before sleep)";
-        t.temp = true;
-        t.load_weapons = t.has_weapons;
-        g_outfits.push_back(t);
-        g_temp_loading = true;
-        LOG("sleep: awake; the %zu pieces worn before go back on", t.items.size());
-        start_loading(self, U32(g_outfits.size() - 1));
-        fx_carry();
-    } else {
-        LOG("sleep: awake; the outfit worn before (\"%s\") is gone: nothing given back", g_before_name.c_str());
-    }
-    g_have_items = false;
+    end(self, g_sleep_swap);
 }
 
 void drop_temp()
 {
-    if (!g_temp_loading || g_async.active || fx_busy_target() != -1 || look_changing()) return;
-    g_temp_loading = false;
+    if (!g_temp_for || g_async.active || fx_busy_target() != -1 || look_changing()) return;
+    Swap& s = *g_temp_for;
+    g_temp_for = nullptr;
     bool was_worn = false;
     for (size_t i = g_outfits.size(); i-- > 0;)
         if (g_outfits[i].temp) was_worn |= g_outfits[i].worn, g_outfits.erase(g_outfits.begin() + std::ptrdiff_t(i));
-    if (was_worn) mark_worn(-1); // (what is worn is no outfit again, as before the sleep)
-    if (g_before_let_go) g_unmanaged[g_sleep_char] = g_before_let_go_of, g_before_let_go = false; // ("No outfit" again)
-    LOG("sleep: the pieces worn before are back on");
+    if (was_worn) mark_worn(-1); // (what is worn is no outfit again, as before)
+    if (s.let_go) g_unmanaged[s.ch] = s.let_go_of, s.let_go = false; // ("No outfit" again)
+    LOG("%s: the pieces worn before are back on", s.what);
 }
 
 } // namespace
@@ -362,6 +389,12 @@ void sleep_tick(U64 self)
 {
     g_sleep_self = self;
     g_hud_at = GetTickCount64();
+    // (combat first: it wins over a sleep - a combat begun in bed takes the sleepwear as what comes back after it)
+    if (const bool now = g_combat_now; now != g_in_combat) {
+        g_in_combat = now;
+        if (now) begin(self, g_combat_swap);
+        else end(self, g_combat_swap);
+    }
     if (g_fell.exchange(false) && !g_asleep) fell_asleep(self);
     if (g_woke.exchange(false) && g_asleep) woke_up(self);
     drop_temp();
@@ -398,6 +431,14 @@ bool sleep_fx_timer(WPARAM id)
 int sleep_looks()
 {
     return g_sleep_look.load();
+}
+
+// The played character's combat began (true) or ended (looks.cpp, the in-battle switch's hook): the combat outfit's swap
+// is done on the HUD side (sleep_tick), at once when the game window's thread is the UI thread (the window message).
+void combat_changed(bool in)
+{
+    g_combat_now = in;
+    post();
 }
 
 } // namespace om

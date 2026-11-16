@@ -263,6 +263,7 @@ void peek_draw(U64 self)
         if (!std::strcmp(c, "om-heat-c")) return "cd_icon_temperature_burn_00";
         if (!std::strcmp(c, "om-heat2-c")) return "cd_icon_temperature_burn_phase_00";
         if (!std::strcmp(c, "om-sleep-c")) return "cd_uitexture_tab_icon_housing_Bed";
+        if (!std::strcmp(c, "om-combat-c")) return "cd_uitexture_tab_icon_skilltree_SwordDualWeapon";
         return nullptr;
     };
     for (int k = 0; k < 5; ++k) {

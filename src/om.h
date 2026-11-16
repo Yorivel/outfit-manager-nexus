@@ -149,8 +149,9 @@ struct Outfit {
     std::uint8_t stash = 0;   // Conditions: Stash, 0 = the global setting, 1 on, 2 off
     // Activity (2026-11-09): what the outfit is worn for, put on when the character starts it (several: one at random),
     // the outfit or items worn before back when it ends. kActivitySleep: in bed (sleep.cpp); its own looks win over the
-    // game's in-bed hiding. (The first build's "Sleepwear: On" reads as Sleeping.)
-    std::uint8_t activity = 0; // kActivityNone / kActivitySleep
+    // game's in-bed hiding. (The first build's "Sleepwear: On" reads as Sleeping.) kActivityCombat (#45, 2026-11-16): while
+    // the played character is in combat; it wins over Sleeping.
+    std::uint8_t activity = 0; // kActivityNone / kActivitySleep / kActivityCombat
     // A temporary outfit (sleep.cpp: the pieces worn before a sleep, going back on): loaded like any other, never saved.
     bool temp = false;
     // Its hotkey (the outfit's settings, 2026-11-06): a key or mouse button (virtual-key code; 0 = none) and the
@@ -180,7 +181,7 @@ struct Outfit {
     std::uint8_t char_look = 0;
     std::string look_snap; // (raw bytes; empty: none taken)
 };
-constexpr std::uint8_t kActivityNone = 0, kActivitySleep = 1, kActivityCount = 2;
+constexpr std::uint8_t kActivityNone = 0, kActivitySleep = 1, kActivityCombat = 2, kActivityCount = 3;
 constexpr U16 kBackShieldSlot = 23;
 // The display slots (the game's equip slot table, CDInventory/tools/equipslots.py): on no wheel, each shows a carried
 // weapon on the body, mirroring a weapon slot - Kliff 22 sword, 23 shield, 24 bow; Damiane 22 rapier, 23 right-hand
@@ -272,7 +273,7 @@ const char* const kBadges[] = {"om-plus-big", "om-cog-big", "om-plus-c", "om-cog
                                "om-cold2-c", "om-heat2-c", "om-eye-c", "om-look-shown-c", "om-look-hidden-c",
                                "om-look-combat-c", "om-look-peace-c", "om-return-c", "om-prompt-c", "om-cross-c",
                                "om-abtn-c", "om-unequip-c", "om-wset-c", "om-wset-gold-c", "om-wset-busy-c",
-                               "om-sleep-c", "om-lookmain-c"};
+                               "om-sleep-c", "om-combat-c", "om-lookmain-c"};
 // The game's slot refresh (after every equipment change) re-selects every slot's dots with its own count (0 for ours:
 // no items) and -1: the select is hooked, and for our slots' selectors it gets our count and mode instead, so the dots
 // never go blank. Our own calls pass through it as well. Our slots are looked up live (the Outfits menu's slot list).

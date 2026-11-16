@@ -185,7 +185,7 @@ std::vector<const char*> cfg_values(std::uint8_t k, U32& cur)
         }
         if (k == kCfgActivity) { // (one per kActivity*, in that order)
             cur = o.activity < kActivityCount ? o.activity : 0;
-            return {"value.off", "value.sleeping"};
+            return {"value.off", "value.sleeping", "value.combat"};
         }
         if (k == kCfgHotkey) { // (one value: the hotkey, or the wait for one)
             bool waiting = g_peek_capture && g_capture_outfit == g_cfg;
@@ -266,7 +266,10 @@ std::string cfg_description(std::uint8_t k)
         if (k == kCfgClimate) t = entry_text(kPageConditions, 3);
         else if (k == kCfgWeapons) t = entry_text(kPageConditions, 0);
         else if (k == kCfgStash) t = entry_text(kPageConditions, 1);
-        else if (k == kCfgActivity) t.second = lang::t(g_outfits[size_t(g_cfg)].activity == kActivitySleep ? "desc.activity.sleeping" : "desc.activity.off");
+        else if (k == kCfgActivity) {
+            const std::uint8_t a = g_outfits[size_t(g_cfg)].activity;
+            t.second = lang::t(a == kActivitySleep ? "desc.activity.sleeping" : a == kActivityCombat ? "desc.activity.combat" : "desc.activity.off");
+        }
         else if (k == kCfgRename) t = entry_text(kPageOutfit, 0);
         else if (k == kCfgOverwrite)
             t.second = lang::t(g_overwrite_reset ? "desc.overwrite.reset" : "desc.overwrite.keep");

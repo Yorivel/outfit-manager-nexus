@@ -247,6 +247,7 @@ void outfit_resistance(const Outfit& o, int& ice, int& fire)
 // or the manual Cold / Heat (plain), or none.
 const char* climate_badge(const Outfit& o)
 {
+    if (o.activity == kActivityCombat) return "om-combat-c"; // (Activity: Combat: the swords, #45)
     if (o.activity == kActivitySleep) return "om-sleep-c"; // (Activity: Sleeping: the bed, in the thermometer's spot)
     return climate_only(o);
 }

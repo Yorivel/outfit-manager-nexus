@@ -29,6 +29,7 @@ bool look_changing();
 bool model_loading(U64 model);
 void look_settled();
 void look_refresh();
+void look_glide(U64 ctx, U32 target); // (sleep.cpp's evaluator hook: a chart layer's state change; #46)
 extern U64 g_weapon_hide_after;
 extern U64 g_sheathe_refresh_at; // (GetTickCount64: a sheathed hidden weapon's glow peak is over - the looks again)
 // the sneak peek glow on one hidden weapon's parts (part name ids) as it is drawn (false) or sheathed (true) - transition.cpp
