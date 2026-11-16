@@ -263,6 +263,7 @@ void peek_draw(U64 self)
         if (!std::strcmp(c, "om-heat-c")) return "cd_icon_temperature_burn_00";
         if (!std::strcmp(c, "om-heat2-c")) return "cd_icon_temperature_burn_phase_00";
         if (!std::strcmp(c, "om-sleep-c")) return "cd_uitexture_tab_icon_housing_Bed";
+        if (!std::strcmp(c, "om-combat-c")) return "cd_uitexture_tab_icon_skilltree_SwordDualWeapon";
         return nullptr;
     };
     for (int k = 0; k < 5; ++k) {
@@ -309,8 +310,15 @@ void peek_draw(U64 self)
                                                 : g_peek_by_pad ? (g_pad_is_ps ? "outfitmanager_peek_key_cross" : "outfitmanager_peek_key_a")
                                                                 : "Common_Icon_Keyguide_PC_Mouse_left");
             set_class(p.hint_icon, "om-peek-hicon-hi", !hotkey);
-            if (p.ripple) set_class(p.ripple, "om-peek-ripple-hi", !hotkey);
-            if (p.hold) set_class(p.hold, "om-peek-hold-hi", !hotkey);
+            // (the press ripple and hold ring go with the hint: left on with none, the ripple's resting disc showed as
+            // a faint circle under the label - 2026-11-16. A redraw also ends a past press's ripple: its animation class
+            // stayed set, and when the row changed the UI applied it again frozen on its first frame, the disc stuck
+            // on. A press sets it again after its redraw, so its own ripple still plays)
+            if (p.ripple) {
+                set_class(p.ripple, "om-peek-ripple-a", false), set_class(p.ripple, "om-peek-ripple-b", false);
+                set_class(p.ripple, "om-peek-ripple-hi", !hotkey), set_class(p.ripple, "!cpp-none", !hinted);
+            }
+            if (p.hold) set_class(p.hold, "om-peek-hold-hi", !hotkey), set_class(p.hold, "!cpp-none", !hinted);
         }
     }
     // #32: a pin / unpin to come on each shown outfit (its corner); a divider where the groups meet

@@ -13,10 +13,12 @@
 #include "prompts.h"
 #include "wheel_draw.h"
 #include "wheel_hooks.h"
+#include "parts.h"
 
 namespace om {
 
 int sleep_looks(); // (sleep.cpp)
+void combat_changed(bool in); // (sleep.cpp: the played character's combat began / ended - Activity: Combat)
 
 VisSetFn g_vis_set = nullptr;
 VisReleaseFn g_vis_release = nullptr;
@@ -32,6 +34,12 @@ struct LookPiece {
 };
 std::mutex g_looks_mu;
 std::map<U16, std::vector<LookPiece>> g_looks; // character -> the worn outfit's pieces with a look (published copy)
+struct PartLook { // (Visibility Extras: a part group of a piece, with its look)
+    U16 slot;
+    std::string group;
+    std::uint8_t look;
+};
+std::map<U16, std::vector<PartLook>> g_part_looks; // character -> the worn outfit's part groups with a look (same lock)
 
 std::mutex g_appear_mu; // the maps below; one sync at a time (game thread, job threads, UI thread)
 std::map<U64, std::map<U16, int>> g_look_applied; // inventory -> slot -> the model handle our layer decides
@@ -43,6 +51,8 @@ std::set<U64> g_look_swapped;                     // ... of those, the rebuilt o
 // across pieces, so a look set now lands on whichever mesh is there). Until then looks only hide: nothing is shown or
 // let go of, so neither the old pieces nor the new ones flash.
 std::set<U64> g_look_hold;
+// The weapon slots drawn (in hand) when a hold began: those get no call until the load is over (look_sync)
+std::map<U64, std::set<U16>> g_hold_drawn;
 std::set<U64> g_look_steps_in; // (held, and the load's steps are in: the game has put the new pieces on)
 U64 player_inventory(); // (below)
 U64 g_sheathe_refresh_at = 0;
@@ -59,6 +69,9 @@ std::map<std::pair<U64, U16>, U64> g_draw_wait;
 // until the glow's hold ends (1.9 s). The player only, not mid outfit change. (g_appear_mu)
 std::map<std::pair<U64, U16>, bool> g_fx_was_shown;
 constexpr U16 kBowSlot = 2; // (equipment-2: the bow - its part renders like armour on the back: the hologram on it too)
+// (equipment-14: the tools. The weapon glow doesn't show on them - an arm tool, the Knuckledrills and the Chainsaw, has
+// no part it takes - so a hidden tool has no glow and no hold: it goes as it is put away, 2026-11-16: it lingered ~2 s)
+constexpr U16 kToolSlot = 14;
 std::map<std::pair<U64, U16>, U64> g_look_appear_at, g_look_go_at; // (a drawn hidden weapon: since when its scabbard waits; g_appear_mu)
 std::map<std::pair<U64, U16>, FxTargets> g_fx_targets; // (the player's hidden weapons, from the last sync; g_appear_mu) // (a sheathed hidden weapon stays until its glow's peak: the looks again then)
 std::map<std::pair<U64, U16>, bool> g_fx_was_drawn; // (the player's hidden weapons: drawn at the last sync)
@@ -108,6 +121,7 @@ struct PartInfo {
     U32 count = 0;
     int ch_case = 0;
     std::vector<int> extras;
+    bool armour_like = false; // (renders like armour, so the glow doesn't show on it: the hologram on it - bow, shield)
 };
 std::map<std::pair<U64, int>, PartInfo> g_part_info; // (model, handle) -> what was found
 
@@ -118,7 +132,12 @@ std::map<U16, std::uint8_t> g_helmet_pins; // character -> 1 hidden, 2 shown
 void publish_looks(const Store& s)
 {
     std::map<U16, std::vector<LookPiece>> m;
+    std::map<U16, std::vector<PartLook>> pm;
     auto add = [&](U16 character, const Outfit& o) {
+        for (const auto& [k, look] : o.part_looks) // ("<slot>:<group>")
+            if (look != kLookDefault)
+                if (size_t c = k.find(':'); c != std::string::npos)
+                    pm[character].push_back({static_cast<U16>(std::strtoul(k.c_str(), nullptr, 10)), k.substr(c + 1), look});
         for (const OutfitItem& it : o.items)
             if (it.look != kLookDefault) m[character].push_back({it.slot, 0xFFFF, 0, it.look});
         for (const auto& [slot, look] : o.empty_looks)
@@ -135,6 +154,7 @@ void publish_looks(const Store& s)
     {
         std::lock_guard<std::mutex> lock(g_looks_mu);
         g_looks = std::move(m);
+        g_part_looks = std::move(pm);
     }
     std::lock_guard<std::mutex> lock(g_helmet_mu); // (the helmet key's pins: the store's, so a load brings its save's)
     g_helmet_pins.clear();
@@ -425,10 +445,29 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
     if (!model) return;
     U16 ch = character_of(actor);
     charlook_built(actor, ch); // (#35: after a load, the outfit's look or the character's own, already now)
+    { // (a save just loaded: the outfit its equipment matches is the applied one from the loading screen on - gear.cpp;
+      // per character, as its model is built: the played character is only known late in the loading screen)
+        static std::mutex mu;
+        static std::map<U16, U32> decided; // character -> the load (generation) decided for
+        const U32 gen = g_generation.load();
+        bool todo;
+        {
+            std::lock_guard<std::mutex> lock(mu);
+            auto d = decided.find(ch);
+            todo = ch != kNoCharacter && (d == decided.end() || d->second != gen);
+        }
+        if (todo && !g_weapon_slot_count && g_qsi_get) collect_weapon_slots(); // (its weapons too, read the same way)
+        if (todo && worn_after_load(inv, ch)) {
+            std::lock_guard<std::mutex> lock(mu);
+            decided[ch] = gen;
+        }
+    }
     std::vector<LookPiece> pieces;
+    std::vector<PartLook> part_looks;
     {
         std::lock_guard<std::mutex> lock(g_looks_mu);
         if (auto it = g_looks.find(ch); it != g_looks.end()) pieces = it->second;
+        if (auto it = g_part_looks.find(ch); it != g_part_looks.end()) part_looks = it->second;
     }
     if (const std::uint8_t pin = helmet_pin(ch)) { // (the helmet key: over the outfit's look, with no outfit too)
         const std::uint8_t look = pin == 1 ? kLookHidden : kLookShown;
@@ -443,7 +482,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
     if (g_look_hold.count(inv) && g_look_swap_seen.count(inv) && !model_loading(model))
         g_look_hold.erase(inv), g_look_swap_seen.erase(inv); // (the last part is in: the looks apply in full)
     bool hold = g_look_hold.count(inv) != 0;
-    if (!hold) g_look_steps_in.erase(inv);
+    if (!hold) g_look_steps_in.erase(inv), g_hold_drawn.erase(inv);
     // (bringing pieces back to the presentation waits for the load's steps, not for its last part: by then the game
     // has put the new pieces on itself - skipped as already presented - and the pieces that stay, a circlet, earrings,
     // come back with them; waiting for the last part brought them in apart from the new helm: the head flickered)
@@ -463,7 +502,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
     if (pieces.empty() && (!hold || steps_in))
         for (auto& [key, asked] : g_present_asked)
             if (key.first == inv && asked != 0 && asked != 1) asked = 1, present_request(inv, key.second, false);
-    if (pieces.empty() && (ap == g_look_applied.end() || ap->second.empty())) {
+    if (pieces.empty() && part_looks.empty() && (ap == g_look_applied.end() || ap->second.empty())) {
         if (ap != g_look_applied.end() && !hold) forget_inventory(inv);
         return;
     }
@@ -505,6 +544,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
         bool drawn = false;
         int ch_case = 0;
         std::vector<int> extras;
+        bool armour_like = false;
         if (is_weapon_slot(p.slot) || is_display_slot(p.slot)) { // (drawn: always shown; its parts are watched)
             if (U64 part = look_part(model, h); part && vc) {
                 PartInfo& pi = g_part_info[{model, h}];
@@ -523,17 +563,44 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
                             }
                         searched = true;
                     }
-                    std::string names;
-                    for (U64 q : look_parts(model, h)) {
-                        bool fresh = g_weapon_parts.insert_or_assign({vc, r32(q + 0x48)}, std::make_pair(inv, p.slot)).second;
-                        if (fresh) names += " " + part_name(r32(q + 0x48));
+                    std::string names, dropped;
+                    std::set<U32> current;
+                    for (U64 q : look_parts(model, h)) current.insert(r32(q + 0x48));
+                    // (the parts of a piece that has left the slot stop counting: a tool slot kept every earlier tool's
+                    // parts, and one of them reported drawn with no put-away after it held the new tool shown until the
+                    // model was rebuilt - 2026-11-16, a hidden Knuckledrill stayed out after it was put away)
+                    for (auto it = g_weapon_parts.begin(); it != g_weapon_parts.end();) {
+                        if (it->first.first == vc && it->second == std::make_pair(inv, p.slot) && !current.count(it->first.second)) {
+                            dropped += " " + part_name(it->first.second);
+                            g_part_drawn.erase(it->first);
+                            it = g_weapon_parts.erase(it);
+                        } else {
+                            ++it;
+                        }
                     }
-                    if (!names.empty()) LOG("appearance: equipment-%u's parts watched for drawing:%s", p.slot, names.c_str());
-                    pi = {part, tab, count, case_handle(model, own), extra_case_handles(model, own)};
+                    for (U32 nm : current) {
+                        bool fresh = g_weapon_parts.insert_or_assign({vc, nm}, std::make_pair(inv, p.slot)).second;
+                        if (fresh) names += " " + part_name(nm);
+                    }
+                    if (!dropped.empty()) { // (drawn only through a dropped part: not drawn any more)
+                        bool now = false;
+                        for (U32 nm : current)
+                            if (auto d = g_part_drawn.find({vc, nm}); d != g_part_drawn.end()) now |= d->second;
+                        if (!now) g_drawn[{inv, p.slot}] = false;
+                    }
+                    if (!names.empty() || !dropped.empty())
+                        LOG("appearance: equipment-%u's parts watched for drawing:%s%s%s", p.slot, names.c_str(),
+                            dropped.empty() ? "" : "; no longer:", dropped.c_str());
+                    // (the bow and shields render like armour: the glow doesn't show on them, the hologram does. A shield
+                    // is told by its part's name - the game's MainWeapon_Shield_L / _R - in any slot it sits in)
+                    // (and the rocket pack, Bag_Rocket: it renders like armour too - #46)
+                    const bool like = p.slot == kBowSlot || own.rfind("MainWeapon_Shield", 0) == 0 || own == "Bag_Rocket";
+                    pi = {part, tab, count, case_handle(model, own), extra_case_handles(model, own), like};
                     log_model_parts(model, ch);
                 }
                 ch_case = pi.ch_case;
                 extras = pi.extras;
+                armour_like = pi.armour_like;
             }
             if (auto it = g_drawn.find({inv, p.slot}); it != g_drawn.end() && it->second) drawn = true;
             // (a lit lantern shows, on the hip too: hidden only while it is out - sound.cpp)
@@ -558,7 +625,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
                     tg.holo.clear();
                     std::vector<int> hh = extras; // (the scabbard and the extras: they appear with it)
                     if (ch_case) hh.push_back(ch_case);
-                    if (p.slot == kBowSlot) hh.push_back(h); // (the bow itself: drawn like armour on the back)
+                    if (armour_like) hh.push_back(h); // (the bow / a shield itself: drawn like armour)
                     for (int x : hh) {
                         tg.holo.push_back(static_cast<U32>(x));
                         for (U64 q : look_parts(model, x)) {
@@ -568,7 +635,8 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
                         }
                     }
                 }
-                if (was != g_fx_was_drawn.end() && was->second != drawn && !drawn && transition_on()) { // (sheathed; drawn: in the hook)
+                if (was != g_fx_was_drawn.end() && was->second != drawn && !drawn && transition_on() &&
+                    p.slot != kToolSlot) { // (sheathed; drawn: in the hook)
                     std::vector<U32> names;
                     for (const auto& [k2, own] : g_weapon_parts)
                         if (own == key) names.push_back(k2.second);
@@ -587,7 +655,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
                         std::vector<U32> hl;
                         for (int x : extras) hl.push_back(static_cast<U32>(x));
                         if (ch_case) hl.push_back(static_cast<U32>(ch_case));
-                        if (p.slot == kBowSlot) hl.push_back(static_cast<U32>(h)); // (the bow: drawn like armour on the back)
+                        if (armour_like) hl.push_back(static_cast<U32>(h)); // (the bow / a shield: drawn like armour)
                         if (!hl.empty()) fx_scabbard_holo(hl, !drawn);
                     }
                     if (!drawn) {
@@ -613,7 +681,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
             // (an outfit change and its transition change looks too: only noted then, no effect of its own)
             const bool quiet = hold || hide_wait || fx_transition_busy() || !transition_on();
             auto was = g_fx_was_shown.find(key);
-            const bool weapon = is_weapon_slot(p.slot) || is_display_slot(p.slot); // (weapons only - user, 2026-11-07)
+            const bool weapon = (is_weapon_slot(p.slot) || is_display_slot(p.slot)) && p.slot != kToolSlot; // (weapons only - user, 2026-11-07)
             if (weapon && !quiet && was != g_fx_was_shown.end() && was->second != vis) {
                 std::vector<U32> holo;
                 std::vector<U32> names;
@@ -621,7 +689,7 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
                     if (own == key) names.push_back(k2.second);
                 std::vector<int> hh = extras; // (the scabbard and the extras - a bow's quiver and arrows)
                 if (ch_case) hh.push_back(ch_case);
-                if (p.slot == kBowSlot) hh.push_back(h); // (the bow itself: drawn like armour on the back)
+                if (armour_like) hh.push_back(h); // (the bow / a shield itself: drawn like armour)
                 for (int x : hh) {
                     holo.push_back(static_cast<U32>(x));
                     for (U64 q : look_parts(model, x))
@@ -665,7 +733,10 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
         // Weapons, tools and the display slots are NOT taken off: presenting a weapon again plays its equip animation
         // on top of the draw (tried 2026-11-12).
         if (!underwear && !is_weapon_slot(p.slot) && !is_display_slot(p.slot)) {
-            const U64 part = look_part(model, h);
+            // (a slot off the presentation has no part of its own: a part with its handle is the bare body's - the
+            // chest's Upperbody, the gloves' Hand, the boots' Foot share their names with the body's. Taken for the
+            // piece, the slot was taken off a second time as a load ended: a blink on the loading screen, 2026-11-16)
+            const U64 part = present_is_off(inv, p.slot) ? 0 : look_part(model, h);
             const bool off = present_on() && !shown && !flying && sleep != 2;
             U64& asked = g_present_asked[{inv, p.slot}];
             present_want(inv, p.slot, off); // (from now on its put-on is left out: it never shows for a moment)
@@ -681,7 +752,13 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
             continue;
         }
         // (mid outfit change: only hiding; what is shown waits for the model swap, kept as it was meanwhile)
-        if (!(hold && (shown || drawn)) && look_call(model, h, shown || drawn ? 1 : 0)) now[p.slot] = h;
+        // (a weapon in hand as the change began - its new model still loading - gets no call at all, a hide included:
+        // hidden while it loaded, a weapon swapped in while drawn stayed invisible in the hand for good, whatever was
+        // shown after - 2026-11-16, tested by switch both ways. Once the model has loaded, the game's draw reports
+        // decide. Sheathed weapons and the display slots still hide at once, so they never flash on)
+        const bool weapon_hold = hold && is_weapon_slot(p.slot) && g_hold_drawn[inv].count(p.slot);
+        if (weapon_hold) state += " (loading: untouched)";
+        if (!weapon_hold && !(hold && (shown || drawn)) && look_call(model, h, shown || drawn ? 1 : 0)) now[p.slot] = h;
         if (shown || drawn) forced.insert(h);
         state += shown || drawn ? hold ? " shown once on" : " shown" : " hidden";
         if (!(shown || drawn) && p.slot < 32) hidden_mask |= 1u << p.slot;
@@ -697,6 +774,19 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
             else if (look_call(model, extras[x], 0)) now[static_cast<U16>(p.slot | (0x200 + 0x100 * x))] = extras[x];
             if (x == 0) state += case_shown ? ", its parts left to the game" : ", its parts hidden";
         }
+    }
+    // Visibility Extras: a part group's look over its piece's. Its parts are hidden on our layer when the look says so
+    // (shown: left as the piece has them); a piece hidden by its own look is off the presentation, its parts with it.
+    // In flight / asleep the game's own rules win, as for the pieces. Kept in `now` like a case: released when gone.
+    for (const PartLook& pl : part_looks) {
+        if (pl.slot >= 32 || (hidden_mask >> pl.slot & 1) || flying) continue;
+        const bool show = pl.look == kLookShown || (pl.look == kLookCombat && in_battle) || (pl.look == kLookPeace && !in_battle);
+        if (show) continue;
+        U16 idx = 0;
+        for (const ItemPart& ip : item_parts(inv, model, pl.slot))
+            if (part_group(ip.name) == pl.group && idx < 0x40 && look_call(model, ip.handle, 0))
+                now[static_cast<U16>(0x1000 + pl.slot * 0x40 + idx++)] = ip.handle;
+        state += " equipment-" + std::to_string(pl.slot) + " " + pl.group + (idx ? " hidden" : " (no such part now)");
     }
     // (a slot taken off the presentation whose look is gone - an outfit without it - comes back: the loop above only
     // sees the slots that have a look now)
@@ -743,6 +833,13 @@ void __fastcall battle_vis_hook(U64 inv, std::uint8_t show, std::uint8_t show2)
 {
     g_battle_vis_orig(inv, show, show2);
     int battle = in_battle_of(inv); // (its argument is the headgear option's verdict: "always shown" makes it 1 for good)
+    { // (the played character's combat beginning / ending: Activity: Combat's outfit, sleep.cpp - #45)
+        static std::atomic<int> was{-1};
+        if (battle >= 0 && inv == player_inventory()) {
+            const int prev = was.exchange(battle);
+            if (prev != battle && (prev >= 0 || battle)) combat_changed(battle != 0); // (the first report: only a fight)
+        }
+    }
     look_sync(inv, battle >= 0 ? battle != 0 : show != 0);
 }
 
@@ -877,7 +974,7 @@ float __fastcall equip_vis_check_hook(U64 vc, const U32* part, std::uint8_t* rec
         return r;
     }
     d = true;
-    if (transition_on()) // (a hidden weapon drawn: its effects start on this frame - from the looks a frame
+    if (transition_on() && owner.second != kToolSlot) // (a hidden weapon drawn: its effects start on this frame - from the looks a frame
                                 // later, its scabbard showed plain first)
         if (auto tg = g_fx_targets.find(owner); tg != g_fx_targets.end()) {
             fx_weapon_glow(tg->second.names, false);
@@ -949,6 +1046,56 @@ U64 player_inventory()
     return inv;
 }
 
+// A chart layer's state change (sleep.cpp's evaluator hook, every layer): one entering the glide chart's states is a body
+// in the air under a glider or the rocket pack; the same layer entering any other state has landed. While the played
+// character is in the air, a rocket pack (Bag_Rocket) in one of his slots counts as a flight tool in use - shown like a
+// drawn weapon though its look hides it. Oongka's flight was told by his flight helmet showing (game_layer); on Kliff
+// with Combat Evolved's jetpack there is no flight helmet, and its hidden pack stayed hidden in flight (#46, 2026-11-16).
+// (the glide states run on the upper and the lower body's layers at once - one of them the played character's own
+// upper body, checked 2026-11-16 on Kliff and Oongka: every layer in a glide state is tracked, in the air while any is)
+#include "glide_states.inc"
+std::atomic<U64> g_glide_ctx[4] = {}; // (the layers in a glide state now)
+void look_glide(U64 ctx, U32 target)
+{
+    const bool glide = std::binary_search(std::begin(kGlideStates), std::end(kGlideStates), target);
+    int at = -1, free = -1, airborne = 0;
+    for (int i = 0; i < 4; ++i) {
+        const U64 c = g_glide_ctx[i].load();
+        if (c == ctx) at = i;
+        if (!c && free < 0) free = i;
+        airborne += c != 0;
+    }
+    if (glide == (at >= 0)) return; // (no change for this layer: the common case, nothing more done)
+    const bool was = airborne > 0;
+    if (glide) {
+        if (free < 0) return;
+        g_glide_ctx[free] = ctx, ++airborne;
+    } else {
+        g_glide_ctx[at] = 0, --airborne;
+    }
+    const bool now = airborne > 0;
+    if (now == was) return; // (another layer of the same flight)
+    const U64 inv = player_inventory();
+    if (!inv) return;
+    std::lock_guard<std::mutex> lock(g_appear_mu);
+    U64 model = 0;
+    for (const auto& [m, i] : g_look_model_inv)
+        if (i == inv) model = m;
+    if (!model) return;
+    for (U16 sl = 0; sl < 32; ++sl) {
+        const int h = look_handle(inv, sl);
+        const U64 part = h ? look_part(model, h) : 0;
+        if (!part || part_name(r32(part + 0x48)) != "Bag_Rocket") continue;
+        bool& f = g_flight_tool[{inv, h}];
+        if (f == now) continue;
+        f = now;
+        LOG("appearance: equipment-%u's rocket pack %s", sl, now ? "shown in flight" : "landed: its look decides again");
+        // (taking off: it shows at once - in the hologram it took longer than a short flight lasts and never showed in
+        // full, 2026-11-16; landing: the sheathe path in look_sync fades it out - armour_like)
+        if (std::find(g_look_pending.begin(), g_look_pending.end(), inv) == g_look_pending.end()) g_look_pending.push_back(inv);
+    }
+}
+
 // The player's outfit is about to change (true: looks only hide until the model swaps) or didn't after all (false).
 void look_hold(bool on)
 {
@@ -956,8 +1103,15 @@ void look_hold(bool on)
     if (!inv) return;
     std::lock_guard<std::mutex> lock(g_appear_mu);
     g_look_swap_seen.erase(inv), g_look_steps_in.erase(inv);
-    if (on) g_look_hold.insert(inv);
-    else g_look_hold.erase(inv);
+    if (on) {
+        g_look_hold.insert(inv);
+        std::set<U16>& drawn = g_hold_drawn[inv]; // (the weapons in hand as the change begins)
+        drawn.clear();
+        for (const auto& [owner, d] : g_drawn)
+            if (owner.first == inv && d) drawn.insert(owner.second);
+    } else {
+        g_look_hold.erase(inv);
+    }
 }
 
 // The player's outfit is still going on the model (from the requests until its last part swapped in).

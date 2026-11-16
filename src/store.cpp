@@ -131,6 +131,8 @@ void write_lists(std::string& out, const Store& s)
                 if (o.used) put(out, "used\t%u\n", o.used);
                 if (o.back_look) put(out, "backlook\t%u\n", o.back_look);
                 if (o.underwear_look) put(out, "underwear\t%u\n", o.underwear_look);
+                for (const auto& [group, look] : o.part_looks) // (Visibility Extras)
+                    if (look) put(out, "partlook\t%s\t%u\n", group.c_str(), look);
                 if (o.has_back) put(out, "backshield\t%u\n", o.has_back);
                 for (const auto& [slot, look] : o.empty_looks)
                     if (look) put(out, "slotlook\t%u\t%u\n", slot, look);
@@ -480,6 +482,9 @@ void load_outfits()
             } else if (!list.empty() && v[0] == "underwear" && v.size() >= 2) {
                 unsigned b = static_cast<unsigned>(std::strtoul(v[1].c_str(), nullptr, 10));
                 list.back().underwear_look = static_cast<std::uint8_t>(b < kLookCount ? b : 0);
+            } else if (!list.empty() && v[0] == "partlook" && v.size() >= 3) { // (Visibility Extras)
+                unsigned b = static_cast<unsigned>(std::strtoul(v[2].c_str(), nullptr, 10));
+                if (b && b < kLookCount) list.back().part_looks[v[1]] = static_cast<std::uint8_t>(b);
             } else if (!list.empty() && v[0] == "backshield" && v.size() >= 2) {
                 unsigned b = static_cast<unsigned>(std::strtoul(v[1].c_str(), nullptr, 10));
                 list.back().has_back = static_cast<std::uint8_t>(b <= 2 ? b : 0);

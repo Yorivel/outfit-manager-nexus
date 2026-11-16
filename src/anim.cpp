@@ -16,6 +16,11 @@
 //    2026-11-13) all need the helmet - except the item's charges (kRvaItemCharges): the Visione's recharge, divided by
 //    a recharge time a helmet's info doesn't have (a crash with the Plate Helm of the Shadows).
 // The caller (the helmet key, arc.cpp) hides / shows the helmet when the state is left (anim_outcome).
+// The four hooks are in place only while an animation is asked for or plays (anim_helmet_start .. anim_outcome): the
+// item info lookup is the iteminfo table's getter, which other mods find by its bytes (Master Looter's table scan
+// missed both tables with OM's hook over it, 2026-11-15), and the other three are game code others may scan as well.
+// Created each time from the bytes there then (another mod's hook over the same function stays chained) and removed
+// after, which puts those bytes back.
 #include "charlook.h"
 #include "anim.h"
 #include "addrs.h"
@@ -174,27 +179,43 @@ bool anim_branch_passes(const U64* candidate)
     return t_inject && candidate && rd(reinterpret_cast<U64>(candidate), b) && b == reinterpret_cast<U64>(g_branch);
 }
 
+struct AnimHook { const U64* rva; void* fn; void** orig; };
+const AnimHook kAnimHooks[] = {
+    {&kRvaBranchTry, reinterpret_cast<void*>(&try_hook), reinterpret_cast<void**>(&g_try_orig)},
+    {&kRvaCtrlAck, reinterpret_cast<void*>(&ack_hook), reinterpret_cast<void**>(&g_ack_orig)},
+    {&kRvaItemInfo, reinterpret_cast<void*>(&info_hook), reinterpret_cast<void**>(&g_info_orig)},
+    {&kRvaSetVisualEquipEv, reinterpret_cast<void*>(&ev_hook), reinterpret_cast<void**>(&g_ev_orig)},
+};
+
+// Puts the animation's hooks in place (on) or takes them away. A failed install takes back what it had put in.
+bool anim_hooks(bool on)
+{
+    size_t done = 0;
+    for (const auto& h : kAnimHooks) {
+        void* t = reinterpret_cast<void*>(g_base + *h.rva);
+        if (on) {
+            if (MH_CreateHook(t, h.fn, h.orig) != MH_OK || MH_EnableHook(t) != MH_OK) {
+                MH_RemoveHook(t);
+                LOG("helmet animation: hook at +%llX failed", *h.rva);
+                for (size_t i = 0; i < done; ++i) MH_RemoveHook(reinterpret_cast<void*>(g_base + *kAnimHooks[i].rva));
+                return false;
+            }
+            ++done;
+        } else {
+            MH_RemoveHook(t);
+        }
+    }
+    return true;
+}
+
 void anim_install()
 {
     if (!have({kRvaBranchTry, kRvaCtrlAck, kRvaItemInfo, kRvaSetVisualEquipEv, kRvaItemCharges}) || !sleep_evaluator_hooked()) {
         LOG("helmet animations: off (the action chart's functions weren't all found)");
         return;
     }
-    struct { U64 rva; void* fn; void** orig; } hooks[] = {
-        {kRvaBranchTry, reinterpret_cast<void*>(&try_hook), reinterpret_cast<void**>(&g_try_orig)},
-        {kRvaCtrlAck, reinterpret_cast<void*>(&ack_hook), reinterpret_cast<void**>(&g_ack_orig)},
-        {kRvaItemInfo, reinterpret_cast<void*>(&info_hook), reinterpret_cast<void**>(&g_info_orig)},
-        {kRvaSetVisualEquipEv, reinterpret_cast<void*>(&ev_hook), reinterpret_cast<void**>(&g_ev_orig)},
-    };
-    for (auto& h : hooks) {
-        void* t = reinterpret_cast<void*>(g_base + h.rva);
-        if (MH_CreateHook(t, h.fn, h.orig) != MH_OK || MH_EnableHook(t) != MH_OK) {
-            LOG("helmet animations: off (hook at +%llX failed)", h.rva);
-            return;
-        }
-    }
     g_ok = true;
-    LOG("helmet animations: on");
+    LOG("helmet animations: on (hooked only while one plays)");
 }
 
 void anim_tick()
@@ -234,6 +255,7 @@ void anim_tick()
 bool anim_helmet_start(bool take_off, U16 helmet_key)
 {
     if (!g_ok.load() || !g_player_id.load() || g_phase.load() != kIdle) return false;
+    if (!anim_hooks(true)) return false;
     static const U16 visione = key_of_pid(kPidVisionePropItem);
     g_prop_from = visione;
     g_prop_to = helmet_key;
@@ -252,6 +274,7 @@ AnimOutcome anim_outcome()
 {
     int e = kEnded;
     if (!g_phase.compare_exchange_strong(e, kIdle)) return AnimOutcome::Running;
+    anim_hooks(false);
     return AnimOutcome(g_outcome.load());
 }
 

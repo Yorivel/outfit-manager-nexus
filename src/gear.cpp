@@ -356,6 +356,7 @@ void carry_looks(const Outfit& from, Outfit& to)
 {
     to.back_look = from.back_look;
     to.underwear_look = from.underwear_look;
+    to.part_looks = from.part_looks;
     to.empty_looks.clear();
     for (OutfitItem& it : to.items) it.look = slot_look(from, it.slot);
     auto carry = [&](U16 slot, std::uint8_t look) {
@@ -453,18 +454,58 @@ static bool worn_as_outfit(U64 self, Outfit& now)
 
 // The weapon set whose weapons are exactly the worn ones (every weapon slot, empty ones too; crossed hands count), or
 // -1 (#27: strict, so a set of two weapons and one with the same two plus more never match together).
-static int weapon_set_matching(const Outfit& now)
+static int weapon_set_in(const std::vector<Outfit>& outfits, const Outfit& now)
 {
     Outfit w = now;
     w.weapons_only = true;
-    for (size_t o = 0; o < g_outfits.size(); ++o)
-        if (is_weapon_set(g_outfits[o]) && same_pieces(g_outfits[o], w)) return static_cast<int>(o);
+    for (size_t o = 0; o < outfits.size(); ++o)
+        if (is_weapon_set(outfits[o]) && same_pieces(outfits[o], w)) return static_cast<int>(o);
     return -1;
 }
+static int weapon_set_matching(const Outfit& now) { return weapon_set_in(g_outfits, now); }
 int worn_weapon_set(U64 self)
 {
     Outfit now;
     return worn_as_outfit(self, now) ? weapon_set_matching(now) : -1;
+}
+
+// The worn pieces read (WornRaw) as an outfit, by slot.
+static Outfit worn_outfit_of(const WornRaw* w, int n)
+{
+    Outfit now;
+    for (int i = 0; i < n; ++i) {
+        now.has_weapons |= is_weapon_slot(w[i].slot);
+        if (w[i].key != 0xFFFF) now.items.push_back({w[i].slot, w[i].key, w[i].uid});
+    }
+    std::sort(now.items.begin(), now.items.end(), [](const OutfitItem& a, const OutfitItem& b) { return a.slot < b.slot; });
+    return now;
+}
+
+// The outfit of `outfits` whose pieces are `now`'s, or -1 (`anchor` first). One rule for the menu's check and the
+// load's (worn_after_load).
+int match_outfit(const std::vector<Outfit>& outfits, const Outfit& now, int anchor)
+{
+    const bool weapons_from_set = weapon_set_in(outfits, now) >= 0;
+    auto matches = [&](size_t o) {
+        Outfit seen = now; // (what this outfit cares about: not the slots it leaves empty that can't be emptied)
+        seen.items.erase(std::remove_if(seen.items.begin(), seen.items.end(),
+                                        [&](const OutfitItem& it) {
+                                            return g_keep_slots.count(it.slot) && !outfit_piece(outfits[o], it.slot);
+                                        }),
+                         seen.items.end());
+        if (is_weapon_set(outfits[o])) return false; // (never the applied outfit, #27)
+        if (weapons_from_set) { // (the weapons are a weapon set's: the outfit is judged on its armour, #27)
+            Outfit armour = outfits[o];
+            armour.load_weapons = false;
+            return same_pieces(armour, seen);
+        }
+        return same_pieces(outfits[o], seen);
+    };
+    // (the anchor first: two outfits can match, e.g. the same armour with "Weapons: Leave", and the loaded one stays)
+    if (anchor >= 0 && size_t(anchor) < outfits.size() && matches(size_t(anchor))) return anchor;
+    for (size_t o = 0; o < outfits.size(); ++o)
+        if (matches(o)) return static_cast<int>(o);
+    return -1;
 }
 
 // The saved outfit whose pieces are the worn ones, or -1.
@@ -473,33 +514,95 @@ int find_worn_outfit(U64 self)
     WornRaw w[kWornMax];
     int n = read_worn(self, w, kWornMax);
     if (n <= 0) return -1;
-    Outfit now;
-    for (int i = 0; i < n; ++i) {
-        now.has_weapons |= is_weapon_slot(w[i].slot);
-        if (w[i].key != 0xFFFF) now.items.push_back({w[i].slot, w[i].key, w[i].uid});
-    }
-    std::sort(now.items.begin(), now.items.end(), [](const OutfitItem& a, const OutfitItem& b) { return a.slot < b.slot; });
-    const bool weapons_from_set = weapon_set_matching(now) >= 0;
-    auto matches = [&](size_t o) {
-        Outfit seen = now; // (what this outfit cares about: not the slots it leaves empty that can't be emptied)
-        seen.items.erase(std::remove_if(seen.items.begin(), seen.items.end(),
-                                        [&](const OutfitItem& it) {
-                                            return g_keep_slots.count(it.slot) && !outfit_piece(g_outfits[o], it.slot);
-                                        }),
-                         seen.items.end());
-        if (is_weapon_set(g_outfits[o])) return false; // (never the applied outfit, #27)
-        if (weapons_from_set) { // (the weapons are a weapon set's: the outfit is judged on its armour, #27)
-            Outfit armour = g_outfits[o];
-            armour.load_weapons = false;
-            return same_pieces(armour, seen);
+    return match_outfit(g_outfits, worn_outfit_of(w, n), anchor_outfit());
+}
+
+// A save just loaded, its character built (looks.cpp, the first look sync of the played character): the outfit its
+// equipment matches becomes the applied one in the loaded outfits, as the menu's check would make it once the world
+// shows - now already, so the loading screen has its looks (a save recorded with no outfit, or another, showed the
+// wrong looks there and switched as the world appeared: hidden pieces popped back in, 2026-11-16). Nothing matching,
+// the save's record stands; "No outfit" (#21) is kept. True once decided for this load (the equipment was read).
+bool worn_after_load(U64 inv, U16 ch)
+{
+    const U64 list = inv ? rp(inv + kOffInvEquipList) : 0;
+    WornRaw w[kWornMax];
+    int found = 0;
+    const int n = list ? read_worn_from(0, w, kWornMax, list, found) : -1;
+    if (n <= 0) return false; // (not built yet)
+    bool armour = false;
+    for (int k = 0; k < n; ++k) armour |= w[k].key != 0xFFFF && !is_weapon_slot(w[k].slot) && !is_accessory_slot(w[k].slot);
+    if (!armour) return false;
+    const Outfit now = worn_outfit_of(w, n);
+    std::lock_guard<std::mutex> lock(g_store_mu);
+    if (g_generation.load() == g_seen_generation) return true; // (taken over by the menu already: its check decides)
+    if (g_unmanaged.count(ch)) return true;
+    for (CharacterOutfits& c : g_published) {
+        if (c.character != ch) continue;
+        int worn = -1;
+        for (size_t i = 0; i < c.outfits.size(); ++i)
+            if (c.outfits[i].worn) worn = int(i);
+        const int m = match_outfit(c.outfits, now, worn);
+        if (m < 0 || m == worn) return true;
+        for (size_t i = 0; i < c.outfits.size(); ++i) c.outfits[i].worn = int(i) == m;
+        LOG("load: the equipment is \"%s\" (the save had %s): its looks from the loading screen", c.outfits[size_t(m)].name.c_str(),
+            worn >= 0 ? ("\"" + c.outfits[size_t(worn)].name + "\"").c_str() : "no outfit");
+        publish_looks(g_published);
+        // (the save's record too: the next load of this save starts with the right outfit - #47)
+        const std::string name = c.outfits[size_t(m)].name;
+        bool fixed = false;
+        for (auto& [slot, b] : g_bound) {
+            if (!g_loaded_known || !b.id.same(g_loaded_id)) continue;
+            for (CharacterOutfits& bc : b.store)
+                if (bc.character == ch)
+                    for (Outfit& o : bc.outfits) {
+                        const bool w = o.name == name && !o.temp;
+                        fixed |= o.worn != w;
+                        o.worn = w;
+                    }
         }
-        return same_pieces(g_outfits[o], seen);
-    };
-    // (the anchor first: two outfits can match, e.g. the same armour with "Weapons: Leave", and the loaded one stays)
-    if (int a = anchor_outfit(); a >= 0 && matches(size_t(a))) return a;
-    for (size_t o = 0; o < g_outfits.size(); ++o)
-        if (matches(o)) return static_cast<int>(o);
-    return -1;
+        if (fixed) {
+            write_store_file();
+            LOG("load: the save's record now has \"%s\" on", name.c_str());
+        }
+        return true;
+    }
+    return true;
+}
+
+// A save being written (saves.cpp, the watch thread, g_store_mu held): in the outfits that go with it, the played
+// character's applied outfit is the one its equipment matches - not what a swap in progress has applied for the moment
+// (sleepwear, combat: a temporary outfit, or none for an instant; a save then recorded no outfit over exactly a saved
+// one's pieces, #47). Nothing matching, or "No outfit" (#21): as it is. Temporary outfits are never saved.
+void record_worn_for_save(Store& s)
+{
+    U64 ctx[4] = {};
+    const U64 actor = acquire_player(ctx);
+    const U16 ch = actor ? character_of(actor) : kNoCharacter;
+    if (ctx[0]) release_player(ctx);
+    if (ch == kNoCharacter || g_unmanaged.count(ch)) return;
+    WornRaw w[kWornMax];
+    const int n = read_worn(0, w, kWornMax);
+    if (n <= 0) return;
+    bool armour = false;
+    for (int k = 0; k < n; ++k) armour |= w[k].key != 0xFFFF && !is_weapon_slot(w[k].slot) && !is_accessory_slot(w[k].slot);
+    if (!armour) return;
+    for (CharacterOutfits& c : s) {
+        if (c.character != ch) continue;
+        std::vector<Outfit> real; // (the saved outfits only: a temporary one's pieces are the worn ones by definition)
+        std::vector<size_t> at;
+        int worn = -1;
+        for (size_t i = 0; i < c.outfits.size(); ++i)
+            if (!c.outfits[i].temp) {
+                if (c.outfits[i].worn) worn = int(real.size());
+                real.push_back(c.outfits[i]), at.push_back(i);
+            }
+        const int m = match_outfit(real, worn_outfit_of(w, n), worn);
+        if (m < 0 || m == worn) return;
+        for (size_t i = 0; i < c.outfits.size(); ++i) c.outfits[i].worn = i == at[size_t(m)];
+        LOG("save: \"%s\" recorded as on (what is worn; %s was applied for the moment)", real[size_t(m)].name.c_str(),
+            worn >= 0 ? ("\"" + real[size_t(worn)].name + "\"").c_str() : "no outfit");
+        return;
+    }
 }
 
 // --- Player actor and character -----------------------------------------------------------------
@@ -876,8 +979,13 @@ bool adopt_returned(Outfit& o, const std::vector<Owned>& owned)
             bool have = false;
             for (const Owned& x : owned) have |= x.uid == it.uid && x.key == it.key;
             if (have || stash_pending(it.uid)) continue;
+            // (a run-time key alone is no proof of the item: once a package or mod adds items before them, the key
+            // names another item - 2026-11-15, Camp Happens' 9 new items made a pre-order boots key a ship's stern,
+            // adopted as the boots. With its permanent id the item is checked below; without one, uid only, above.)
+            if (!it.pid && key_assigned_at_run(it.key)) continue;
             for (const Owned& x : owned)
-                if (x.key == it.key && x.uid > o.seen && std::find(taken.begin(), taken.end(), x.uid) == taken.end()) {
+                if (x.key == it.key && (!it.pid || pid_of(x.key) == it.pid) && x.uid > o.seen &&
+                    std::find(taken.begin(), taken.end(), x.uid) == taken.end()) {
                     LOG("outfit \"%s\": equipment-%u key %u came back (uid %llX -> %llX)", o.name.c_str(), it.slot,
                         it.key, it.uid, x.uid);
                     it.uid = x.uid;

@@ -29,6 +29,7 @@ bool look_changing();
 bool model_loading(U64 model);
 void look_settled();
 void look_refresh();
+void look_glide(U64 ctx, U32 target); // (sleep.cpp's evaluator hook: a chart layer's state change; #46)
 extern U64 g_weapon_hide_after;
 extern U64 g_sheathe_refresh_at; // (GetTickCount64: a sheathed hidden weapon's glow peak is over - the looks again)
 // the sneak peek glow on one hidden weapon's parts (part name ids) as it is drawn (false) or sheathed (true) - transition.cpp
@@ -62,6 +63,7 @@ bool present_on();
 void present_request(U64 inv, U16 slot, bool take_off);
 void present_game_thread();
 void present_seen(U64 inv, U16 slot);
+bool present_is_off(U64 inv, U16 slot);
 void present_want(U64 inv, U16 slot, bool off); // (present.cpp: a look wants the slot off: its put-on is left out)
 void present_want_only(U64 inv, U32 slots);
 void present_install();

@@ -299,6 +299,7 @@ void show_side_badges(U64 root, const char* const kind[2], int where)
         if (!b) continue;
         const char* t = kind ? kind[k] : nullptr;
         set_class(b, "om-sb-bed", t && !std::strcmp(t, "bed"));
+        set_class(b, "om-sb-combat", t && !std::strcmp(t, "combat"));
         set_class(b, "om-sb-look", t && !std::strcmp(t, "look"));
         set_class(b, "om-sb-plain", t && where == 1);
         set_class(b, "om-sb-eye", t && where == 2);
@@ -336,9 +337,10 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
     U32 k = i < visible ? slot_outfit(i) : kOutfitSlots;
     bool piece = k < pieces.size(), page = k == pieces.size(), back = k == pieces.size() + 1;
     const bool under = piece && pieces[k] == kUnderwearPiece; // (no item: a label, like the page slot)
+    const bool part = piece && is_extra_row(pieces[k]); // (Visibility Extras: a part group - its name, like the underwear)
     OutfitItem tmp{};
     const OutfitItem* it = piece ? eye_item(pieces[k], tmp) : nullptr;
-    std::string pic = it ? piece_icon(*it) : std::string();
+    std::string pic = it && !part ? piece_icon(*it) : std::string();
     show_slot_image(self, root, i, pic);
     if (i < visible) show_mode_dots(script, mode_count(i), mode_lit(i));
     U64 badge = find_by_class(root, "quickslot-occupancy-icon-chain"), low = find_by_class(root, "cpp-icon-disable-item");
@@ -354,15 +356,17 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
     // Back and the page slot: a label (the page slot names the page its dots chose - its silhouette was easy to misread
     // while scrolling through the three, #23)
     static const char* const kPageName[kEyeSteps] = {"page.armour", "page.weapons", "page.accessories"};
-    const bool labelled = back || page || under;
+    const bool labelled = back || page || under || part;
     U64 mark = find_parent_of_class(root, "charged-count");
     if (mark) {
         ok &= labelled ? set_class(mark, "self-center", true) && set_class(mark, "om-label-wrap", true) : clear_label(mark);
         ok &= set_class(mark, "om-eye-c", false) && set_class(mark, "om-eye2-c", false);
         ok &= set_class(mark, "!cpp-none", !labelled);
         if (U64 text = labelled ? find_by_class(mark, "charged-count") : 0) {
+            const std::string pl = part ? part_label(g_extra_rows[pieces[k] - kExtraBase].group) : std::string();
             const char* label = back    ? lang::t("setting.back") // (Back: the settings' word, translated)
                                 : under ? lang::t("piece.underwear")
+                                : part  ? pl.c_str()
                                         : lang::t(kPageName[g_eye_pick % kEyeSteps]);
             if (g_set_text) g_set_text(text, label, 0);
             ok &= set_class(text, "om-label", true) && set_class(text, "om-label-value", false);
@@ -535,9 +539,10 @@ void apply_outfit_slots(U64 self, U32 only)
             if (const char* c = climate_only(ro)) row[n++] = c; // (the thermometer stays on the slot, user 2026-11-13)
             if (!kBadgesInCentre) { // (else the bed and the look: in the centre only)
                 if (ro.activity == kActivitySleep) row[n++] = "om-sleep-c";
+                if (ro.activity == kActivityCombat) row[n++] = "om-combat-c";
                 if (charlook_on(ro)) row[n++] = "om-lookmain-c";
             }
-            for (int k = 1; k < n; ++k) side[k - 1] = !std::strcmp(row[k], "om-sleep-c") ? "bed" : "look";
+            for (int k = 1; k < n; ++k) side[k - 1] = !std::strcmp(row[k], "om-sleep-c") ? "bed" : !std::strcmp(row[k], "om-combat-c") ? "combat" : "look";
         }
         // (the "+" slot: the worn chest, whatever is worn - what it unequips / what saving would keep)
         const bool set = saved && is_weapon_set(g_outfits[slot_outfit(i)]); // (a weapon set, #27)
@@ -578,7 +583,8 @@ void apply_outfit_slots(U64 self, U32 only)
                 for (U16 s = 0; s < 32; ++s) looks |= slot_look(g_outfits[slot_outfit(i)], s) != kLookDefault;
             if (!kBadgesInCentre && saved && !set && mode == kModeMain) looks |= g_outfits[slot_outfit(i)].underwear_look != kLookDefault;
             bool climate = want && (!std::strncmp(want, "om-cold", 7) || !std::strncmp(want, "om-heat", 7) ||
-                                    !std::strcmp(want, "om-sleep-c") || !std::strcmp(want, "om-lookmain-c"));
+                                    !std::strcmp(want, "om-sleep-c") || !std::strcmp(want, "om-combat-c") ||
+                                    !std::strcmp(want, "om-lookmain-c"));
             stacked = looks && climate;
             badge_ok &= set_class(mark, "self-center", true);
             badge_ok &= set_class(mark, "om-eye-c", looks && !stacked);
@@ -683,7 +689,7 @@ U32 mode_count(U32 i)
 {
     if (g_eye >= 0) {
         size_t k = slot_outfit(i), n = eye_pieces().size();
-        return k < n ? kLookCount : k == n ? kEyeSteps : 0;
+        return k < n ? (g_eye_extras && g_extra_piece < 0 ? 0 : kLookCount) : k == n ? kEyeSteps : 0; // (parts mode's pieces: none)
     }
     if (g_cfg >= 0) return cfg_dots(i, nullptr);
     // (an outfit: its action, its settings; the "+" slot once outfits exist: Unequip Outfit, Save, Settings - #21; the page
@@ -955,7 +961,7 @@ void center_show(U64 self)
 U64 g_cb_row = 0, g_cb_host = 0; // (the row, and the caption holding it)
 std::vector<const char*> g_cb_kinds;
 const char* const kCbAll[] = {"om-cbi-eye", "om-cbi-cold", "om-cbi-heat", "om-cbi-cold2", "om-cbi-heat2", "om-cbi-bed",
-                              "om-cbi-look"};
+                              "om-cbi-combat", "om-cbi-look"};
 
 void keep_center_badges()
 {
@@ -982,13 +988,14 @@ bool show_center_badges(U64 te, const Outfit* o)
     if (te) g_cb_row = find_by_class(te, "om-cb-row", 12); // (looked up again each time: never a stale element)
     std::vector<const char*> kinds;
     if (o && !is_weapon_set(*o)) {
-        bool looks = o->underwear_look != kLookDefault;
+        bool looks = o->underwear_look != kLookDefault || !o->part_looks.empty();
         for (U16 s = 0; s < 32 && !looks; ++s) looks |= slot_look(*o, s) != kLookDefault;
         if (looks) kinds.push_back("om-cbi-eye");
         if (const char* c = climate_only(*o)) // (om-cold-c -> om-cbi-cold ...)
             kinds.push_back(!std::strcmp(c, "om-cold-c") ? "om-cbi-cold" : !std::strcmp(c, "om-heat-c") ? "om-cbi-heat"
                             : !std::strcmp(c, "om-cold2-c") ? "om-cbi-cold2" : "om-cbi-heat2");
         if (o->activity == kActivitySleep) kinds.push_back("om-cbi-bed");
+        if (o->activity == kActivityCombat) kinds.push_back("om-cbi-combat");
         if (charlook_on(*o)) kinds.push_back("om-cbi-look");
     }
     if (kinds != g_cb_kinds) {

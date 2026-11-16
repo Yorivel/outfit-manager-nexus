@@ -3,6 +3,7 @@
 #include "om.h"
 #include "saves.h"
 #include "store.h"
+#include "gear.h"
 #include "looks.h"
 #include "pads.h"
 
@@ -212,8 +213,10 @@ void on_slot_changed(U32 slot, const std::wstring& name, DWORD action)
     if (it == g_pending_writes.end()) {
         FILETIME ft;
         GetSystemTimeAsFileTime(&ft);
+        Store with = g_published;
+        record_worn_for_save(with); // (the applied outfit as the equipment says, not a swap's moment - gear.cpp)
         g_pending_writes.push_back(
-            {slot, slot_save_path(slot), g_published, {}, now, (U64(ft.dwHighDateTime) << 32) | ft.dwLowDateTime});
+            {slot, slot_save_path(slot), with, {}, now, (U64(ft.dwHighDateTime) << 32) | ft.dwLowDateTime});
         write_store_file(); // noted at once, in case the game closes before the write is bound
         LOG("game is writing save slot %u (%ls, change %lu): %zu outfits go with it", slot, name.c_str(), action,
             outfit_total(g_published));
