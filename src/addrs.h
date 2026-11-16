@@ -228,6 +228,12 @@ extern U64 kRvaMeshCollectNamed;
 extern U64 kRvaMeshColour;
 extern U64 kRvaMeshColourArg;
 extern U64 kRvaLookCtor, kRvaLookDtor, kRvaLookApply, kRvaCompStoreLook, kOffCompLook, kRvaBarberAckVt, kRvaBarberAck;
+// Visibility Extras' chain (parts.cpp) and the working-parts check
+extern U64 kRvaPartsBody, kRvaPrefabIds, kRvaPartsMapFind, kRvaPartsGlobal;
+extern U64 kOffInvActor, kOffPartsComp, kOffPartsBodyArg, kOffPartsBodyId, kOffEquipListEntries, kOffEquipListCount,
+    kOffEquipEntrySize, kOffEntryShownKey, kOffEntryKey, kOffPartsG, kOffPartsG1, kOffPartsG2, kOffPartsG3, kOffPartsMap,
+    kOffPrefabRecKey;
+extern U64 kRvaChestPartCheck, kRvaPartCast, kOffPartScene, kOffSceneInner, kOffSceneSkip, kOffSceneCastAdj, kOffCastTable;
 void resolve_addresses();
 
 } // namespace om
