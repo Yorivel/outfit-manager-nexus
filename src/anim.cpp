@@ -107,6 +107,8 @@ U64 __fastcall try_hook(U64 comp, U64 layer, U64 cur, U64 cand, U64 a5, U64 a6, 
         g_seen = false;
         g_started_at = GetTickCount64();
         g_phase = kPlaying;
+    } else { // DIAG (anim-start, 2026-11-17; remove): refusals of our branch, to key "not started" on them (600 ms now)
+        LOG("DIAG anim-start: our branch refused (result %llX, +%llu ms since asked)", r, GetTickCount64() - g_asked_at.load());
     }
     g_injecting = false;
     return r;
@@ -237,6 +239,13 @@ void anim_tick()
         break;
     case kPlaying: {
         const U32 st = upper_state(g_comp.load());
+        if (!g_seen.load() && st != g_want.load()) { // DIAG (anim-start, 2026-11-17; remove): its states before ours (500 ms now)
+            static U32 diag_last = 0;
+            if (st != diag_last) {
+                diag_last = st;
+                LOG("DIAG anim-start: taken, upper layer in %08X (+%llu ms)", st, now - g_started_at.load());
+            }
+        }
         if (st == g_want.load()) {
             if (!g_seen.exchange(true)) LOG("helmet animation %08X: playing", st);
         } else if (g_seen.load()) {

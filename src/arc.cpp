@@ -175,6 +175,7 @@ U8 g_peek_pad_last = 0;               // the pad's buttons on the last frame (fo
 
 std::atomic<bool> g_peek_live{false};  // the arc is open (read by the input filters: the wheel is the arc's)
 std::atomic<U64> g_peek_hud_at{0};     // the status screen's last frame with the arc ready (tick): the key is the arc's
+std::atomic<U64> g_peek_self{0};       // DIAG (hud-shown, 2026-11-17; remove)
 std::atomic<int> g_peek_wheel{0};      // wheel movement kept from the game while the arc is open (WHEEL_DELTA units)
 
 bool peek_elements()
@@ -847,6 +848,7 @@ void peek_frame(U64 self)
     if (g_peek_root == ~0ull || !peek_elements()) return;
     Peek& p = g_peek;
     g_peek_hud_at = GetTickCount64();
+    g_peek_self = self;
     // The key (the "+" page's Quick Peek): held = open, released = the highlighted outfit goes on. Not while the gear
     // wheel, a question or the naming prompt is open.
     if (g_peek_capture && !g_menu_open) g_peek_capture = false; // (the wheel closed while the setting waited)

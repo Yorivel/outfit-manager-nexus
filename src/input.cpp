@@ -6,6 +6,9 @@
 #include "wheel_hooks.h"
 #include "pads.h"
 #include "arc.h"
+#include "addrs.h"
+#include "mem.h"
+#include "log.h"
 
 namespace om {
 
@@ -30,9 +33,26 @@ bool sleep_fx_timer(WPARAM id); // (sleep.cpp: its effect timer)
 // twice and seemed not to move).
 std::atomic<bool> g_wheel_hooked{false};
 
+// DIAG (hud-shown, 2026-11-17; remove): "the HUD is shown" is a HUD frame within the last 250 ms. Does the status
+// screen's own shown / hidden pair (+kOffModalShown / +kOffModalHidden, as on the game's modals) say the same at each
+// key? Logged when the answer of either changes.
+void diag_hud_shown()
+{
+    static int last = -1;
+    const U64 self = g_peek_self.load();
+    const bool recent = GetTickCount64() - g_peek_hud_at.load() < 250;
+    unsigned char shown = 0xFF, hidden = 0xFF;
+    if (self) rd(self + kOffModalShown, shown), rd(self + kOffModalHidden, hidden);
+    const int now = (recent ? 1 : 0) | (shown << 1) | (hidden << 9);
+    if (now == last) return;
+    last = now;
+    LOG("DIAG hud-shown: HUD frame within 250 ms %d; status screen %llX shown %u hidden %u", recent, self, shown, hidden);
+}
+
 // Is (vk) with the modifiers held now one of the current outfits' hotkeys (in play)?
 bool hotkey_held_now(U32 vk)
 {
+    if (vk) diag_hud_shown();
     if (!vk || g_menu_open || g_name_modal || GetTickCount64() - g_peek_hud_at.load() >= 250) return false;
     std::uint8_t mods = static_cast<std::uint8_t>(((GetKeyState(VK_CONTROL) & 0x8000) ? 1 : 0) |
                                                   ((GetKeyState(VK_MENU) & 0x8000) ? 2 : 0) | ((GetKeyState(VK_SHIFT) & 0x8000) ? 4 : 0));
