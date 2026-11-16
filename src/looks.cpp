@@ -41,6 +41,7 @@ struct PartLook { // (Visibility Extras: a part group of a piece, with its look)
 };
 std::map<U16, std::vector<PartLook>> g_part_looks; // character -> the worn outfit's part groups with a look (same lock)
 
+std::atomic<U32> g_in_use_slots{0}; // (slots whose working part is in use now: shown - look_pending)
 std::mutex g_appear_mu; // the maps below; one sync at a time (game thread, job threads, UI thread)
 std::map<U64, std::map<U16, int>> g_look_applied; // inventory -> slot -> the model handle our layer decides
 std::map<U64, bool> g_in_battle;                  // inventory -> the headgear switch's last in-battle flag
@@ -542,6 +543,8 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
         bool shown = p.look == kLookShown || (p.look == kLookCombat && in_battle) || (p.look == kLookPeace && !in_battle);
         bool case_shown = shown; // (a weapon's case: with its look, and while the weapon is drawn)
         bool drawn = false;
+        // (a working part in use - the Tech Gloves' arm out - shows like a lit lantern, in any slot; parts.cpp)
+        if (p.slot < 32 && inv == player_inventory() && ((g_in_use_slots.load() >> p.slot) & 1)) drawn = true;
         int ch_case = 0;
         std::vector<int> extras;
         bool armour_like = false;
@@ -1019,6 +1022,16 @@ void __fastcall model_swap_hook(U64 job, U64 a, U64 b, char c, std::uint8_t* sta
 void look_pending()
 {
     if (g_look_dirty_world.exchange(false)) look_refresh(); // (the world is up: unchecked pieces get their check)
+    { // (a working part in use - the Tech Gloves' arm out - or put away: its piece shows / its look decides again)
+        const U64 inv = player_inventory(), actor = inv ? rp(inv + 8) : 0, model = actor ? look_model(actor) : 0;
+        const U32 now = model ? working_parts_in_use(inv, model) : 0;
+        if (const U32 was = g_in_use_slots.exchange(now); was != now) {
+            for (U16 s = 0; s < 32; ++s)
+                if (((was ^ now) >> s) & 1)
+                    LOG("working parts: equipment-%u's working part %s", s, (now >> s) & 1 ? "is in use: shown" : "is put away: its look again");
+            look_refresh();
+        }
+    }
     if (working_parts_dirty()) { // (a piece's working part found or ruled out: into the outfits file now)
         std::lock_guard<std::mutex> lock(g_store_mu);
         write_store_file();

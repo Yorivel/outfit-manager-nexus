@@ -238,6 +238,7 @@ using CastFn = U64(__fastcall*)(U64);
 struct LiveCheck {
     bool ok = false;
     U32 o_part = 0, o_obj = 0, o_flag = 0, o_table = 0;
+    U32 entry = ~0u; // (the table entry the chest path asks for: the part in use - the arm out; ~0: not found)
     std::int32_t o_adj = 0;
     CastFn cast = nullptr;
 } g_live;
@@ -289,9 +290,15 @@ bool live_check_ready()
     g_live.o_adj = static_cast<std::int8_t>(d8(at + 27));
     g_live.cast = reinterpret_cast<CastFn>(call_target(at + 28));
     g_live.o_table = d32(at + 52);
+    { // (the function called with the table: its "mov edx, <entry>" before the entry's lookup)
+        static const int kEntry[] = {0xBA, -1, -1, -1, -1, 0xE8};
+        const U64 fn = call_target(at + 56);
+        if (const U64 m = scan_raw(kEntry, 6, reinterpret_cast<const unsigned char*>(fn), 0x60)) g_live.entry = d32(m + 1);
+    }
     g_live.ok = true;
-    LOG("working parts: the game's check found at +%llX (part +%X -> +%X, flag +%X, cast +%llX, table +%X)", at - g_base,
-        g_live.o_part, g_live.o_obj, g_live.o_flag, reinterpret_cast<U64>(g_live.cast) - g_base, g_live.o_table);
+    LOG("working parts: the game's check found at +%llX (part +%X -> +%X, flag +%X, cast +%llX, table +%X, in use: entry %d)",
+        at - g_base, g_live.o_part, g_live.o_obj, g_live.o_flag, reinterpret_cast<U64>(g_live.cast) - g_base, g_live.o_table,
+        g_live.entry == ~0u ? -1 : int(g_live.entry));
     return true;
 }
 
@@ -364,5 +371,60 @@ void working_parts_read(const std::string& ids, bool working)
 }
 
 bool working_parts_dirty() { return g_kind_dirty.exchange(false); }
+
+namespace {
+// The part's in-use entry (0: none) and its working flag (polled in play, 2026-11-16: the entry appears as the arm comes
+// out; +82 goes 0 -> 1 as it starts working and back to 0 the moment it is put away - steady, where +48 flickered
+// 3 / 0 while the arm came out). -1: can't tell.
+constexpr U32 kInUseState = 0x82;
+constexpr unsigned char kAtRest = 0;
+int part_in_use_raw(U64 part, U64* entry, unsigned char* state)
+{
+    __try {
+        const U64 a = rp(part + g_live.o_part);
+        const U64 q = a ? rp(a + g_live.o_obj) : 0;
+        if (!q) return -1;
+        const U64 obj = g_live.cast(q + g_live.o_adj);
+        const U64 t = obj ? rp(obj + g_live.o_table) : 0;
+        if (!t) return -1;
+        *entry = rp(t + U64(g_live.entry) * 8);
+        *state = *entry ? *reinterpret_cast<const unsigned char*>(*entry + kInUseState) : kAtRest;
+        return *entry ? 1 : 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return -1;
+    }
+}
+} // namespace
+
+// The slots whose piece has a working part that is in use now (the Tech Gloves' arm out): its component holds the
+// entry the game asks for then (seen appearing as the arm was used, 2026-11-16). A hidden piece shows while it is.
+U32 working_parts_in_use(U64 inv, U64 model)
+{
+    if (!inv || !model || !live_check_ready() || g_live.entry == ~0u) return 0; // (found here too: a known item never checks)
+    // per slot: the entry seen last, and whether its use is on (from the entry's first appearance - it starts at rest
+    // for a moment as the arm comes out - or from its state leaving rest, until it comes back to rest)
+    struct Use { U64 entry = 0; bool on = false, moved = false; };
+    static std::map<std::pair<U64, U16>, Use> uses;
+    U32 mask = 0;
+    const U64 rt = rp(inv + 0xA0), arr = rt ? rp(rt + 8) : 0;
+    for (U32 i = 0, n = rt ? r32(rt + 0x10) : 0; arr && i < n && i < 64; ++i) {
+        const U16 slot = *reinterpret_cast<U16*>(arr + i * 0xD0ull + 0xC8);
+        U16 key = *reinterpret_cast<U16*>(arr + i * 0xD0ull + 0x90);
+        if (key == 0xFFFF) key = *reinterpret_cast<U16*>(arr + i * 0xD0ull + 8);
+        if (slot >= 32 || key == 0xFFFF || working_part_known(key) != 1) continue;
+        for (const ItemPart& p : item_parts(inv, model, slot)) {
+            U64 entry = 0;
+            unsigned char state = kAtRest;
+            if (part_in_use_raw(look_part(model, p.handle), &entry, &state) < 0) continue;
+            Use& u = uses[{inv, slot}];
+            if (!entry) { u = {}; continue; }
+            if (entry != u.entry) u = {entry, true, false}; // (it just appeared: the arm is coming out)
+            if (state != kAtRest) u.on = true, u.moved = true;
+            else if (u.moved) u.on = false, u.moved = false; // (back at rest after moving: put away)
+            if (u.on) { mask |= 1u << slot; break; }
+        }
+    }
+    return mask;
+}
 
 } // namespace om

@@ -6,7 +6,8 @@ Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods
 
 - Fix: on Visibility Extras' pages, the pieces you click to open their parts now show the click prompt, like the other clickable slots; the caption that said to click is gone (#48).
 - Fix: opening a chest or door with the Tech Gloves' All-Purpose Arm no longer crashes the game when an outfit hides (or hid, then showed) the gloves. Their arm is a working part the game builds with a component of its own, and the way Outfit Manager hides pieces left it out. Pieces like these now stay as the game built them and are hidden on Outfit Manager's own layer; the first time a hidden piece is ever seen, the game builds it once so Outfit Manager can tell. Thanks for the report and the files, myst0rion!
-- Technical: working parts are told by the game's own chest path (part +28 -> +8, flag +15, its type cast of -28, the table +228), its offsets and cast read from that code's bytes once unpacked; the result is kept per permanent id (workingparts / plainparts in the outfits file); a piece our own call presented again is never checked (present_built_by_om).
+- New: hidden Tech Gloves show while their All-Purpose Arm is in use, and hide again once it's put away (like a hidden lantern while it burns).
+- Technical: working parts are told by the game's own chest path (part +28 -> +8, flag +15, its type cast of -28, the table +228), its offsets and cast read from that code's bytes once unpacked; the result is kept per permanent id (workingparts / plainparts in the outfits file); a piece our own call presented again is never checked (present_built_by_om). In use: the arm component's entry 27 (the index read from the chest path's code) appears as the arm comes out; its flag +82 is 1 while it works and back to 0 as it is put away (measured in play; to be witnessed in the resolver).
 
 ## 0.8.0 (2026-11-16)
 

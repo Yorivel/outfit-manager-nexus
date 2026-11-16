@@ -21,5 +21,6 @@ int working_part_check(U64 inv, U64 model, U16 slot, U16 key); // (the game's ow
 std::string working_parts_line(bool working);                   // (the outfits file: hex permanent ids)
 void working_parts_read(const std::string& ids, bool working);
 bool working_parts_dirty();                                      // (a result recorded since: the file is written)
+U32 working_parts_in_use(U64 inv, U64 model);                     // (slots whose working part is in use now)
 
 } // namespace om
