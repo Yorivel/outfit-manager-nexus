@@ -114,6 +114,8 @@ bool g_peek_capture_held[256] = {};      // keys already down when it started wa
 
 // Character look (#35): the dot scrolled to (0 Off, 1 Snapshot); a click does it. Set to the outfit's own on entering.
 std::uint8_t g_look_pick = 0;
+// Visibility: the dot scrolled to (0 Pieces, 1 Extras - only when the outfit's pieces have extra parts); a click opens it.
+std::uint8_t g_vis_pick = 0;
 
 // A weapon set's Icon setting: its choices' equip slots (0: the main weapon, then each weapon it holds, in slot order).
 std::vector<U16> icon_choices(const Outfit& o)
@@ -182,6 +184,10 @@ std::vector<const char*> cfg_values(std::uint8_t k, U32& cur)
         if (k == kCfgStash) {
             cur = o.stash % 3;
             return {"value.default", "value.on", "value.off"};
+        }
+        if (k == kCfgVisibility && has_extras(o)) { // (Visibility Extras: an action with a choice, scrolled then clicked)
+            cur = g_vis_pick;
+            return {"value.pieces", "value.extras"};
         }
         if (k == kCfgActivity) { // (one per kActivity*, in that order)
             cur = o.activity < kActivityCount ? o.activity : 0;
@@ -283,7 +289,7 @@ std::string cfg_description(std::uint8_t k)
                                                : "desc.look.take");
         }
         else if (k == kCfgDelete) t = entry_text(kPageOutfit, 1);
-        else if (k == kCfgVisibility) t.second = lang::t("desc.visibility");
+        else if (k == kCfgVisibility) t.second = lang::t(g_vis_pick == 1 ? "desc.visibility.extras" : "desc.visibility");
         else if (k == kCfgHotkey) {
             const Outfit& o = g_outfits[size_t(g_cfg)];
             t.second = g_peek_capture && g_capture_outfit == g_cfg ? lang::t("desc.hotkey.wait")
@@ -326,6 +332,7 @@ void cfg_enter(U64 self, U32 o)
 {
     g_eye = -1, g_cfg = static_cast<int>(o), g_overwrite_reset = false;
     g_look_pick = o < g_outfits.size() && charlook_on(g_outfits[o]) ? 1 : 0;
+    g_vis_pick = 0;
     LOG("settings view: %s", o < g_outfits.size() ? ("\"" + g_outfits[o].name + "\"").c_str() : "the plugin's");
     cfg_refresh(self);
 }
@@ -367,8 +374,8 @@ void cfg_scroll(U64 self, U32 i, int step)
     std::vector<const char*> v = cfg_values(e[k], cur);
     if (v.empty()) return;
     U32 to = U32((cur + v.size() + step) % v.size());
-    if (e[k] == kCfgLook) { // (#35: only the dot moves; a click does it)
-        g_look_pick = static_cast<std::uint8_t>(to);
+    if (e[k] == kCfgLook || e[k] == kCfgVisibility) { // (#35, extras: only the dot moves; a click does it)
+        (e[k] == kCfgLook ? g_look_pick : g_vis_pick) = static_cast<std::uint8_t>(to);
         apply_outfit_slots(self, i);
         center_for_focus(self, focused_script(self), true);
         return;
@@ -467,7 +474,11 @@ void cfg_press(U64 self, U32 i)
     U32 o = static_cast<U32>(g_cfg);
     LOG("settings view: %s pressed", cfg_name(e[k]));
     switch (e[k]) {
-    case kCfgVisibility: g_cfg = -1, eye_enter(self, o); break;
+    case kCfgVisibility: {
+        const bool extras = g_vis_pick == 1 && o < g_outfits.size() && has_extras(g_outfits[o]);
+        g_cfg = -1, eye_enter(self, o, extras);
+        break;
+    }
     case kCfgRename: open_rename_prompt(self, o); break;
     case kCfgOverwrite: overwrite_pressed(self, o, g_overwrite_reset); break;
     case kCfgLook: look_pressed(self, o); break;

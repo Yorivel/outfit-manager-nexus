@@ -7,6 +7,7 @@
 #include "items.h"
 #include "store.h"
 #include "saves.h"
+#include "parts.h"
 #include "looks.h"
 #include "load.h"
 #include "prompts.h"
@@ -190,6 +191,7 @@ bool install()
         g_vis_set = reinterpret_cast<VisSetFn>(g_base + kRvaVisSet);
         g_vis_release = reinterpret_cast<VisReleaseFn>(g_base + kRvaVisRelease);
         g_slot_handle = reinterpret_cast<SlotHandleFn>(g_base + kRvaSlotHandle);
+        parts_install(); // (Visibility Extras: the parts a piece brings, read through the slot handle function)
         if (have({kRvaBattleCheck})) g_battle_check = reinterpret_cast<BattleCheckFn>(g_base + kRvaBattleCheck);
         else LOG("appearance: battle check not found; combat looks follow the headgear switch");
         if (MH_CreateHook(t, reinterpret_cast<void*>(&battle_vis_hook), reinterpret_cast<void**>(&g_battle_vis_orig)) !=

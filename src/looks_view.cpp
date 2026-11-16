@@ -9,6 +9,10 @@
 #include "wheel_draw.h"
 #include "wheel_hooks.h"
 #include <map>
+#include "lang.h"
+#include "parts.h"
+#include "mem.h"
+#include "addrs.h"
 
 namespace om {
 
@@ -22,6 +26,58 @@ int g_cfg = -1;             // the settings view's outfit (the saved count: the 
 
 std::uint8_t g_eye_step = 0; // 0 Armour, 1 Weapons, 2 Accessories
 std::uint8_t g_eye_pick = 0; // the page slot's dots: scrolled to choose, a click opens it (g_eye_step follows)
+// Visibility Extras (the view in parts mode): one row per part group of a piece the outfit holds, on the page of the
+// piece's slot. A piece's groups come from the model while it is worn (parts.cpp), and are kept per item for the
+// session, so an outfit whose pieces were worn before shows them too. A piece with one group has nothing extra.
+bool g_eye_extras = false;
+int g_extra_piece = -1;
+std::vector<ExtraRow> g_extra_rows;
+std::map<U64, std::vector<std::string>> g_seen_groups; // item uid -> its part groups (as last worn)
+
+std::vector<ExtraRow> extra_rows(const Outfit& o)
+{
+    std::vector<ExtraRow> rows;
+    const U64 inv = player_inventory(), actor = inv ? rp(inv + 8) : 0, model = actor ? look_model(actor) : 0;
+    const U64 list = inv ? rp(inv + kOffInvEquipList) : 0;
+    std::vector<OutfitItem> items = o.items;
+    std::sort(items.begin(), items.end(), [](const OutfitItem& a, const OutfitItem& b) { return a.slot < b.slot; });
+    for (const OutfitItem& it : items) {
+        if (it.key == 0xFFFF || !it.uid) continue;
+        U64 e = list ? equipped_item(list, it.slot) : 0, uid = 0;
+        if (e && model && rd(e, uid) && uid == it.uid) { // (worn: its groups as the model has them now)
+            std::vector<std::string> g;
+            for (const ItemPart& p : item_parts(inv, model, it.slot))
+                if (std::find(g.begin(), g.end(), part_group(p.name)) == g.end()) g.push_back(part_group(p.name));
+            if (!g.empty()) g_seen_groups[it.uid] = g;
+        }
+        auto f = g_seen_groups.find(it.uid);
+        if (f == g_seen_groups.end() || f->second.size() < 2) continue;
+        for (const std::string& g : f->second) rows.push_back({it.slot, it.key, it.uid, g});
+    }
+    return rows;
+}
+bool has_extras(const Outfit& o) { return parts_on() && !extra_rows(o).empty(); }
+// A part group's name for the player: its line ("part.Upperbody_Acc"), or the group's own words (a modded item's part).
+std::string part_label(const std::string& group)
+{
+    // (a weapon's scabbard / case, and the weapon itself, whatever its kind and side: one line each)
+    const bool weapon = !group.compare(0, 11, "MainWeapon_") || !group.compare(0, 14, "TwoHandWeapon_");
+    if (weapon && group.find("_IN") != std::string::npos) return lang::t("part.scabbard");
+    const std::string k = "part." + group;
+    const char* t = lang::t(k.c_str());
+    if (t == k.c_str() && weapon) return lang::t("part.weapon");
+    if (t != k.c_str()) return t;
+    std::string s = group;
+    for (char& c : s) if (c == '_') c = ' ';
+    return s;
+}
+std::string extra_key(const ExtraRow& r) { return std::to_string(r.slot) + ":" + r.group; }
+// The page a slot's rows go on: 0 Armour, 1 Weapons, 2 Accessories (as the pieces).
+std::uint8_t slot_step(U16 slot)
+{
+    return is_weapon_slot(slot) || is_display_slot(slot) ? 1 : is_accessory_slot(slot) ? 2 : 0;
+}
+
 bool is_accessory_slot(U16 slot) { return std::find(std::begin(kAccessorySlots), std::end(kAccessorySlots), slot) != std::end(kAccessorySlots); }
 
 // The outfit the view edits: g_outfits[g_eye], or with g_eye the saved count (the "+" slot's, as g_cfg) the character's
@@ -35,6 +91,17 @@ std::vector<size_t> eye_pieces()
 {
     std::vector<size_t> v;
     if (g_eye < 0 || size_t(g_eye) > g_outfits.size()) return v;
+    if (g_eye_extras) { // (parts mode: the page's pieces with extra parts; a piece opened: its part groups)
+        for (size_t r = 0; r < g_extra_rows.size(); ++r) {
+            const U16 sl = g_extra_rows[r].slot;
+            if (g_extra_piece >= 0) {
+                if (sl == g_extra_piece) v.push_back(kExtraBase + r);
+            } else if (slot_step(sl) == g_eye_step && std::find(v.begin(), v.end(), kExtraPieceBase + sl) == v.end()) {
+                v.push_back(kExtraPieceBase + sl);
+            }
+        }
+        return v;
+    }
     if (g_eye_step == 1) {
         for (U32 i = 0; i < g_weapon_slot_count; ++i)
             if (g_weapon_slots[i] != 0xFFFF) v.push_back(g_weapon_slots[i]);
@@ -74,6 +141,15 @@ std::uint8_t slot_look(const Outfit& o, U16 slot)
 const OutfitItem* eye_item(size_t idx, OutfitItem& tmp)
 {
     Outfit& o = eye_outfit();
+    if (is_extra_piece(idx)) // (a piece with extra parts: the piece, no look of its own here)
+        for (const ExtraRow& r : g_extra_rows)
+            if (r.slot == idx - kExtraPieceBase) return &(tmp = {r.slot, r.key, r.uid, kLookDefault});
+    if (is_extra_row(idx) && idx - kExtraBase < g_extra_rows.size()) { // (a part group: its piece, with the group's look)
+        const ExtraRow& r = g_extra_rows[idx - kExtraBase];
+        auto f = o.part_looks.find(extra_key(r));
+        tmp = {r.slot, r.key, r.uid, f != o.part_looks.end() ? f->second : std::uint8_t(kLookDefault)};
+        return &tmp;
+    }
     if (idx == kUnderwearPiece) {
         tmp = {kUnderwearSlot, 0xFFFF, 0, o.underwear_look};
         return &tmp;
@@ -102,6 +178,9 @@ const OutfitItem* eye_item(size_t idx, OutfitItem& tmp)
 std::uint8_t& eye_look(size_t idx)
 {
     Outfit& o = eye_outfit();
+    if (is_extra_row(idx) && idx - kExtraBase < g_extra_rows.size()) return o.part_looks[extra_key(g_extra_rows[idx - kExtraBase])];
+    static std::uint8_t none = kLookDefault; // (a piece in parts mode: no look to change)
+    if (is_extra_piece(idx)) return none = kLookDefault;
     if (idx == kBackPiece) return o.back_look;
     if (idx == kUnderwearPiece) return o.underwear_look;
     for (OutfitItem& it : o.items)
@@ -186,9 +265,21 @@ void eye_refresh(U64 self)
     center_for_focus(self, focused_script(self), true);
 }
 
-void eye_enter(U64 self, U32 o)
+void eye_enter(U64 self, U32 o, bool extras)
 {
     g_eye = static_cast<int>(o), g_eye_step = 0, g_eye_pick = 0;
+    g_eye_extras = extras && !eye_no_outfit(), g_extra_piece = -1;
+    g_extra_rows = g_eye_extras ? extra_rows(g_outfits[o]) : std::vector<ExtraRow>{};
+    if (g_eye_extras) { // (open on the first page that has rows)
+        for (std::uint8_t st = 0; st < kEyeSteps; ++st) {
+            bool any = false;
+            for (const ExtraRow& r : g_extra_rows) any |= slot_step(r.slot) == st;
+            if (any) { g_eye_step = g_eye_pick = st; break; }
+        }
+        std::string s;
+        for (const ExtraRow& r : g_extra_rows) s += " " + extra_key(r);
+        LOG("visibility extras: \"%s\":%s", g_outfits[o].name.c_str(), s.empty() ? " (none)" : s.c_str());
+    }
     LOG("appearance view: %s", eye_no_outfit() ? "no outfit (#33)" : ("\"" + g_outfits[o].name + "\"").c_str());
     eye_refresh(self);
 }
@@ -197,7 +288,8 @@ void eye_leave(U64 self)
 {
     LOG("appearance view: back to the settings");
     U32 o = static_cast<U32>(g_eye);
-    g_eye = -1, g_eye_step = 0;
+    g_eye = -1, g_eye_step = 0, g_eye_extras = false, g_extra_piece = -1;
+    g_extra_rows.clear();
     g_center_desc.clear();
     cfg_enter(self, o); // (entered from there)
 }
@@ -208,13 +300,15 @@ void eye_scroll(U64 self, U32 i, int step)
 {
     std::vector<size_t> pieces = eye_pieces();
     U32 k = i < visible_slots() ? slot_outfit(i) : kOutfitSlots;
+    if (k < pieces.size() && is_extra_piece(pieces[k])) return; // (a piece in parts mode: a click opens it)
     if (k < pieces.size()) {
         Outfit& o = eye_outfit();
         std::uint8_t& look = eye_look(pieces[k]);
         look = kLookOrder[(look_pos(look) + kLookCount + step) % kLookCount];
         OutfitItem tmp{};
         const OutfitItem& it = *eye_item(pieces[k], tmp);
-        LOG("appearance: \"%s\" equipment-%u %s -> look %u", o.name.c_str(), it.slot, (it.key != 0xFFFF ? item_name(it.key) : std::string("(empty)")).c_str(), look);
+        LOG("appearance: \"%s\" equipment-%u %s%s -> look %u", o.name.c_str(), it.slot, (it.key != 0xFFFF ? item_name(it.key) : std::string("(empty)")).c_str(),
+            pieces[k] >= kExtraBase ? (" part " + g_extra_rows[pieces[k] - kExtraBase].group).c_str() : "", look);
         save_outfits(); // (publishes the looks)
         look_refresh(); // (the worn outfit's pieces change at once)
         apply_outfit_slots(self, i);
@@ -232,12 +326,19 @@ void eye_press(U64 self, U32 i)
 {
     std::vector<size_t> pieces = eye_pieces();
     U32 k = i < visible_slots() ? slot_outfit(i) : kOutfitSlots;
-    if (k == pieces.size()) {
-        g_eye_step = g_eye_pick = g_eye_pick != g_eye_step ? g_eye_pick : std::uint8_t((g_eye_step + 1) % kEyeSteps);
+    if (k < pieces.size() && is_extra_piece(pieces[k])) { // (parts mode: the piece's parts open)
+        g_extra_piece = int(pieces[k] - kExtraPieceBase);
+        LOG("visibility extras: equipment-%d's parts", g_extra_piece);
+        eye_refresh(self);
+    } else if (k == pieces.size()) {
+        const bool same = g_eye_pick == g_eye_step && g_extra_piece < 0;
+        g_eye_step = g_eye_pick = same ? std::uint8_t((g_eye_step + 1) % kEyeSteps) : g_eye_pick;
+        g_extra_piece = -1;
         LOG("appearance view: step %u", g_eye_step);
         eye_refresh(self);
     } else if (k == pieces.size() + 1) {
-        eye_leave(self);
+        if (g_extra_piece >= 0) g_extra_piece = -1, eye_refresh(self); // (a piece's parts: back to the page's pieces)
+        else eye_leave(self);
     }
 }
 

@@ -197,15 +197,22 @@ void center_for_focus(U64 self, U64 script, bool hide_otherwise)
                 nm = nm.empty() ? std::string(lang::t("piece.back_shield")) : lang::f("piece.back_shield_item", {{"item", nm}});
             g_center_name = nm.empty() ? std::string(lang::t("piece.empty")) : nm;
             g_center_desc = lang::t(kLookText[it.look < kLookCount ? it.look : 0]);
+            if (is_extra_row(pieces[k])) { // (Visibility Extras: the part group, its look, and whose it is)
+                g_center_name = part_label(g_extra_rows[pieces[k] - kExtraBase].group);
+                g_center_desc = lang::f("extras.row", {{"look", g_center_desc}, {"item", nm}});
+            } else if (is_extra_piece(pieces[k])) {
+                g_center_desc = lang::t("extras.piece");
+            }
             if (pieces[k] == kHelmetSlot) // (the helmet key overrides it: say so, #34)
                 if (const std::uint8_t pin = helmet_pin(g_character))
                     g_center_desc = lang::f(pin == 1 ? "look.helmetkey.hidden" : "look.helmetkey.shown", {{"look", g_center_desc}});
         } else if (k == pieces.size()) {
             g_center_name = lang::t(kStepName[g_eye_pick]);
             g_center_desc = lang::t(g_eye_pick == g_eye_step ? "page.this" : "page.open");
+            if (g_eye_extras && pieces.empty() && g_eye_pick == g_eye_step) g_center_desc = lang::t("extras.none_here");
         } else if (k == pieces.size() + 1) {
-            g_center_name = lang::t("center.back_settings");
-            g_center_desc = lang::t("desc.back_settings");
+            g_center_name = lang::t(g_extra_piece >= 0 ? "extras.back" : "center.back_settings");
+            g_center_desc = lang::t(g_extra_piece >= 0 ? "extras.back_desc" : "desc.back_settings");
         } else {
             if (hide_otherwise) center_hide(self);
             return;

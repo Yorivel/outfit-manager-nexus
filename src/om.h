@@ -170,6 +170,9 @@ struct Outfit {
     // no wheel, so in no outfit): its look in this outfit (a Look), applied to whatever is in that slot.
     std::uint8_t back_look = 0;
     std::uint8_t underwear_look = 0; // (the body's Underwear part: a look like a piece's, no item behind it)
+    // Visibility Extras: a look per part group of the outfit's pieces ("<slot>:<group>", the group: a part name without
+    // its number, e.g. "4:Upperbody_Acc"); groups the worn pieces don't have wait for a piece that has them.
+    std::map<std::string, std::uint8_t> part_looks;
     // Whether that slot held anything when the outfit was saved (it is empty while the shield slot holds a shield):
     // 0 unknown (saved before this was kept), 1 yes, 2 no. The eye view lists the back shield only when it can matter.
     std::uint8_t has_back = 0;

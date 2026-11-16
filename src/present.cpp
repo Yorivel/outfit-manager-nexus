@@ -208,6 +208,8 @@ void present_want_only(U64 inv, U32 slots) // (drops the wishes of every slot ou
 
 // (a piece seen presented again without our asking - the game built it anew: it sounds as worn until taken off again)
 void present_seen(U64 inv, U16 slot) { mark(inv, slot, false); }
+// The slot is off the presentation (taken off, or kept off as put on) and not presented since.
+bool present_is_off(U64 inv, U16 slot) { return slot < 32 && ((off_mask(inv) >> slot) & 1); }
 
 void present_install()
 {

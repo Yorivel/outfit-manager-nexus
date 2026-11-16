@@ -337,9 +337,10 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
     U32 k = i < visible ? slot_outfit(i) : kOutfitSlots;
     bool piece = k < pieces.size(), page = k == pieces.size(), back = k == pieces.size() + 1;
     const bool under = piece && pieces[k] == kUnderwearPiece; // (no item: a label, like the page slot)
+    const bool part = piece && is_extra_row(pieces[k]); // (Visibility Extras: a part group - its name, like the underwear)
     OutfitItem tmp{};
     const OutfitItem* it = piece ? eye_item(pieces[k], tmp) : nullptr;
-    std::string pic = it ? piece_icon(*it) : std::string();
+    std::string pic = it && !part ? piece_icon(*it) : std::string();
     show_slot_image(self, root, i, pic);
     if (i < visible) show_mode_dots(script, mode_count(i), mode_lit(i));
     U64 badge = find_by_class(root, "quickslot-occupancy-icon-chain"), low = find_by_class(root, "cpp-icon-disable-item");
@@ -355,15 +356,17 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
     // Back and the page slot: a label (the page slot names the page its dots chose - its silhouette was easy to misread
     // while scrolling through the three, #23)
     static const char* const kPageName[kEyeSteps] = {"page.armour", "page.weapons", "page.accessories"};
-    const bool labelled = back || page || under;
+    const bool labelled = back || page || under || part;
     U64 mark = find_parent_of_class(root, "charged-count");
     if (mark) {
         ok &= labelled ? set_class(mark, "self-center", true) && set_class(mark, "om-label-wrap", true) : clear_label(mark);
         ok &= set_class(mark, "om-eye-c", false) && set_class(mark, "om-eye2-c", false);
         ok &= set_class(mark, "!cpp-none", !labelled);
         if (U64 text = labelled ? find_by_class(mark, "charged-count") : 0) {
+            const std::string pl = part ? part_label(g_extra_rows[pieces[k] - kExtraBase].group) : std::string();
             const char* label = back    ? lang::t("setting.back") // (Back: the settings' word, translated)
                                 : under ? lang::t("piece.underwear")
+                                : part  ? pl.c_str()
                                         : lang::t(kPageName[g_eye_pick % kEyeSteps]);
             if (g_set_text) g_set_text(text, label, 0);
             ok &= set_class(text, "om-label", true) && set_class(text, "om-label-value", false);
@@ -686,7 +689,7 @@ U32 mode_count(U32 i)
 {
     if (g_eye >= 0) {
         size_t k = slot_outfit(i), n = eye_pieces().size();
-        return k < n ? kLookCount : k == n ? kEyeSteps : 0;
+        return k < n ? (g_eye_extras && g_extra_piece < 0 ? 0 : kLookCount) : k == n ? kEyeSteps : 0; // (parts mode's pieces: none)
     }
     if (g_cfg >= 0) return cfg_dots(i, nullptr);
     // (an outfit: its action, its settings; the "+" slot once outfits exist: Unequip Outfit, Save, Settings - #21; the page
@@ -985,7 +988,7 @@ bool show_center_badges(U64 te, const Outfit* o)
     if (te) g_cb_row = find_by_class(te, "om-cb-row", 12); // (looked up again each time: never a stale element)
     std::vector<const char*> kinds;
     if (o && !is_weapon_set(*o)) {
-        bool looks = o->underwear_look != kLookDefault;
+        bool looks = o->underwear_look != kLookDefault || !o->part_looks.empty();
         for (U16 s = 0; s < 32 && !looks; ++s) looks |= slot_look(*o, s) != kLookDefault;
         if (looks) kinds.push_back("om-cbi-eye");
         if (const char* c = climate_only(*o)) // (om-cold-c -> om-cbi-cold ...)

@@ -1,4 +1,4 @@
-Outfit Manager 0.7.2 by Strahlimeier
+Outfit Manager 0.8.0 by Strahlimeier
 Adds an Outfits tab to Crimson Desert's gear wheel: save what you wear, switch outfits with one click.
 
 INSTALL (DMM)
@@ -45,8 +45,10 @@ OUTFIT ARC PINS
   The Arc lists No Outfit, your pinned outfits, then the 3 you wore most recently. Its first entry, Edit Pins, pins
   or unpins the highlighted outfit; hold a pinned one to move it. Press No Outfit to switch the Arc to weapon sets.
 
-SLEEPWEAR
+ACTIVITIES (SLEEPWEAR, COMBAT)
   An outfit's Activity setting: set to Sleeping, it goes on when you get into bed; what you wore comes back on waking.
+  Set to Combat, it goes on when a fight starts; what you wore comes back when the fight ends. Combat wins over
+  Sleeping: a fight in bed keeps the combat outfit on, and your sleepwear comes back after it.
 
 HELMET KEY
   A key on the + page that hides or shows your helmet whatever the outfit says; on foot your character takes it off
@@ -67,6 +69,12 @@ NO OUTFIT VISIBILITY
 
 UNDERWEAR
   An outfit's visibility settings end their Armour page with Underwear: hide it or show it like any piece.
+
+VISIBILITY EXTRAS
+  When an outfit's pieces are made of more than one part, its Visibility setting gets a second dot, Extra Parts:
+  scroll to it and click. Each page lists the pieces with extra parts; click one to set how each of its parts shows
+  (pauldrons and trims, the legs of a chest piece, a cloak's shoulder drape, a scabbard, a quiver's arrows, ...).
+  Per outfit. Hiding a main layer (a torso, the legs) can leave a gap in the body under it.
 
 EFFECTS
   Changing outfits plays a glow over the character; the new outfit appears at its peak. Hidden weapons glow when you
