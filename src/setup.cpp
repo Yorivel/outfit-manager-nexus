@@ -18,6 +18,7 @@
 #include "pads.h"
 #include "arc.h"
 #include "ui_hook.h"
+#include "stash.h"
 
 namespace om {
 
@@ -177,6 +178,7 @@ bool install()
     anim_install(); // the helmet key's take-off / take-on animations (anim.cpp)
     charlook_install(); // the barber's reply (#35: where a change goes; charlook.cpp)
     present_install(); // hidden pieces off the game's presentation (present.cpp)
+    diag_item_acks_install(); // DIAG (item-acks, 2026-11-17; remove): the server's item replies (stash.cpp)
     install_ask_dialog();
     if (g_equip_request && have({kRvaCompanionEquip})) { // companions' pieces from storage / the wardrobe
         void* t = reinterpret_cast<void*>(g_base + kRvaCompanionEquip);

@@ -9,5 +9,6 @@ bool stash_pending(U64 uid);
 void stash_verify(U64 self);
 std::vector<StashDest> stash_destinations();
 void stash_pieces(U64 self, const Outfit* loaded);
+void diag_item_acks_install(); // DIAG (item-acks, 2026-11-17; remove)
 
 } // namespace om
