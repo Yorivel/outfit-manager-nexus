@@ -6,19 +6,29 @@
 #include "gear.h"
 #include "looks.h"
 #include "pads.h"
+#include "addrs.h"
+#include <MinHook.h>
 
 namespace om {
 
 // --- Save binding: watching the game's save files (read only) -----------------------------------
-// The game keeps each save in ...\save\<user id>\slot<N>\save.save (+ lobby.save). When the game writes a slot (seen
-// by watching the save folder, whatever API it uses) that save gets the active outfits of that moment. A save the
-// game loads brings back the outfits of the save with the same content (any slot, so copied saves keep theirs);
-// a save the mod never saw written starts with an empty wheel. The first save loaded takes the outfits made so far.
-// Loads: the game reads every save to list them (start-up, load menu), slots a few ms apart; a load reads one slot
-// alone. So a read counts as a load only if no other slot is read within kListGapMs of it.
+// The game keeps each save in ...\save\<user id>\slot<N>\save.save (+ lobby.save). When the game writes a slot
+// that save gets the active outfits of that moment. A save the game loads brings back the outfits of the save with the
+// same content (any slot, so copied saves keep theirs); a save the mod never saw written starts with an empty wheel.
+// The first save loaded takes the outfits made so far.
+// Loads and writes are the game's own save requests (kRvaSaveCommit, hooked: commit_hook): a request reads its saves,
+// checks them, writes, deletes - in that order, on the calling thread. One with nothing to write or delete is a load,
+// applied as soon as it returns; one that writes binds its saves when it returns (the new save is in place: the game
+// wrote slotN_new and renamed it to slotN). The save list (start-up, the Load menu) reads every save outside any
+// request, and the read before a write is inside a writing request: neither is a load (2026-11-17; before, a read
+// alone for 1.5 s was taken as a load and a write as done after 2 s of quiet).
+// Without the request (not found after a game update) the old way stays: a read counts as a load only if no other
+// slot is read within kListGapMs of it and it stays alone for kLoadRestMs; a write (seen by watching the save folder)
+// is bound once the file stays unchanged for kWriteRestMs.
 constexpr U64 kListGapMs = 500;
-constexpr U64 kLoadRestMs = 1500; // a read becomes a load after this long alone
-constexpr U64 kWriteRestMs = 2000; // a written save is hashed once it stays unchanged this long
+constexpr U64 kLoadRestMs = 1500;
+constexpr U64 kWriteRestMs = 2000;
+bool g_commit_hooked = false; // (set once at start-up, before the game's first save request)
 
 struct PendingLoad {
     int slot = -1;
@@ -70,7 +80,8 @@ void fill_key(SaveId& id, const std::wstring& path)
 }
 
 // "...\save\<digits>\slot<N>\<file>" -> N, else -1. `dir` gets the path up to and including the last separator.
-int save_slot(const wchar_t* path, std::wstring* file, std::wstring* dir)
+// `staged` (if given): also "slot<N>_new" (the folder a save is written in before it replaces slot<N>) -> N, set true.
+int save_slot(const wchar_t* path, std::wstring* file, std::wstring* dir, bool* staged = nullptr)
 {
     if (!path || !wcsstr(path, L"slot")) return -1;
     std::wstring p = path;
@@ -84,7 +95,13 @@ int save_slot(const wchar_t* path, std::wstring* file, std::wstring* dir)
     for (size_t i = u + 1; i < d; ++i)
         if (!std::iswdigit(p[i])) return -1;
     if (d + 5 >= f) return -1;
-    for (size_t i = d + 5; i < f; ++i)
+    size_t digits_end = f;
+    if (staged) {
+        *staged = f > d + 9 && p.compare(f - 4, 4, L"_new") == 0;
+        if (*staged) digits_end = f - 4;
+    }
+    if (digits_end <= d + 5) return -1;
+    for (size_t i = d + 5; i < digits_end; ++i)
         if (!std::iswdigit(p[i])) return -1;
     if (file) *file = p.substr(f + 1);
     if (dir) *dir = std::wstring(path, f + 1);
@@ -192,7 +209,39 @@ void on_save_read(U32 slot, const std::wstring& path)
     g_save_work = true;
 }
 
-// Watch thread: something in slot<N>\ changed (the game is writing that save, or deleting it).
+// The game began writing save slot N: it gets the outfits active now (g_store_mu held). False: already noted.
+bool begin_write(U32 slot, const wchar_t* what, DWORD action)
+{
+    if (std::any_of(g_pending_writes.begin(), g_pending_writes.end(), [&](const PendingWrite& p) { return p.slot == slot; }))
+        return false;
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    Store with = g_published;
+    record_worn_for_save(with); // (the applied outfit as the equipment says, not a swap's moment - gear.cpp)
+    g_pending_writes.push_back(
+        {slot, slot_save_path(slot), with, {}, GetTickCount64(), (U64(ft.dwHighDateTime) << 32) | ft.dwLowDateTime});
+    write_store_file(); // noted at once, in case the game closes before the write is bound
+    LOG("game is writing save slot %u (%ls, change %lu): %zu outfits go with it", slot, what, action,
+        outfit_total(g_published));
+    return true;
+}
+
+// A written save gets its outfits (g_store_mu held): its id from the file as it is now; gone = its outfits dropped.
+void bind_written(PendingWrite& w)
+{
+    SaveId q = quick_id(w.path);
+    if (!q.size) {
+        if (g_bound.erase(w.slot)) LOG("save slot %u is gone: its outfits are dropped", w.slot);
+        return;
+    }
+    q.hash = hash_file(w.path);
+    fill_key(q, w.path);
+    LOG("save slot %u written: %zu outfits bound (size %llu, hash %llX)", w.slot, outfit_total(w.store), q.size, q.hash);
+    g_bound[w.slot] = {q, std::move(w.store)};
+}
+
+// Watch thread: something in slot<N>\ changed (the game is writing that save, or deleting it). (Only without the
+// game's save requests: g_commit_hooked.)
 void on_slot_changed(U32 slot, const std::wstring& name, DWORD action)
 {
     std::lock_guard<std::mutex> lock(g_store_mu);
@@ -207,22 +256,9 @@ void on_slot_changed(U32 slot, const std::wstring& name, DWORD action)
             apply_load("before a save write");
         }
     }
-    U64 now = GetTickCount64();
-    auto it = std::find_if(g_pending_writes.begin(), g_pending_writes.end(),
-                           [&](const PendingWrite& p) { return p.slot == slot; });
-    if (it == g_pending_writes.end()) {
-        FILETIME ft;
-        GetSystemTimeAsFileTime(&ft);
-        Store with = g_published;
-        record_worn_for_save(with); // (the applied outfit as the equipment says, not a swap's moment - gear.cpp)
-        g_pending_writes.push_back(
-            {slot, slot_save_path(slot), with, {}, now, (U64(ft.dwHighDateTime) << 32) | ft.dwLowDateTime});
-        write_store_file(); // noted at once, in case the game closes before the write is bound
-        LOG("game is writing save slot %u (%ls, change %lu): %zu outfits go with it", slot, name.c_str(), action,
-            outfit_total(g_published));
-    } else {
-        it->since = now;
-    }
+    if (!begin_write(slot, name.c_str(), action))
+        for (PendingWrite& p : g_pending_writes)
+            if (p.slot == slot) p.since = GetTickCount64();
     g_save_work = true;
 }
 
@@ -273,6 +309,7 @@ DWORD WINAPI save_watch_thread(LPVOID)
     t_in_file_hook = true;
     bind_unfinished();
     key_bound_saves();
+    if (g_commit_hooked) return 0; // (writes are seen in the game's own save requests: no folder watch)
     HANDLE dir = CreateFileW(g_save_root.c_str(), FILE_LIST_DIRECTORY,
                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
                              FILE_FLAG_BACKUP_SEMANTICS, nullptr);
@@ -319,15 +356,7 @@ void poll_saves()
             ++it;
             continue;
         }
-        if (!q.size) {
-            if (g_bound.erase(it->slot)) LOG("save slot %u is gone: its outfits are dropped", it->slot);
-        } else {
-            q.hash = hash_file(it->path);
-            fill_key(q, it->path);
-            LOG("save slot %u written: %zu outfits bound (size %llu, hash %llX)", it->slot, outfit_total(it->store),
-                q.size, q.hash);
-            g_bound[it->slot] = {q, std::move(it->store)};
-        }
+        bind_written(*it);
         changed = true;
         it = g_pending_writes.erase(it);
     }
@@ -343,18 +372,109 @@ void settle_load_now()
     if (g_pending_load.slot >= 0 && GetTickCount64() - g_pending_load.at >= kListGapMs) apply_load("menu opened");
 }
 
-// A game open of a save file: reads of save.save are load candidates; the first one also starts the folder watch.
+// --- The game's save requests (kRvaSaveCommit) ------------------------------------------------------------------
+// One request on the calling thread: its reads (pa::GamePlaySaveDataFileHandler slot 4, "Commit Load"), a check, its
+// writes (slot 5, when +kOffSaveReqWrites) and deletes (slot 6, when +kOffSaveReqDeletes); false if one failed (the
+// game then puts the old save folder back). The save files it opens are seen by the file hooks below, on this thread.
+using CommitFn = bool(__fastcall*)(U64 self, U64 request);
+CommitFn g_commit_orig = nullptr;
+enum CommitKind { kNoCommit, kLoadCommit, kWriteCommit };
+thread_local int t_commit = kNoCommit;
+thread_local int t_commit_read = -1;     // (a load: the slot whose save.save it read)
+thread_local U32 t_commit_written[8];     // (a write: the slots whose save.save it wrote)
+thread_local int t_commit_written_n = 0;
+
+// The request is over (not on the game's file path any more: our own file reads are fine here).
+void commit_done(bool ok, U32 writes, U32 deletes, int read, const U32* written, int written_n)
+{
+    std::lock_guard<std::mutex> lock(g_store_mu);
+    if (!writes && !deletes) {
+        if (read < 0) return; // (nothing of ours: lobby.save alone, or another file)
+        if (!ok) {
+            LOG("the game's load of save slot %d failed: the outfits stay as they are", read);
+            return;
+        }
+        const std::wstring path = slot_save_path(U32(read));
+        g_pending_load = {read, path, quick_id(path), GetTickCount64()};
+        apply_load("the game's load");
+        return;
+    }
+    LOG("the game's save request is over (%s; %u to write, %u to delete)", ok ? "done" : "FAILED", writes, deletes);
+    bool changed = false;
+    for (int i = 0; i < written_n; ++i) {
+        auto it = std::find_if(g_pending_writes.begin(), g_pending_writes.end(),
+                               [&](const PendingWrite& p) { return p.slot == written[i]; });
+        if (it == g_pending_writes.end()) continue;
+        if (ok) bind_written(*it);
+        else LOG("save slot %u: the game's write failed (it puts the old save back): its outfits stay as they were", it->slot);
+        g_pending_writes.erase(it);
+        changed = true;
+    }
+    if (writes && !written_n) LOG("the game wrote a save without opening a save.save the mod knows: nothing bound");
+    if (deletes && ok) // (a deleted save: its folder is gone)
+        for (auto it = g_bound.begin(); it != g_bound.end();)
+            if (!quick_id(slot_save_path(it->first)).size) {
+                LOG("save slot %u was deleted: its outfits are dropped", it->first);
+                it = g_bound.erase(it);
+                changed = true;
+            } else {
+                ++it;
+            }
+    if (changed) write_store_file();
+}
+
+bool __fastcall commit_hook(U64 self, U64 request)
+{
+    U32 writes = 0, deletes = 0;
+    __try {
+        writes = *reinterpret_cast<const U32*>(request + kOffSaveReqWrites);
+        deletes = *reinterpret_cast<const U32*>(request + kOffSaveReqDeletes);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return g_commit_orig(self, request);
+    }
+    const int outer = t_commit; // (one request inside another: not seen, but kept apart if it happens)
+    t_commit = writes || deletes ? kWriteCommit : kLoadCommit;
+    t_commit_read = -1, t_commit_written_n = 0;
+    const bool ok = g_commit_orig(self, request);
+    const int read = t_commit_read, written_n = t_commit_written_n;
+    U32 written[8];
+    std::copy(t_commit_written, t_commit_written + written_n, written);
+    t_commit = outer, t_commit_read = -1, t_commit_written_n = 0;
+    commit_done(ok, writes, deletes, read, written, written_n);
+    return ok;
+}
+
+// A game open of a save file. With the game's save requests: a read inside a load request is the load (applied when it
+// returns), any other read is the save list or the read before a write; a write inside a writing request (into
+// slotN_new) begins that slot's write. Without them, the old way: reads of save.save are load candidates. The first
+// open also starts the watch thread (outfits of writes left unfinished, save keys; the folder watch without requests).
 void on_save_file(const wchar_t* path, DWORD access, bool ok, const char* api)
 {
     std::wstring file, dir;
-    int slot = save_slot(path, &file, &dir);
+    bool staged = false;
+    int slot = save_slot(path, &file, &dir, &staged);
     if (slot < 0 || !ok || file != L"save.save") return;
     if (!g_watching.exchange(true)) {
         g_save_root = dir.substr(0, dir.size() - 1);
         g_save_root.resize(g_save_root.find_last_of(L"\\/") + 1);
         if (HANDLE t = CreateThread(nullptr, 0, &save_watch_thread, nullptr, 0, nullptr)) CloseHandle(t);
     }
-    if (!(access & (GENERIC_READ | FILE_READ_DATA)) || (access & (GENERIC_WRITE | FILE_WRITE_DATA))) return;
+    const bool reads = (access & (GENERIC_READ | FILE_READ_DATA)) && !(access & (GENERIC_WRITE | FILE_WRITE_DATA));
+    if (g_commit_hooked) {
+        if (reads && !staged) {
+            LOG("%s read slot%d\\save.save (%s)", api, slot,
+                t_commit == kLoadCommit ? "the game's load" : t_commit == kWriteCommit ? "before a save write" : "the save list");
+            if (t_commit == kLoadCommit) t_commit_read = slot;
+        } else if (!reads && t_commit == kWriteCommit) {
+            std::lock_guard<std::mutex> lock(g_store_mu);
+            begin_write(U32(slot), path, 0);
+            if (t_commit_written_n < 8 &&
+                std::find(t_commit_written, t_commit_written + t_commit_written_n, U32(slot)) == t_commit_written + t_commit_written_n)
+                t_commit_written[t_commit_written_n++] = U32(slot);
+        }
+        return;
+    }
+    if (!reads || staged) return;
     LOG("%s read slot%d\\save.save", api, slot);
     on_save_read(U32(slot), dir + L"save.save");
 }
@@ -412,6 +532,13 @@ bool install_save_hooks()
             return false;
         }
     }
+    // the game's save requests (see commit_hook); not found or not hooked: loads and writes are told the old way
+    void* t = reinterpret_cast<void*>(g_base + kRvaSaveCommit);
+    g_commit_hooked = have({kRvaSaveCommit, kOffSaveReqWrites, kOffSaveReqDeletes}) &&
+                      MH_CreateHook(t, reinterpret_cast<void*>(&commit_hook), reinterpret_cast<void**>(&g_commit_orig)) == MH_OK &&
+                      MH_EnableHook(t) == MH_OK;
+    if (g_commit_hooked) LOG("saves: loads and writes from the game's save requests (+%llX)", kRvaSaveCommit);
+    else LOG("saves: the game's save requests weren't found; loads and writes are told by file timing");
     return true;
 }
 
