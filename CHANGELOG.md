@@ -2,7 +2,7 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
-## Unreleased
+## 0.8.0 (2026-11-16)
 
 - Fix: Camp Happens and Master Looter work alongside Outfit Manager again. Placed beds and campfires vanished (and went back to your inventory), Camp Happens' armour durability turned itself off, and older Master Looter versions failed their scan. The helmet animation's hook on the game's item lookup stayed in place the whole session, and those mods read that function to find the item table; it's now only there while a helmet animation plays. Thanks for the reports!
 - Fix: pre-order and expansion pieces (the Charter diving suits and others) stay right when their item numbers move. A mod that adds items (Camp Happens adds 9) or a newly installed package renumbers them; an outfit then showed other items in those slots and could put on the wrong one (a ship part as boots). Outfits now follow them by the item's own id, the way base-game items already survive game patches. Outfits saved with an older version follow them once you re-save them (or as soon as the piece is seen in your inventory).
@@ -21,6 +21,7 @@ Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods
 - Technical: combat follows the in-battle switch's hook (the played character's inventory, its battle check), the swap runs on the HUD side like the sleep swap (one Swap per activity, begin / end, a temporary outfit for loose pieces). Flight follows the branch evaluator: a chart layer entering / leaving one of basic_lower_glide's 32 states (game 2.05, glide_states.inc); the slot holding a Bag_Rocket part is shown while any layer glides. Rocket packs take the armour hologram path.
 - Technical: a slot's watched draw parts are rebuilt when its piece changes (the old piece's parts and draw reports dropped, its drawn state settled again); the tool slot (equipment-14) gets no draw / sheathe glow and no sheathe hold. The presentation change is no longer hooked at its entry: its game call sites (found by scanning) go through a stub that runs our pre-step and jumps on with the game's return address (redirect_calls); hidden entries are freed and dropped before the call, so nothing of ours runs after it. Shields (part MainWeapon_Shield_*, any slot) take the bow's hologram path (PartInfo.armour_like). A weapon in hand when an outfit change begins gets no visibility call until its new model has loaded (sheathed weapons and the display slots still hide at once).
 - Technical: the four helmet-animation hooks (branch try, start-action ack, item info, set visual equip) are created when an animation starts and removed (MH_RemoveHook, original bytes back) when it ends; the permanent-id lookup (pid_of / key_of_pid) covers the run-time rows of the item table too when their ids are set, unique and not a data-file row's (game 2.05: 1311 rows, all unique), rebuilt when the table grows; "came back" needs a matching permanent id, and a run-time key without one is followed by uid only.
+- Tested on: Crimson Desert 1.0.0.3663 (2.05, Steam build 26636972).
 
 ## 0.7.2 (2026-11-14)
 
