@@ -721,7 +721,6 @@ void lost_check(U64 self, const std::string& outfit, const std::vector<LeavingPi
 void prepare_outfits()
 {
     ensure_resist_ids();
-    settle_load_now();
     pull_active();
     if (U16 ch = current_character(); ch != kNoCharacter) switch_character(ch);
     repair_keys();
