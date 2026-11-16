@@ -231,6 +231,7 @@ struct Swap {
     bool let_go = false;    // ("No outfit" was on before (Unequip Outfit, #21): it comes back at the end)
     int let_go_of = -1;     // (its g_unmanaged value: the outfit let go)
     bool pending_end = false; // (it ended while an outfit change still ran: given back once that change is over)
+    int put_on = -1;        // (the outfit it put on: a refused sleep calls off only that one's effect)
 };
 Swap g_sleep_swap{"sleep", "asleep", "awake", "(before sleep)", kActivitySleep};
 Swap g_combat_swap{"combat", "in combat", "out of combat", "(before combat)", kActivityCombat};
@@ -302,7 +303,7 @@ void begin(U64 self, Swap& s)
     static std::mt19937 rng{std::random_device{}()};
     U32 pick = wear[std::uniform_int_distribution<size_t>(0, wear.size() - 1)(rng)];
     LOG("%s: putting on \"%s\"%s", s.what, g_outfits[pick].name.c_str(), wear.size() > 1 ? " (picked at random)" : "");
-    s.swapped = true;
+    s.swapped = true, s.put_on = int(pick);
     start_loading(self, pick);
     fx_carry();
 }
@@ -429,7 +430,9 @@ void sleep_tick(U64 self)
         else end(self, g_combat_swap);
     }
     if (g_fell.exchange(false) && !g_asleep) fell_asleep(self);
-    if (g_refused.exchange(false) && g_asleep && g_sleep_swap.swapped && fx_cancel_pending()) {
+    // (only the sleepwear's own effect: an outfit loaded meanwhile, or the idle of getting up, is left alone)
+    if (g_refused.exchange(false) && g_asleep && g_sleep_swap.swapped && fx_busy_target() == g_sleep_swap.put_on &&
+        fx_cancel_pending()) {
         g_sleep_swap.swapped = false, g_sleep_swap.pending_end = false, g_asleep = false; // (nothing was put on)
         LOG("sleep: refused before the sleepwear went on: nothing changes");
         update_look_mode();
