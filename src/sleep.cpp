@@ -84,13 +84,24 @@ void post()
     if (HWND w = g_game_hwnd.load()) PostMessageW(w, kWmSleep, 0, 0); // (now, not at the next HUD frame)
 }
 
+// In bed: noted (getting out is watched from here). The sleepwear waits for the sleep itself - a kSleepStart state -
+// which a sleep the game refuses never reaches: getting in alone swapped, and a refused sleep (the game's, not the
+// player's) put the sleepwear on and off again (user, 2026-11-17: states logged for both, ing_02 E2B2EE2F only in
+// the accepted one).
+std::atomic<bool> g_slept{false}; // (this bed's sleep has begun: the sleepwear went on)
 void into_bed(U64 ctx0, U64 ctx1, const char* why)
 {
     if (g_hook_asleep.exchange(true)) return;
     g_hook_ctx[0] = ctx0, g_hook_ctx[1] = ctx1, g_hook_since = GetTickCount64();
+    g_slept = false;
+    LOG("sleep: into bed (%s; ctx %llX %llX)", why, ctx0, ctx1);
+}
+void sleep_began(U32 state)
+{
+    if (g_slept.exchange(true)) return;
     g_fell = true;
     post();
-    LOG("sleep: into bed (%s; ctx %llX %llX)", why, ctx0, ctx1);
+    LOG("sleep: the sleep itself began (state %08X)", state);
 }
 
 U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64 a7, const U64* link, U64 a9, U64 a10)
@@ -117,7 +128,8 @@ U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64
             g_step_at = now;
         }
         if (std::find(std::begin(kSleepStart), std::end(kSleepStart), target) != std::end(kSleepStart)) {
-            into_bed(ctx, 0, "the sleep itself");
+            into_bed(ctx, 0, "the sleep itself"); // (no bed seen getting in: in bed now)
+            sleep_began(target);
             if (g_hook_ctx[0].load() != ctx && !g_hook_ctx[1].load()) g_hook_ctx[1] = ctx;
         } else if (g_hook_asleep.load() && (ctx == g_hook_ctx[0].load() || ctx == g_hook_ctx[1].load()) &&
                    now - g_hook_since.load() >= kOutAfterMs &&
@@ -212,6 +224,7 @@ struct Swap {
     U16 ch = kNoCharacter;
     bool let_go = false;    // ("No outfit" was on before (Unequip Outfit, #21): it comes back at the end)
     int let_go_of = -1;     // (its g_unmanaged value: the outfit let go)
+    bool pending_end = false; // (it ended while an outfit change still ran: given back once that change is over)
 };
 Swap g_sleep_swap{"sleep", "asleep", "awake", "(before sleep)", kActivitySleep};
 Swap g_combat_swap{"combat", "in combat", "out of combat", "(before combat)", kActivityCombat};
@@ -251,7 +264,7 @@ void fx_carry()
 // Begins an activity: its outfit (one at random) goes on, what was worn noted to come back.
 void begin(U64 self, Swap& s)
 {
-    s.swapped = false;
+    s.swapped = false, s.pending_end = false;
     prepare_outfits(); // (the character's own outfits)
     s.ch = g_character;
     std::vector<U32> wear;
@@ -286,8 +299,19 @@ void begin(U64 self, Swap& s)
 }
 
 // Ends an activity: what was worn before it goes back on (an outfit, or the pieces as a temporary outfit).
+// An outfit change still running: the outfit effect playing (also unseen, behind the bed's fade), the load's steps,
+// the model taking the new pieces. A swap's end waits for it: started meanwhile, the load was turned away ("an outfit
+// is still being put on") and the pieces never came back (a sleep the game refused, 2026-11-17).
+bool change_running() { return fx_transition_busy() || g_async.active || look_changing(); }
+
 void end(U64 self, Swap& s)
 {
+    if (s.swapped && change_running()) {
+        if (!s.pending_end) LOG("%s: %s; what was worn before waits for the outfit change still running", s.what, s.ended);
+        s.pending_end = true;
+        return;
+    }
+    s.pending_end = false;
     if (!s.swapped) {
         LOG("%s: %s", s.what, s.ended);
         return;
@@ -397,6 +421,8 @@ void sleep_tick(U64 self)
     }
     if (g_fell.exchange(false) && !g_asleep) fell_asleep(self);
     if (g_woke.exchange(false) && g_asleep) woke_up(self);
+    for (Swap* s : {&g_combat_swap, &g_sleep_swap}) // (an end held for a running change: now that it is over)
+        if (s->pending_end && !change_running()) end(self, *s);
     drop_temp();
     update_look_mode();
 }

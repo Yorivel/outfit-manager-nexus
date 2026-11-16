@@ -29,6 +29,7 @@
 #include "addrs.h"
 #include "gear.h"
 #include "looks.h"
+#include "parts.h"
 #include "log.h"
 #include <MinHook.h>
 #include <atomic>
@@ -126,7 +127,13 @@ void present_pre(U64 comp, int* /*err*/, void* puton, U64 /*flag*/)
     for (U32 i = 0; i < l->count; ++i) {
         unsigned char* at = e + i * 0xE0ull;
         const U16 slot = *reinterpret_cast<U16*>(at);
-        if (slot < 32 && ((want >> slot) & 1)) {
+        // (by the item going on, not only its slot: a slot kept off for one piece - the sleepwear's gloves - must not
+        // drop another going on there with a working part - the Tech Gloves: built without it, the arm crashed the
+        // wardrobe, 2026-11-17 - or one not checked yet; the game builds those, the look hides them on its layer)
+        U16 key = 0xFFFF;
+        rd(reinterpret_cast<U64>(at) + 0x18 + 8, key);
+        const bool plain = key != 0xFFFF && working_part_known(key) == 0;
+        if (slot < 32 && ((want >> slot) & 1) && plain) {
             reinterpret_cast<ItemFn>(g_base + kRvaItemFree)(at + 0x18);
             mark(comp, slot, true);
             LOG("presentation: equipment-%u kept off as it is put on (its look hides it)", slot);

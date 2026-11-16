@@ -328,7 +328,9 @@ namespace {
 // enabled (+kOffArmEnabled: set by the chest path on every use), unbound (+kOffArmUnbound: from its construction to its
 // first update) and in use (+kOffArmInUse: from the update's first pose to the end of its blend-out). Polled in play,
 // 2026-11-17, three uses in a row on one entry: first use unbound, then enabled + in use, then in use alone, then all
-// 0; later uses only enabled, about 3 s. Its "state" here: the three ORed, 0 at rest. -1: can't tell.
+// 0; later uses only enabled, about 3 s. Its "state" here: enabled alone - the game sets it on every use; unbound is
+// also set when the game rebuilds the piece (a fresh IK object, no use: counting it, hidden gloves flashed on after
+// every outfit change, 2026-11-17), and in use only lasts the first use's blend-out. 0 at rest. -1: can't tell.
 constexpr unsigned char kAtRest = 0;
 int part_in_use_raw(U64 part, U64* entry, unsigned char* state)
 {
@@ -341,8 +343,7 @@ int part_in_use_raw(U64 part, U64* entry, unsigned char* state)
         if (!t) return -1;
         *entry = rp(t + U64(g_live.entry) * 8);
         *state = kAtRest;
-        if (*entry)
-            for (const U32 o : g_live.o_flags) *state |= *reinterpret_cast<const unsigned char*>(*entry + o);
+        if (*entry) *state = *reinterpret_cast<const unsigned char*>(*entry + g_live.o_flags[0]); // (enabled)
         return *entry ? 1 : 0;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return -1;
@@ -355,10 +356,6 @@ int part_in_use_raw(U64 part, U64* entry, unsigned char* state)
 U32 working_parts_in_use(U64 inv, U64 model)
 {
     if (!inv || !model || !live_check_ready() || g_live.entry == ~0u) return 0; // (found here too: a known item never checks)
-    // per slot: the entry seen last, and whether its use is on (from the entry's first appearance - it starts at rest
-    // for a moment as the arm comes out - or from its state leaving rest, until it comes back to rest)
-    struct Use { U64 entry = 0; bool on = false, moved = false; };
-    static std::map<std::pair<U64, U16>, Use> uses;
     U32 mask = 0;
     const U64 rt = rp(inv + 0xA0), arr = rt ? rp(rt + 8) : 0;
     for (U32 i = 0, n = rt ? r32(rt + 0x10) : 0; arr && i < n && i < 64; ++i) {
@@ -369,13 +366,10 @@ U32 working_parts_in_use(U64 inv, U64 model)
         for (const ItemPart& p : item_parts(inv, model, slot)) {
             U64 entry = 0;
             unsigned char state = kAtRest;
-            if (part_in_use_raw(look_part(model, p.handle), &entry, &state) < 0) continue;
-            Use& u = uses[{inv, slot}];
-            if (!entry) { u = {}; continue; }
-            if (entry != u.entry) u = {entry, true, false}; // (it just appeared: the arm is coming out)
-            if (state != kAtRest) u.on = true, u.moved = true;
-            else if (u.moved) u.on = false, u.moved = false; // (back at rest after moving: put away)
-            if (u.on) { mask |= 1u << slot; break; }
+            if (part_in_use_raw(look_part(model, p.handle), &entry, &state) > 0 && state != kAtRest) { // (enabled: in use)
+                mask |= 1u << slot;
+                break;
+            }
         }
     }
     return mask;

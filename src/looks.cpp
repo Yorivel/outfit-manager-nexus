@@ -5,6 +5,7 @@
 #include <intrin.h>
 #include "ui.h"
 #include "addrs.h"
+#include "items.h"
 #include "gear.h"
 #include "store.h"
 #include "looks_view.h"
@@ -536,6 +537,20 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
         if (!underwear) {
             if (!e || !rd(e, uid) || !rd(e + 8, key)) { state += " empty"; continue; }
             if (key == 0xFFFF) { state += " empty"; continue; } // (a look belongs to the slot: whatever is there)
+            // (the game shows another item there than the one equipped - a visual item: the Visione it puts on for a
+            // memory over any helmet. That is the game's for the moment: not hidden, not kept off the presentation.
+            // Hidden as the helmet, it vanished, and its take-off afterwards took off nothing - Emophaze, 2026-11-17)
+            U16 shown_key = 0xFFFF;
+            if (kOffEntryShownKey) rd(e + kOffEntryShownKey, shown_key);
+            // (only the Visione, by its permanent id: other visual items - a transmog mod's - keep the slot's look)
+            if (shown_key != 0xFFFF && shown_key != key) {
+                if (pid_of(shown_key) == kPidVisionePropItem) {
+                    if (p.slot < 32) present_want(inv, p.slot, false);
+                    state += " left to the game (it shows the Visione, item " + std::to_string(shown_key) + ")";
+                    continue;
+                }
+                state += " (shows item " + std::to_string(shown_key) + ", a visual item: its look applies)";
+            }
         }
         int h = underwear ? named_handle(model, "Underwear") : look_handle(inv, p.slot);
         if (!h) { state += " no model part"; continue; }
