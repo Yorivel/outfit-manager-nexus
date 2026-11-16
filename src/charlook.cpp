@@ -223,7 +223,7 @@ U64 apply_body()
     return U64(std::int64_t(kRvaLookApply) + 5 + rel);
 }
 ApplyFn g_apply_orig = nullptr;
-std::atomic<U64> g_swap_until{0};
+std::atomic<bool> g_swap_armed{false}; // (a load since the last swap: its loading-screen build gets OM's look)
 std::atomic<U32> g_swap_gen{0xFFFFFFFF};
 
 // The look a loaded save wants for a character: its applied outfit's snapshot, else its No Outfit look ("" unknown).
@@ -247,16 +247,18 @@ std::string load_want(U16 character, bool* busy = nullptr)
 
 U32* __fastcall apply_hook(U64 comp, U32* result, GameLook* look, U64 zero)
 {
-    const U64 now = GetTickCount64();
-    if (const U32 gen = g_generation.load(); gen != g_swap_gen.load()) g_swap_gen = gen, g_swap_until = now + 90000;
-    if (t_own_apply || now > g_swap_until.load() || (g_ui_thread && GetCurrentThreadId() != g_ui_thread) || !look)
+    // (only the loading screen's build: from a load until the world is up - HUD frames only run in the world. It was a
+    // 90 s window: the barber's own apply a minute after a save + reload fell into it, OM put its stored look back and
+    // read that back as the barber's change - hairstyles and makeup never stuck, 2026-11-17, berzeker89 / MalteDEV583)
+    if (const U32 gen = g_generation.load(); gen != g_swap_gen.load()) g_swap_gen = gen, g_swap_armed = true;
+    if (t_own_apply || !g_swap_armed.load() || world_up() || (g_ui_thread && GetCurrentThreadId() != g_ui_thread) || !look)
         return g_apply_orig(comp, result, look, zero);
     U64 ctx[4] = {};
     const U64 actor = acquire_player(ctx);
     const U16 ch = actor && look_component(actor) == comp ? character_of(actor) : kNoCharacter;
     if (ctx[0]) release_player(ctx);
     if (ch == kNoCharacter) return g_apply_orig(comp, result, look, zero);
-    g_swap_until = 0; // (the played character's build after the load: once)
+    g_swap_armed = false; // (the played character's build after the load: once)
     const std::string want = load_want(ch);
     if (want.size() != kLookBytes || look->mesh.n != kMeshCount || look->values.n != kValueCount || !look->mesh.p ||
         !look->values.p)

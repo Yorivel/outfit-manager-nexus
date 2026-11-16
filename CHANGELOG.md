@@ -4,6 +4,8 @@ Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods
 
 ## Unreleased
 
+- Fix: hairstyle and makeup changes at the barber stick again. Outfit Manager put its saved look back on the character for a while after every load (meant for the loading screen), and a barber change made soon after a load fell into that window; it now only touches the look before the world appears. Thanks for the reports and the files, berzeker89 and MalteDEV583!
+- Fix: changing the Underwear's visibility no longer crashes the game (0.8.0). The new Visibility Extras code took the Underwear row for one of its part rows. Thanks for the reports and the video, Ma1Lo, gaylord13 and Cataclysimz!
 - Fix: on Visibility Extras' pages, the pieces you click to open their parts now show the click prompt, like the other clickable slots; the caption that said to click is gone (#48).
 - Fix: opening a chest or door with the Tech Gloves' All-Purpose Arm no longer crashes the game when an outfit hides (or hid, then showed) the gloves. Their arm is a working part the game builds with a component of its own, and the way Outfit Manager hides pieces left it out. Pieces like these now stay as the game built them and are hidden on Outfit Manager's own layer; the first time a hidden piece is ever seen, the game builds it once so Outfit Manager can tell. Thanks for the report and the files, myst0rion!
 - New: hidden Tech Gloves show while their All-Purpose Arm is in use, and hide again once it's put away (like a hidden lantern while it burns).
