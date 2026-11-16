@@ -32,7 +32,6 @@ std::atomic<U64> g_name_modal{0}; // the open prompt (0: none)
 U64 g_name_self = 0;       // the gear menu it was opened from
 std::string g_name_default;
 size_t g_name_index = 0;   // the outfit being named (checked against g_name_default)
-U64 g_name_opened = 0;     // tick
 U64 g_modal_ended = 0;      // tick: presses made while typing are dropped for a moment after the prompt closes
 unsigned char g_name_shown = 0; // modal +0xbd at open (the shown flag; the hide clears it)
 alignas(16) unsigned char g_modal_params[0x1800];
@@ -401,7 +400,6 @@ void open_rename_prompt(U64 self, size_t index)
     g_name_self = self;
     g_name_index = index;
     g_name_default = g_outfits[index].name;
-    g_name_opened = GetTickCount64();
     {
         std::lock_guard<std::mutex> lock(g_typed_mu);
         g_typed.clear();
@@ -416,7 +414,8 @@ void open_rename_prompt(U64 self, size_t index)
         g_name_shown, hiding, rp(modal + kOffModalInput));
 }
 
-// While the prompt is open: notices it closing some other way (the shown flag drops, or a 3-minute safety stop).
+// While the prompt is open: notices it closing some other way (its shown flag drops). (No time limit: a prompt left
+// open stays open, as the game's own do - 2026-11-17; it used to close itself after 3 minutes.)
 void watch_rename_prompt()
 {
     if (!g_name_modal) return;
@@ -424,14 +423,9 @@ void watch_rename_prompt()
     unsigned char shown = g_name_shown;
     rd(g_name_modal + kOffModalShown, shown);
     if (g_name_shown && !shown) finish_naming("", "prompt closed elsewhere");
-    else if (GetTickCount64() - g_name_opened > 180000) {
-        hide_modal_raw(g_name_modal);
-        finish_naming("", "timed out");
-    }
 }
 std::atomic<U64> g_ask_modal{0}; // the open question (0: none)
 U64 g_ask_self = 0;
-U64 g_ask_opened = 0;
 unsigned char g_ask_shown = 0;
 AskedLoad g_pending;
 enum AskAnswer { kAskAbort, kAskYes, kAskNo };
@@ -579,7 +573,6 @@ void ask_next(U64 self, AskedLoad p)
     }
     g_pending = std::move(p);
     g_ask_self = self;
-    g_ask_opened = GetTickCount64();
     rd(modal + kOffModalShown, g_ask_shown);
     g_ask_modal = modal;
     LOG("question %d %llX open (+0xbd %u): %s", g_pending.stage, modal, g_ask_shown, msg.c_str());
@@ -595,7 +588,6 @@ bool open_barber_question(U64 root, const char* title, const char* msg, const ch
     p.confirm = kConfirmBarberLook;
     g_pending = std::move(p);
     g_ask_self = root;
-    g_ask_opened = GetTickCount64();
     rd(modal + kOffModalShown, g_ask_shown);
     g_ask_modal = modal;
     LOG("barber question %llX open: %s", modal, msg);
@@ -615,17 +607,14 @@ void pump_ask(U64 self)
     }
 }
 
-// While the question is open: notices it closing some other way (Esc, a click outside) or a 3-minute safety stop.
+// While the question is open: notices it closing some other way (Esc, a click outside: its shown flag drops). (No time
+// limit, as for the naming prompt.)
 void watch_ask()
 {
     if (!g_ask_modal) return;
     unsigned char shown = g_ask_shown;
     rd(g_ask_modal + kOffModalShown, shown);
     if (g_ask_shown && !shown) finish_ask(kAskAbort, "closed without an answer; nothing loaded");
-    else if (GetTickCount64() - g_ask_opened > 180000) {
-        hide_modal_raw(g_ask_modal);
-        finish_ask(kAskAbort, "timed out; nothing loaded");
-    }
 }
 
 // Optional: without it saving works as before and names stay "Outfit N".

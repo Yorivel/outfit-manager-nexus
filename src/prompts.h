@@ -24,7 +24,6 @@ void watch_rename_prompt();
 extern std::atomic<U64> g_ask_modal;
 extern U64 g_ask_self;
 bool open_barber_question(U64 root, const char* title, const char* msg, const char* yes, const char* no);
-extern U64 g_ask_opened;
 extern unsigned char g_ask_shown;
 extern AskedLoad g_pending;
 U64 open_common_modal_raw(U64 self, const char* title, const char* message, const char* yes, const char* no);
