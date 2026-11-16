@@ -349,10 +349,10 @@ void working_parts_read(const std::string& ids, bool working)
 bool working_parts_dirty() { return g_kind_dirty.exchange(false); }
 
 namespace {
-// The part's in-use entry (0: none) and its working flag (polled in play, 2026-11-16: the entry appears as the arm comes
-// out; +82 goes 0 -> 1 as it starts working and back to 0 the moment it is put away - steady, where +48 flickered
-// 3 / 0 while the arm came out). -1: can't tell.
-constexpr U32 kInUseState = 0x82;
+// The part's in-use entry (0: none) and its working flags (logged in play, 2026-11-17, three uses in a row on one entry:
+// it appears with +81 set as the arm comes out; +80 is set while the arm works on EVERY use, about 3 s; +82 only on
+// the first; all three 0 between uses). Its "state" here: those three bytes, 0 at rest. -1: can't tell.
+constexpr U32 kInUseState = 0x80;
 constexpr unsigned char kAtRest = 0;
 int part_in_use_raw(U64 part, U64* entry, unsigned char* state)
 {
@@ -364,7 +364,8 @@ int part_in_use_raw(U64 part, U64* entry, unsigned char* state)
         const U64 t = obj ? rp(obj + g_live.o_table) : 0;
         if (!t) return -1;
         *entry = rp(t + U64(g_live.entry) * 8);
-        *state = *entry ? *reinterpret_cast<const unsigned char*>(*entry + kInUseState) : kAtRest;
+        const unsigned char* f = *entry ? reinterpret_cast<const unsigned char*>(*entry + kInUseState) : nullptr;
+        *state = f ? static_cast<unsigned char>(f[0] | f[1] | f[2]) : kAtRest; // (+80 | +81 | +82)
         return *entry ? 1 : 0;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return -1;
