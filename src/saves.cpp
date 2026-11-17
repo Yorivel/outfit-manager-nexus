@@ -8,6 +8,7 @@
 #include "pads.h"
 #include "addrs.h"
 #include <MinHook.h>
+#include <intrin.h>
 
 namespace om {
 
@@ -17,14 +18,18 @@ namespace om {
 // same content (any slot, so copied saves keep theirs); a save the mod never saw written starts with an empty wheel.
 // The first save loaded takes the outfits made so far.
 // Loads and writes are the game's own save requests (kRvaSaveCommit, hooked: commit_hook): a request reads its saves,
-// checks them, writes, deletes - in that order, on the calling thread. One with nothing to write or delete is a load,
-// applied as soon as it returns; one that writes binds its saves when it returns (the new save is in place: the game
-// wrote slotN_new and renamed it to slotN). The save list (start-up, the Load menu) reads every save outside any
-// request, and the read before a write is inside a writing request: neither is a load (2026-11-17; before, a read
-// alone for 1.5 s was taken as a load and a write as done after 2 s of quiet).
-// Without the request (not found after a game update) the outfits don't follow saves: the wheel keeps the ones it has
-// until the mod is updated. No guess by file timing (user, 2026-11-17: off, never wrong).
-bool g_commit_hooked = false; // (set once at start-up, before the game's first save request)
+// checks them, writes, deletes - in that order, on the calling thread. One that writes binds its saves when it returns
+// (the new save is in place: the game wrote slotN_new and renamed it to slotN). A load is the game's load of a save slot
+// into the game (kRvaSaveLoadSlot, hooked: load_slot_hook - "Start Load SaveSlot", the login into the world: Continue,
+// a load from the title or the pause menu): it reads the slot's saves through read-only requests and is applied when
+// it returns loaded. Read-only requests outside it are no load: the Load menu's slot list reads every listed save that
+// way, one request after another (2026-11-17: each was taken for a load, the outfits switched through every save and
+// a save the mod didn't know took the current ones); the start-up list reads outside any request, and the read before
+// a write is inside a writing request (2026-11-17; before, a read alone for 1.5 s was taken as a load and a write as
+// done after 2 s of quiet).
+// Without the requests or the load (not found after a game update) the outfits don't follow saves: the wheel keeps the
+// ones it has until the mod is updated. No guess by file timing (user, 2026-11-17: off, never wrong).
+bool g_commit_hooked = false; // (set once at start-up, before the game's first save request: both hooks in place)
 
 struct PendingLoad {
     int slot = -1;
@@ -271,29 +276,64 @@ DWORD WINAPI save_watch_thread(LPVOID)
 // One request on the calling thread: its reads (pa::GamePlaySaveDataFileHandler slot 4, "Commit Load"), a check, its
 // writes (slot 5, when +kOffSaveReqWrites) and deletes (slot 6, when +kOffSaveReqDeletes); false if one failed (the
 // game then puts the old save folder back). The save files it opens are seen by the file hooks below, on this thread.
+// Read-only requests come from the game's load of a slot (below: a load request) and from its slot refresh (the Load
+// menu's list, and the list a login refreshes first: per listed slot one for lobby.save, one for save.save; no load).
 using CommitFn = bool(__fastcall*)(U64 self, U64 request);
 CommitFn g_commit_orig = nullptr;
-enum CommitKind { kNoCommit, kLoadCommit, kWriteCommit };
+enum CommitKind { kNoCommit, kLoadCommit, kReadCommit, kWriteCommit };
 thread_local int t_commit = kNoCommit;
-thread_local int t_commit_read = -1;     // (a load: the slot whose save.save it read)
 thread_local U32 t_commit_written[8];     // (a write: the slots whose save.save it wrote)
 thread_local int t_commit_written_n = 0;
 
-// The request is over (not on the game's file path any more: our own file reads are fine here).
-void commit_done(bool ok, U32 writes, U32 deletes, int read, const U32* written, int written_n)
+// --- The game's load of a save slot (kRvaSaveLoadSlot) ----------------------------------------------------------
+// (into, result*, save handler, slot folder name, slot) -> result*: reads the slot's lobby.save and save.save (one
+// read-only request each) and reads them into the game; *result 0 = loaded, else the game's error. Its only caller is
+// "Start Load SaveSlot" (the user's / character's login into the world). The slot is the folder's number (slot<N>).
+using LoadSlotFn = U32*(__fastcall*)(U64 into, U32* result, U64 handler, U64 name, U32 slot);
+LoadSlotFn g_load_slot_orig = nullptr;
+thread_local int t_load_slot = -1;     // (inside the game's load of this slot)
+thread_local bool t_load_read = false; // (its save.save read, in one of its requests)
+
+// The game's load of a slot is over (its file reads are done: our own are fine here).
+void load_done(U32 slot, U32 result, bool read)
 {
     std::lock_guard<std::mutex> lock(g_store_mu);
-    if (!writes && !deletes) {
-        if (read < 0) return; // (nothing of ours: lobby.save alone, or another file)
-        if (!ok) {
-            LOG("the game's load of save slot %d failed: the outfits stay as they are", read);
-            return;
-        }
-        const std::wstring path = slot_save_path(U32(read));
-        g_pending_load = {read, path, quick_id(path), GetTickCount64()};
-        apply_load("the game's load");
+    if (result) {
+        LOG("the game's load of save slot %u failed (error %u): the outfits stay as they are", slot, result);
         return;
     }
+    if (!read) { // (not seen: a game update moved the save file elsewhere - off rather than a guess)
+        LOG("the game loaded save slot %u without a read of its save.save the mod saw: the outfits stay as they are", slot);
+        return;
+    }
+    const std::wstring path = slot_save_path(slot);
+    g_pending_load = {int(slot), path, quick_id(path), GetTickCount64()};
+    apply_load("the game's load");
+}
+
+U32* __fastcall load_slot_hook(U64 into, U32* result, U64 handler, U64 name, U32 slot)
+{
+    LOG("saves: the game loads save slot %u (from +%llX)", slot, reinterpret_cast<U64>(_ReturnAddress()) - g_base); // DIAG
+    const int outer = t_load_slot; // (one load inside another: not seen, but kept apart if it happens)
+    const bool outer_read = t_load_read;
+    t_load_slot = int(slot), t_load_read = false;
+    U32* r = g_load_slot_orig(into, result, handler, name, slot);
+    if (!g_commit_hooked) return r; // (save binding off)
+    const bool read = t_load_read;
+    t_load_slot = outer, t_load_read = outer_read;
+    U32 code = ~0u;
+    __try {
+        if (r) code = *r;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    load_done(slot, code, read);
+    return r;
+}
+
+// A writing request is over (not on the game's file path any more: our own file reads are fine here).
+void commit_done(bool ok, U32 writes, U32 deletes, const U32* written, int written_n)
+{
+    std::lock_guard<std::mutex> lock(g_store_mu);
     LOG("the game's save request is over (%s; %u to write, %u to delete)", ok ? "done" : "FAILED", writes, deletes);
     bool changed = false;
     for (int i = 0; i < written_n; ++i) {
@@ -328,21 +368,24 @@ bool __fastcall commit_hook(U64 self, U64 request)
         return g_commit_orig(self, request);
     }
     const int outer = t_commit; // (one request inside another: not seen, but kept apart if it happens)
-    t_commit = writes || deletes ? kWriteCommit : kLoadCommit;
-    t_commit_read = -1, t_commit_written_n = 0;
+    t_commit = writes || deletes ? kWriteCommit : t_load_slot >= 0 ? kLoadCommit : kReadCommit;
+    LOG("saves: request %llX from +%llX: %u to write, %u to delete, %s", request, // DIAG
+        reinterpret_cast<U64>(_ReturnAddress()) - g_base, writes, deletes, // DIAG
+        t_commit == kLoadCommit ? "inside the game's load" : t_commit == kReadCommit ? "read only, no load" : "writing"); // DIAG
+    t_commit_written_n = 0;
     const bool ok = g_commit_orig(self, request);
-    const int read = t_commit_read, written_n = t_commit_written_n;
+    const int written_n = t_commit_written_n;
     U32 written[8];
     std::copy(t_commit_written, t_commit_written + written_n, written);
-    t_commit = outer, t_commit_read = -1, t_commit_written_n = 0;
-    commit_done(ok, writes, deletes, read, written, written_n);
+    t_commit = outer, t_commit_written_n = 0;
+    if (writes || deletes) commit_done(ok, writes, deletes, written, written_n);
     return ok;
 }
 
-// A game open of a save file. With the game's save requests: a read inside a load request is the load (applied when it
-// returns), any other read is the save list or the read before a write; a write inside a writing request (into
-// slotN_new) begins that slot's write. Without them nothing (save binding off). The first open also starts the watch
-// thread (outfits of writes left unfinished, save keys).
+// A game open of a save file. With the game's save requests: a read inside a load request, of the slot being loaded,
+// is the load's (applied when the load returns); any other read is a list or the read before a write; a write inside a
+// writing request (into slotN_new) begins that slot's write. Without them nothing (save binding off). The first open
+// also starts the watch thread (outfits of writes left unfinished, save keys).
 void on_save_file(const wchar_t* path, DWORD access, bool ok, const char* api)
 {
     if (!g_commit_hooked) return; // (save binding off)
@@ -358,9 +401,13 @@ void on_save_file(const wchar_t* path, DWORD access, bool ok, const char* api)
     const bool reads = (access & (GENERIC_READ | FILE_READ_DATA)) && !(access & (GENERIC_WRITE | FILE_WRITE_DATA));
     {
         if (reads && !staged) {
+            const bool load = t_commit == kLoadCommit && slot == t_load_slot;
             LOG("%s read slot%d\\save.save (%s)", api, slot,
-                t_commit == kLoadCommit ? "the game's load" : t_commit == kWriteCommit ? "before a save write" : "the save list");
-            if (t_commit == kLoadCommit) t_commit_read = slot;
+                load ? "the game's load"
+                     : t_commit == kLoadCommit ? "inside the game's load of another slot: not it"
+                     : t_commit == kReadCommit ? "the game's slot list"
+                     : t_commit == kWriteCommit ? "before a save write" : "the save list");
+            if (load) t_load_read = true;
         } else if (!reads && t_commit == kWriteCommit) {
             std::lock_guard<std::mutex> lock(g_store_mu);
             begin_write(U32(slot), path, 0);
@@ -424,13 +471,18 @@ bool install_save_hooks()
             return false;
         }
     }
-    // the game's save requests (see commit_hook); not found or not hooked: save binding is off
+    // the game's load of a slot and its save requests (see load_slot_hook, commit_hook); either not found or not hooked:
+    // save binding is off (writes alone would bind the outfits of the save played before)
+    void* l = reinterpret_cast<void*>(g_base + kRvaSaveLoadSlot);
     void* t = reinterpret_cast<void*>(g_base + kRvaSaveCommit);
-    g_commit_hooked = have({kRvaSaveCommit, kOffSaveReqWrites, kOffSaveReqDeletes}) &&
+    g_commit_hooked = have({kRvaSaveLoadSlot, kRvaSaveCommit, kOffSaveReqWrites, kOffSaveReqDeletes}) &&
+                      MH_CreateHook(l, reinterpret_cast<void*>(&load_slot_hook), reinterpret_cast<void**>(&g_load_slot_orig)) == MH_OK &&
                       MH_CreateHook(t, reinterpret_cast<void*>(&commit_hook), reinterpret_cast<void**>(&g_commit_orig)) == MH_OK &&
-                      MH_EnableHook(t) == MH_OK;
-    if (g_commit_hooked) LOG("saves: loads and writes from the game's save requests (+%llX)", kRvaSaveCommit);
-    else LOG("saves: the game's save requests weren't found (a game update?): outfits don't follow saves until Outfit Manager is updated");
+                      MH_EnableHook(l) == MH_OK && MH_EnableHook(t) == MH_OK;
+    if (g_commit_hooked)
+        LOG("saves: loads from the game's load of a slot (+%llX), writes from its save requests (+%llX)", kRvaSaveLoadSlot,
+            kRvaSaveCommit);
+    else LOG("saves: the game's load of a slot or its save requests weren't found (a game update?): outfits don't follow saves until Outfit Manager is updated");
     return true;
 }
 

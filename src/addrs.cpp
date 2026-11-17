@@ -548,14 +548,17 @@ U64 kOffArmInUse = 0x82;             // IK: u8, 1 once the update has posed the 
 
 // Saves (saves.cpp; game 2.05). pa::GamePlaySaveDataFileHandler (its _Steam class shares these slots): slot 4 reads a
 // request's saves ("Commit Load"), 5 writes them (copies the slot folder to slotN_backup, writes slotN_new, renames
-// that to slotN, deletes the backup), 6 deletes them, 7 reads every save (the save list: start-up, the Load menu).
-// The commit runs one request through 4, a check, 5 and 6, each skipping an empty list - so a request with nothing to
-// write or delete is a load, and the save list is never a commit. The commit itself sits in the game's protected code:
-// the thunk to it is what the game calls (and what OM hooks).
+// that to slotN, deletes the backup), 6 deletes them, 7 reads every save (the start-up list).
+// The commit runs one request through 4, a check, 5 and 6, each skipping an empty list. The commit itself sits in the
+// game's protected code: the thunk to it is what the game calls (and what OM hooks). A request with nothing to write or
+// delete only reads: the game's load of a slot makes two (lobby.save, save.save), and so does its slot refresh for
+// every listed slot (the Load menu's list; also before a login) - so a load is told by the load function, not the request.
 U64 kRvaSaveHandlerVt = 0x5dbfcb0;   // pa::GamePlaySaveDataFileHandler (anchor for its slots)
 U64 kRvaSaveWrite = 0x25bc8c0;       // (witness only) its slot 5: writes the request's saves (tests +kOffSaveReqWrites)
 U64 kRvaSaveDelete = 0x25bd320;      // (witness only) its slot 6: deletes the request's saves (tests +kOffSaveReqDeletes)
 U64 kRvaSaveCommit = 0x25bac30;      // (thunk) (self, request*) -> bool: one save request - read, check, write, delete
+U64 kRvaSaveLoadSlot = 0x22951b0;    // (into, u32* result, handler, slot name, u32 slot) -> result: the game's load of a
+                                     // save slot into the game (its only caller is "Start Load SaveSlot"); *result 0 = loaded
 U64 kOffSaveReqWrites = 0x6b8;       // save request: u32 the number of saves to write (its list is at -8)
 U64 kOffSaveReqDeletes = 0x6c8;      // save request: u32 the number of saves to delete (its list is at -8)
 

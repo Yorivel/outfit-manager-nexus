@@ -237,7 +237,7 @@ extern U64 kRvaChestPartCheck, kRvaPartCast, kOffPartScene, kOffSceneInner, kOff
 extern U64 kRvaPartUseTable, kOffArmEntry, kRvaPoseIKVt, kRvaPoseIKParams, kRvaPoseIKUpdate, kRvaPoseIKBind, kOffArmEnabled,
     kOffArmUnbound, kOffArmInUse;
 // The game's save requests (saves.cpp)
-extern U64 kRvaSaveHandlerVt, kRvaSaveWrite, kRvaSaveDelete, kRvaSaveCommit, kOffSaveReqWrites, kOffSaveReqDeletes;
+extern U64 kRvaSaveHandlerVt, kRvaSaveWrite, kRvaSaveDelete, kRvaSaveCommit, kRvaSaveLoadSlot, kOffSaveReqWrites, kOffSaveReqDeletes;
 void resolve_addresses();
 
 } // namespace om
