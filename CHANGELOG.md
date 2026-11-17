@@ -2,7 +2,7 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
-## Unreleased
+## 0.8.1 (2026-11-17)
 
 - Fix: viewing a memory with a hidden helmet now shows the Visione the game puts on for it, and its take-off afterwards takes off something you can see. Outfit Manager hid the Visione along with your helmet, since it sits in the helmet slot; while the game shows the Visione there, the slot is now left to the game. Other visual items (a transmog mod's) keep the slot's visibility. Thanks for the report, Emophaze!
 - Fix: when the game refuses a sleep, nothing changes - not even the outfit effect. Outfit Manager now waits for the game's answer when you get into bed (it comes within about a tenth of a second): sleepwear goes on once the bed is accepted, and a refused bed (just slept, unsafe spot) is left alone. (And getting out of bed, waking up or a fight ending now wait for an outfit change still in progress before putting your outfit back.)
