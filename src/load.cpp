@@ -818,28 +818,7 @@ void prepare_outfits()
     repair_keys();
 }
 
-// #53: the selection's game functions. DIAG: the change function is hooked (the weapons tab's own picks are logged with
-// their caller, the piece's equip type flag and the group in hand), and the inventory's weapon state is logged when it
-// changes - one session tells what picking a weapon / a tool in the tab does, and what OM's selection does.
-QuickSlotChangeFn g_quickslot_change_orig = nullptr; // DIAG
-int* __fastcall quickslot_change_hook(U64 inv, int* err, U16 bag, U16 pos, short slot) // DIAG
-{
-    void* caller = _ReturnAddress(); // DIAG
-    U16 key = 0xFFFF; // DIAG
-    const U64 list = rp(inv + kOffInvEquipList); // DIAG (this inventory's own list)
-    const U64 item = list ? equipped_item(list, U16(slot)) : 0; // DIAG
-    if (item) rd(item + 8, key); // DIAG
-    int group = 0; // DIAG
-    bool in_group = false; // DIAG
-    const bool group_ok = g_weapon_group_slots && in_hand_group(inv, U16(slot), group, in_group); // DIAG
-    int* r = g_quickslot_change_orig(inv, err, bag, pos, slot); // DIAG
-    LOG("DIAG wsel: change(inv %llX, bag %X, pos %X, equipment-%d) from %s: key %u \"%s\" hand weapon %d, group in hand %d%s -> %s", // DIAG
-        inv, bag, pos, slot, where(reinterpret_cast<U64>(caller)).c_str(), key, key != 0xFFFF ? item_name(key).c_str() : "", // DIAG
-        key != 0xFFFF && g_equip_type_info ? hand_weapon(key) : -1, group, !group_ok ? " (unreadable)" : in_group ? " (its slot is in it)" : "", // DIAG
-        err ? error_text(*err).c_str() : "?"); // DIAG
-    return r; // DIAG
-}
-
+// #53: the selection's game functions (the weapons tab's own change function, called directly).
 void weapon_select_install()
 {
     if (!have({kRvaQuickSlotChange, kRvaEquipTypeInfo, kRvaWeaponGroupSlots, kOffItemEquipType, kOffEquipTypeHand,
@@ -850,38 +829,7 @@ void weapon_select_install()
     }
     g_equip_type_info = reinterpret_cast<RecordGetFn>(g_base + kRvaEquipTypeInfo);
     g_weapon_group_slots = reinterpret_cast<WeaponGroupSlotsFn>(g_base + kRvaWeaponGroupSlots);
-    g_quickslot_change = reinterpret_cast<QuickSlotChangeFn>(g_base + kRvaQuickSlotChange); // (through the DIAG hook)
-    void* t = reinterpret_cast<void*>(g_base + kRvaQuickSlotChange); // DIAG
-    if (MH_CreateHook(t, reinterpret_cast<void*>(&quickslot_change_hook), reinterpret_cast<void**>(&g_quickslot_change_orig)) != MH_OK || // DIAG
-        MH_EnableHook(t) != MH_OK) // DIAG
-        LOG("DIAG wsel: the change function could not be hooked"), g_quickslot_change_orig = nullptr; // DIAG
-    if (!g_quickslot_change_orig) g_quickslot_change = nullptr; // DIAG (a failed hook may leave the target half-patched)
-    if (!g_quickslot_change) feature_off("feature.weapon_select"); // DIAG
-}
-
-// DIAG: the played character's weapon state - the reserved change (+28 bag, +2A pos, +2C slot, +30 uid), the last change
-// done (+38 slot, +40 uid), the weapon groups (+AC last weapon group, +B0 in hand, +B4 the one before, +B8 its index).
-void diag_weapon_state() // DIAG
-{
-    static U64 last_inv = 0; // DIAG
-    static U64 last[10] = {}; // DIAG
-    U64 inv = player_inventory(); // DIAG
-    if (!inv) return; // DIAG
-    static const U32 offs[10] = {0x28, 0x2a, 0x2c, 0x30, 0x38, 0x40, 0xac, 0xb0, 0xb4, 0xb8}; // DIAG
-    static const U8 size[10] = {2, 2, 2, 8, 2, 8, 4, 4, 4, 4}; // DIAG
-    U64 now[10] = {}; // DIAG
-    for (int i = 0; i < 10; ++i) { // DIAG
-        U64 v = 0; // DIAG
-        if (!rd(inv + offs[i], v)) return; // DIAG
-        now[i] = size[i] == 8 ? v : v & ((1ull << (size[i] * 8)) - 1); // DIAG
-    } // DIAG
-    if (inv == last_inv && !std::memcmp(now, last, sizeof now)) return; // DIAG
-    LOG("DIAG wsel: weapon state%s: reserved bag %llX pos %llX slot %llX uid %llX | changed slot %llX uid %llX | group last %lld in hand %lld before %lld index %lld", // DIAG
-        inv == last_inv ? "" : " (character)", now[0], now[1], now[2], now[3], now[4], now[5], // DIAG
-        static_cast<long long>(static_cast<int>(now[6])), static_cast<long long>(static_cast<int>(now[7])), // DIAG
-        static_cast<long long>(static_cast<int>(now[8])), static_cast<long long>(static_cast<int>(now[9]))); // DIAG
-    last_inv = inv; // DIAG
-    std::memcpy(last, now, sizeof now); // DIAG
+    g_quickslot_change = reinterpret_cast<QuickSlotChangeFn>(g_base + kRvaQuickSlotChange);
 }
 
 } // namespace om

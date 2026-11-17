@@ -1350,7 +1350,6 @@ float __fastcall hud_frame_hook(U64 self)
         // closed; its questions need the wheel, so only that part runs here.
         if (g_async.active && !g_menu_open && !g_ask_next && !g_ask_modal) pump_async(self);
         look_pending(), anchor_recheck();
-        diag_weapon_state(); // DIAG
     }
     return g_hud_frame_orig(self);
 }

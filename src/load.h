@@ -20,8 +20,7 @@ extern QuickSlotChangeFn g_quickslot_change; // (#53: a weapon set's weapon sele
 extern RecordGetFn g_equip_type_info;
 extern WeaponGroupSlotsFn g_weapon_group_slots;
 void select_set_weapon(U64 self, const Outfit& o);
-void weapon_select_install(); // (#53; DIAG: the weapons tab's own calls are logged)
-void diag_weapon_state();     // DIAG
+void weapon_select_install(); // (#53)
 void prepare_outfits();
 
 } // namespace om
