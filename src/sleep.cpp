@@ -2,39 +2,34 @@
 // on (several: one at random); when they get out again - having slept or not - the outfit worn before comes back, or,
 // when none was, the pieces worn before.
 //
-// Getting into bed: the game reads the bed's scene from its packs every time a bed is used - gimmick_sleep_bed_left /
-// _right (the side Kliff climbs in from) - about a second after the interaction, while the screen is black
-// (MO2CDLoader's lookup log, 2026-11-09). The pack lookup (found as MO2CDLoader finds it: the call in the pack reader's
-// open slot, class ResourceLoadWorker_Package) is hooked and watches for those paths. (gimmick_camp_straw, watched
-// until 2026-11-17, is no bed: the camp's straw storage - its stage chart opens the warehouse window, its scene plays a
-// donation animation.)
-// Whose bed: the game takes the character over for the interaction - a branch into one of ai_basic_lower's one-step
-// states (kStep), taken by the played character's chart contexts just before; those contexts are remembered.
-// Getting out: the bed's scene runs a stage chart (its .pastage): SLEEP_IDLE -> SLEEP_START -> SLEEP_SELECT_UI (the
-// hours menu) -> SLEEP_nHOUR -> (the time skip's loading) -> SLEEP_COMPLETE (waking, standing up), or SLEEP_CANCEL ->
-// LEAVE (standing up), or SLEEP_NEGATIVE / _COOLTIME / _EXCLUSIVE (refused) - and every way ends with
-// Timeline.branch(Terminate) once its last timeline is over (ForceTerminate when the game breaks it off: a crime, a
-// fight...). That end, the stage chart processor's end (kRvaStageEnd), is getting out of bed: one exact event for every
-// way out. A bed's chart is told by its hours menu state (kHoursMenu, by name: a branch of one of the chart's states goes
-// to it - the processor's chart, not the state it is in, which on the chart's end has one branch, Terminate: the first
-// round of 2026-11-17 read that one and never saw a bed). The server's branch to a named state (kRvaStageBranchByName)
-// says which state a bed's chart goes to and when - the hours menu (the sleep accepted) or SLEEP_NEGATIVE* (refused):
-// logged only, for now (#49: the sleepwear might wait for the hours menu). Before (until 2026-11-17): the chart
-// state common_gimmick_action s943 804A069D (which some exits never took), or any state outside the scripted / hand-over
-// ones a second and a half into the bed - the played character's plain idle during the time skip's loading (+22.4 s of
-// a sleep) ended the sleep 2.6 s before he got up.
-// The branch evaluator (kRvaBranchEval) is hooked for the branches above (result 0 = taken). A sleep that begins
-// without a known bed scene (a sleeping spot with another scene: cd_seq_minigame_sleep has the same hours menu) is
-// still seen at the sleep itself: bed_sleep start / loop (sequencer_action_pc).
+// A bed is its stage chart (the scene's .pastage, gimmick_sleep_bed_left / _right; cd_seq_minigame_sleep alike):
+// SLEEP_IDLE -> SLEEP_START (SLEEP_PET_START with a pet) -> SLEEP_SELECT_UI (the hours menu) -> SLEEP_nHOUR -> (the
+// time skip's loading) -> SLEEP_COMPLETE (waking, standing up), or SLEEP_CANCEL -> LEAVE (standing up), or SLEEP_NEGATIVE /
+// _COOLTIME / _EXCLUSIVE (refused) - and every way ends with Timeline.branch(Terminate) once its last timeline is over
+// (ForceTerminate when the game breaks it off: a crime, a fight...). Two of the game's own events, nothing else:
+// - the server's branch to a named state (kRvaStageBranchByName): the first state past SLEEP_IDLE is the game's verdict,
+//   about 0.1 s after getting in (2026-11-17: accepted SLEEP_PET_START at +93 ms, refused SLEEP_NEGATIVE_COOLTIME at
+//   +78 ms) - accepted: in bed, the sleepwear goes on (before the outfit effect would show anything); refused: nothing
+//   changes (#49; user: the game's refusal must not swap; getting into bed still does). The hours menu: the sleep's
+//   looks step back (below).
+// - the stage chart processor's end (kRvaStageEnd): out of bed - after a sleep, a refused sleep, standing up from the
+//   hours menu, or the game breaking it off (at the moment he gets control back: his first own state 15 ms later).
+// A bed's chart is told by its hours menu state (kHoursMenu, by name: a branch of one of the chart's states goes to it -
+// read from the processor's chart, not from the state it is in, which on the chart's end has one branch, Terminate).
+// Without either hook (not found after a game update): no sleepwear - nothing guessed instead.
+// Before (until 2026-11-17): the bed scene's file read from the packs, tied to the played character by a step state
+// within 4 s; out of bed by a chart state some exits never took, or any state outside the scripted ones 1.5 s in (the
+// time skip's idle ended a sleep 2.6 s early); a refusal by his idle in bed 0.1 s in (a race with the outfit effect).
 //
 // The game only HIDES the helmet, cloak and weapons in bed, it doesn't unequip them (2026-11-09: no slot changed), so
-// what is worn is read when the bed is seen. The hooks only set flags and post kWmSleep to the game window: its thread
-// is the UI thread, and its messages keep coming while the HUD is hidden (the HUD frame, peek_frame, is the fallback).
-// The sleep's outfit changes play the outfit effect; its timeline (fx_tick, on HUD frames) is carried by a window timer
-// while the HUD is hidden for the bed's fade (fx_carry).
+// what is worn is read when the bed is accepted. The hooks only set flags and post kWmSleep to the game window: its
+// thread is the UI thread, and its messages keep coming while the HUD is hidden (the HUD frame, peek_frame, is the
+// fallback). The sleep's outfit changes play the outfit effect; its timeline (fx_tick, on HUD frames) is carried by a
+// window timer while the HUD is hidden for the bed's fade (fx_carry).
 //
 // In bed, the looks (looks.cpp, sleep_looks): a sleepwear outfit's own looks win over the game's in-bed hiding (a cloak
-// set to Shown stays shown; Default goes the game's way); any other outfit steps back as in flight.
+// set to Shown stays shown; Default goes the game's way); any other outfit steps back as in flight - from the hours
+// menu on (he lies down; getting in, the hidden pieces would show while he climbs in).
 #include "om.h"
 #include "addrs.h"
 #include "gear.h"
@@ -47,41 +42,24 @@
 #include "anim.h"
 #include "ui.h"
 #include <MinHook.h>
-#include <algorithm>
 #include <atomic>
-#include <cstdio>
-#include <cstring>
 #include <random>
 #include <string>
 #include <vector>
 
 namespace om {
 
-
-#include "sleep_states.inc"
-
 extern std::atomic<HWND> g_game_hwnd; // (input.cpp)
 constexpr UINT kWmSleep = WM_APP + 0x51;
 
 namespace {
 
-// bed_sleep start / loop states (sequencer_action_pc, game 2.04.08): the sleep itself (the fallback signal; ing_02 also
-// comes while the hours menu waits - +13.9 s at the menu, 2026-11-17)
-constexpr U32 kSleepStart[] = {0xD1F9862D, 0xE2B2EE2F, 0x70571FD6, 0xF50A6DC9}; // stt_02, ing_02, stt_03, ing_03
-// ai_basic_lower's one-step states: the game taking the character over for an interaction
-constexpr U32 kStep[] = {0x00D286FD, 0x2CAC00E9, 0x7D527861, 0x96A64775, 0xEF3C23FF};
-// the scenes a bed plays when used (sequencer/.../gimmickcalledseq/<name>.*)
-const char* const kBedScenes[] = {"gimmick_sleep_bed_"};
-constexpr U64 kStepWindowMs = 4000; // (the step before the scene: within this)
-constexpr U32 kPlayerIdle = 0x662EC8AD; // (basic_upper s109: the played character's plain idle, taken by his context only)
 // a bed's stage chart: the state of its hours menu (the beds' gimmick_sleep_bed_left / _right and cd_seq_minigame_sleep)
 constexpr const char* kHoursMenu = "SLEEP_SELECT_UI";
 
 using EvalFn = U32*(__fastcall*)(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64 a7, const U64* link, U64 a9,
                                  U64 a10);
 EvalFn g_eval_orig = nullptr;
-using FindFn = bool(__fastcall*)(U64 map, U64 key, U64* out_path, std::uint8_t* out_record);
-FindFn g_find_orig = nullptr;
 using StageEndFn = U64(__fastcall*)(U64 proc, U64 type, U64 a3, U64 a4); // (kRvaStageEnd: processor, u8 end type)
 StageEndFn g_stage_end_orig = nullptr;
 using StageBranchFn = U64(__fastcall*)(U64 proc, U64 a2, U64 a3, U64 a4, const U32* name, U64 a6, U64 a7, U64 a8, U64 a9,
@@ -89,46 +67,15 @@ using StageBranchFn = U64(__fastcall*)(U64 proc, U64 a2, U64 a3, U64 a4, const U
 StageBranchFn g_stage_branch_orig = nullptr;
 
 // set on the game's threads, taken on the UI thread
-std::atomic<bool> g_hook_asleep{false}; // (in bed: sleeping, or at the hours menu)
-std::atomic<U64> g_hook_ctx[2] = {0, 0};
-std::atomic<U64> g_hook_since{0};
+std::atomic<bool> g_in_bed{false};  // (an accepted bed, until its stage chart ends)
+std::atomic<U64> g_bed_since{0};    // (when it was accepted: for the log)
+std::atomic<bool> g_lying{false};   // (its hours menu came: he lies down - the looks step back)
 std::atomic<bool> g_fell{false}, g_woke{false};
-std::atomic<U64> g_step_ctx[2] = {0, 0}; // the contexts the game last took over (kStep), and when
-std::atomic<U64> g_step_at{0};
-// (a bed's stage chart ended and the played character hasn't taken a state of his own since: a bed scene read now is
-// that bed's, not a new one)
-std::atomic<bool> g_bed_ended{false};
-std::atomic<U64> g_out_at{0}; // DIAG (bed-free, 2026-11-17; remove): out of bed, when - for the first free state after it
 std::atomic<U32> g_bed_state{0}; // (the state a bed's chart last went to, its name; 0: none since the last bed's end)
-std::atomic<U64> g_player_ctx{0}; // (the context that last took kPlayerIdle: the played character's upper body)
-std::atomic<U64> g_player_ring[8] = {}; // (its last states: target << 32 | the tick's low 32 bits; logged at a bed)
-std::atomic<U32> g_player_ring_at{0};
 
 void post()
 {
     if (HWND w = g_game_hwnd.load()) PostMessageW(w, kWmSleep, 0, 0); // (now, not at the next HUD frame)
-}
-
-// In bed: the sleepwear goes on once the game accepts the bed. Its stage chart gives the verdict within about 0.1 s of
-// getting in (2026-11-17: accepted SLEEP_PET_START at +93 ms, refused SLEEP_NEGATIVE_COOLTIME at +78 ms), before the
-// outfit effect would show - so a refused bed plays nothing (#49; user: the game's refusal must not swap; getting into
-// bed still does). Without the stage branch hook (not found): the old way - the swap starts on getting in, and the
-// character back in his plain idle (kPlayerIdle) in bed before the sleep began calls the pending load off.
-std::atomic<bool> g_slept{false};   // (this bed's sleep has begun)
-std::atomic<bool> g_refused{false}; // (old way only: back to idle in bed before the sleep began)
-void into_bed(U64 ctx0, U64 ctx1, const char* why, bool accepted = false)
-{
-    if (!g_stage_end_orig) return; // (getting out couldn't be seen: no sleepwear - sleep_install)
-    if (g_hook_asleep.exchange(true)) return;
-    g_hook_ctx[0] = ctx0, g_hook_ctx[1] = ctx1, g_hook_since = GetTickCount64();
-    g_slept = false, g_refused = false;
-    const bool now = accepted || !g_stage_branch_orig;
-    if (now) g_fell = true, post();
-    LOG("sleep: into bed (%s; ctx %llX %llX)%s", why, ctx0, ctx1, now ? "" : "; the sleepwear waits for the bed's verdict");
-}
-void sleep_began(U32 state)
-{
-    if (!g_slept.exchange(true)) LOG("sleep: the sleep itself began (state %08X)", state), post(); // (the looks step back)
 }
 
 // A bed's stage chart: a branch of one of its states goes to the hours menu (kHoursMenu). (A state's own name is no
@@ -150,54 +97,49 @@ bool is_bed_chart(U64 proc)
     return false;
 }
 
-// A bed's stage chart ends (the client's copy and the internal server's alike - the first one counts): getting out of
-// bed - after a sleep, a refused sleep, standing up from the hours menu, or the game breaking it off.
-void bed_chart_ended(U64 proc, U64 type)
+// A bed's stage chart ends (the client's copy and the internal server's alike - the first one counts): out of bed.
+void bed_chart_ended(U64 type)
 {
-    const U64 now = GetTickCount64();
     const U32 last = g_bed_state.exchange(0);
-    // DIAG (bed-stage, 2026-11-17; remove): which processor ends the bed's chart (client / server copy), how
-    LOG("DIAG bed-stage: a bed's stage chart ends (type %u; processor %llX, vtable +%llX; %s)", unsigned(type & 0xFF), proc,
-        rp(proc) ? rp(proc) - g_base : 0, g_hook_asleep.load() ? "in bed" : "not in bed");
-    g_bed_ended = true; // (until he takes a state of his own: a bed scene read meanwhile is this bed's)
-    g_out_at = now;
-    if (g_hook_asleep.exchange(false)) {
-        g_woke = true;
-        post();
-        LOG("sleep: out of bed (the bed's stage chart ended, type %u, after %s; %llu ms in bed)", unsigned(type & 0xFF),
-            last ? class_name(last).c_str() : "no state seen", now - g_hook_since.load());
-    }
+    if (!g_in_bed.exchange(false)) return; // (a refused bed, or the second copy's end)
+    g_lying = false, g_woke = true;
+    post();
+    LOG("sleep: out of bed (the bed's stage chart ended, type %u, after %s; %llu ms in bed)", unsigned(type & 0xFF),
+        last ? class_name(last).c_str() : "no state seen", GetTickCount64() - g_bed_since.load());
 }
 
 U64 __fastcall stage_end_hook(U64 proc, U64 type, U64 a3, U64 a4)
 {
     __try {
-        if (is_bed_chart(proc)) bed_chart_ended(proc, type);
+        if (is_bed_chart(proc)) bed_chart_ended(type);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
     return g_stage_end_orig(proc, type, a3, a4);
 }
 
-// A stage chart went to the state `to` (the server's branch to a named state): a bed's SLEEP_* states. The first one
-// past SLEEP_IDLE is the game's verdict: SLEEP_NEGATIVE* refused (nothing changes), any other (SLEEP_START,
-// SLEEP_PET_START, ...) accepted - the sleepwear goes on.
+// A stage chart went to the state `to`: a bed's SLEEP_* states. The first one past SLEEP_IDLE is the game's verdict:
+// SLEEP_NEGATIVE* refused (nothing changes), any other (SLEEP_START, SLEEP_PET_START, ...) accepted - in bed, the
+// sleepwear goes on. The hours menu: he lies down.
 void bed_chart_branched(U64 proc, U32 to)
 {
     const std::string n = class_name(to);
     if (n.rfind("SLEEP_", 0) != 0 || !is_bed_chart(proc)) return;
     const U32 before = g_bed_state.exchange(to);
-    const bool in_bed = g_hook_asleep.load();
-    if (in_bed) LOG("sleep: the bed's stage: %s (%llu ms in bed)", n.c_str(), GetTickCount64() - g_hook_since.load());
-    else LOG("sleep: the bed's stage: %s (before getting into bed was seen)", n.c_str());
-    const bool verdict = n != "SLEEP_IDLE" && (!before || class_name(before) == "SLEEP_IDLE");
-    if (!verdict) return;
+    if (g_in_bed.load()) {
+        LOG("sleep: the bed's stage: %s (%llu ms in bed)", n.c_str(), GetTickCount64() - g_bed_since.load());
+        if (n == kHoursMenu && !g_lying.exchange(true)) post();
+        return;
+    }
+    LOG("sleep: the bed's stage: %s", n.c_str());
+    if (n == "SLEEP_IDLE" || (before && class_name(before) != "SLEEP_IDLE")) return; // (no verdict yet / not the first)
     if (n.rfind("SLEEP_NEGATIVE", 0) == 0) {
         LOG("sleep: the game refused the bed: nothing changes");
         return;
     }
-    if (in_bed) g_fell = true, post();
-    else into_bed(g_player_ctx.load(), 0, "the bed's stage accepted it: a new bed, its scene read before he was free of the last one",
-                  true); // (the verdict itself starts the bed)
+    g_bed_since = GetTickCount64(), g_lying = n == kHoursMenu;
+    g_in_bed = true, g_fell = true;
+    post();
+    LOG("sleep: into bed (the game accepted it: %s)", n.c_str());
 }
 
 U64 __fastcall stage_branch_hook(U64 proc, U64 a2, U64 a3, U64 a4, const U32* name, U64 a6, U64 a7, U64 a8, U64 a9, U64 a10)
@@ -216,6 +158,8 @@ U64 __fastcall stage_branch_hook(U64 proc, U64 a2, U64 a3, U64 a4, const U32* na
     return r;
 }
 
+// The action chart's branch evaluator: the helmet animations' own branch (anim.cpp) and flight (looks.cpp) - no longer
+// anything of the sleep's (its name stays: sleep_evaluator_hooked).
 U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64 a7, const U64* link, U64 a9, U64 a10)
 {
     if (anim_branch_passes(link)) { // (the helmet animations' own branch: it holds; anim.cpp)
@@ -224,112 +168,11 @@ U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64
     }
     U32* r = g_eval_orig(ctx, out, a3, a4, a5, a6, a7, link, a9, a10);
     __try {
-        if (!r || *r != 0 || !link || !link[0]) return r;
-        U32 target = *reinterpret_cast<const U32*>(link[0] + 0x14);
-        look_glide(ctx, target); // (looks.cpp: in the air under a glider or the rocket pack)
-        U64 now = GetTickCount64();
-        if (target == kPlayerIdle) g_player_ctx = ctx;
-        if (ctx == g_player_ctx.load()) {
-            U32 i = g_player_ring_at.load();
-            if (U32(g_player_ring[(i + 7) % 8].load() >> 32) != target)
-                g_player_ring[i % 8] = U64(target) << 32 | U32(now), g_player_ring_at = i + 1;
-            // (his own state again, outside the scripted ones: free - a bed scene read from now on is a new bed)
-            if (g_bed_ended.load() && !std::binary_search(std::begin(kQuiet), std::end(kQuiet), target) &&
-                g_bed_ended.exchange(false)) {
-                // DIAG (bed-free, 2026-11-17; remove this line): how the stage chart's end and his first free state line up
-                LOG("DIAG bed-free: his first state of his own after the bed: %08X (+%llu ms after the stage chart's end)",
-                    target, now - g_out_at.load());
-            }
-        }
-        if (!g_stage_branch_orig && target == kPlayerIdle && g_hook_asleep.load() && !g_slept.load() && // (old way)
-            (ctx == g_hook_ctx[0].load() || ctx == g_hook_ctx[1].load()) && !g_refused.exchange(true)) {
-            post(); // (the game refused the sleep: sleep_tick calls the sleepwear off)
-            LOG("sleep: back to idle in bed before the sleep began (the game refused it, or the player got up)");
-        }
-        if (std::find(std::begin(kStep), std::end(kStep), target) != std::end(kStep)) {
-            if (now - g_step_at.load() > 500) g_step_ctx[0] = ctx, g_step_ctx[1] = 0; // (a new take-over)
-            else if (g_step_ctx[0].load() != ctx) g_step_ctx[1] = ctx;              // (the other body half)
-            g_step_at = now;
-        }
-        if (std::find(std::begin(kSleepStart), std::end(kSleepStart), target) != std::end(kSleepStart)) {
-            into_bed(ctx, 0, "the sleep itself", true); // (no bed seen getting in: in bed now, and asleep)
-            sleep_began(target);
-            if (g_hook_ctx[0].load() != ctx && !g_hook_ctx[1].load()) g_hook_ctx[1] = ctx;
-        } else if (g_hook_asleep.load() && (ctx == g_hook_ctx[0].load() || ctx == g_hook_ctx[1].load()) &&
-                   !std::binary_search(std::begin(kQuiet), std::end(kQuiet), target)) {
-            // DIAG (bed-states, 2026-11-17; remove): the bed's states outside the scripted / hand-over ones, until the
-            // stage chart ends (getting out: stage_end_hook)
-            LOG("DIAG bed-states: state %08X (ctx %llX, %llu ms in bed)", target, ctx, now - g_hook_since.load());
-        }
+        if (r && *r == 0 && link && link[0])
+            look_glide(ctx, *reinterpret_cast<const U32*>(link[0] + 0x14)); // (in the air under a glider or the rocket pack)
     } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
     return r;
-}
-
-// The pack lookup: a bed's scene being read is the character getting into bed.
-bool __fastcall find_hook(U64 map, U64 key, U64* out_path, std::uint8_t* out_record)
-{
-    __try {
-        const char* path = key ? **reinterpret_cast<const char***>(key) : nullptr;
-        if (path) {
-            while (*path == '/') ++path;
-            if ((path[0] == 's' || path[0] == 'S') && _strnicmp(path, "sequencer/", 10) == 0 && !g_hook_asleep.load())
-                if (const char* g = std::strstr(path, "gimmickcalledseq/"))
-                    for (const char* scene : kBedScenes)
-                        if (_strnicmp(g + 17, scene, std::strlen(scene)) == 0) {
-                            U64 now = GetTickCount64();
-                            if (g_bed_ended.load()) { // (the bed just left - he hasn't taken a state of his own since)
-                                LOG("sleep: bed scene %s read again before the character was free of the last bed: "
-                                    "that bed's, ignored", g + 17);
-                                break;
-                            }
-                            U64 pc = g_player_ctx.load();
-                            bool stepped = now - g_step_at.load() < kStepWindowMs && g_step_ctx[0].load();
-                            if (!pc && !stepped) {
-                                LOG("sleep: a bed scene read before the played character was seen: ignored (%s)", g + 17);
-                                break;
-                            }
-                            { // (the played character's last states, for telling his bed from another's later)
-                                char buf[200];
-                                int len = 0;
-                                U32 at = g_player_ring_at.load();
-                                for (U32 k = 0; k < 8 && len < 180; ++k)
-                                    if (U64 e = g_player_ring[(at + k) % 8].load())
-                                        len += std::snprintf(buf + len, sizeof buf - size_t(len), " %08X(-%u)", U32(e >> 32),
-                                                             U32(now) - U32(e));
-                                buf[len] = 0;
-                                LOG("sleep: bed scene %s; the character's last states:%s%s", g + 17, buf,
-                                    stepped ? " (taken over just before)" : "");
-                            }
-                            U64 c1 = stepped ? g_step_ctx[0].load() : 0;
-                            if (c1 == pc) c1 = stepped ? g_step_ctx[1].load() : 0;
-                            into_bed(pc ? pc : g_step_ctx[0].load(), c1, g + 17);
-                            break;
-                        }
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-    }
-    return g_find_orig(map, key, out_path, out_record);
-}
-
-// The pack lookup, as MO2CDLoader finds it: the pack reader's open slot (vtable +0x10) calls it first, right after
-// `mov rcx, [rcx+20h]`.
-U64 find_pack_lookup()
-{
-    void** vt = game::find_vtable(".?AVResourceLoadWorker_Package@pa@@");
-    if (!vt) return 0;
-    U64 open = reinterpret_cast<U64>(vt[2]);
-    const game::Module m = game::main_module();
-    auto inside = [&](U64 a) { return a >= m.base && a + 16 < m.base + m.size; };
-    if (!inside(open)) return 0;
-    for (U64 p = open; p < open + 0x100; ++p) {
-        const std::uint8_t* b = reinterpret_cast<const std::uint8_t*>(p);
-        if (b[0] == 0x48 && b[1] == 0x8b && b[2] == 0x49 && b[3] == 0x20 && b[4] == 0xe8) {
-            U64 t = p + 9 + *reinterpret_cast<const std::int32_t*>(p + 5);
-            return inside(t) ? t : 0;
-        }
-    }
-    return 0;
 }
 
 // HUD side (the HUD frame, or the game window's thread when it is the UI thread: kWmSleep)
@@ -349,7 +192,6 @@ struct Swap {
     bool let_go = false;    // ("No outfit" was on before (Unequip Outfit, #21): it comes back at the end)
     int let_go_of = -1;     // (its g_unmanaged value: the outfit let go)
     bool pending_end = false; // (it ended while an outfit change still ran: given back once that change is over)
-    int put_on = -1;        // (the outfit it put on: a refused sleep calls off only that one's effect)
 };
 Swap g_sleep_swap{"sleep", "asleep", "awake", "(before sleep)", kActivitySleep};
 Swap g_combat_swap{"combat", "in combat", "out of combat", "(before combat)", kActivityCombat};
@@ -367,10 +209,10 @@ int worn_index()
 void update_look_mode()
 {
     int w = worn_index();
-    // In bed, the looks change only once the sleepwear is on or the sleep itself began: getting in, the hidden pieces
-    // would show while he climbs in - and a sleep the game refuses would blink them (2026-11-17).
+    // In bed, the looks change only once the sleepwear is on or he lies down (the hours menu): getting in, the hidden
+    // pieces would show while he climbs in (2026-11-17).
     const bool sleepwear = w >= 0 && g_outfits[size_t(w)].activity == kActivitySleep && !g_outfits[size_t(w)].temp;
-    int mode = !g_asleep ? 0 : sleepwear ? 2 : g_slept.load() ? 1 : 0;
+    int mode = !g_asleep ? 0 : sleepwear ? 2 : g_lying.load() ? 1 : 0;
     if (mode != g_sleep_look.load()) {
         g_sleep_look = mode;
         LOG("sleep: looks %s", mode == 0 ? "as usual" : mode == 1 ? "left to the game's in-bed hiding" : "the sleepwear outfit's own");
@@ -421,7 +263,7 @@ void begin(U64 self, Swap& s)
     static std::mt19937 rng{std::random_device{}()};
     U32 pick = wear[std::uniform_int_distribution<size_t>(0, wear.size() - 1)(rng)];
     LOG("%s: putting on \"%s\"%s", s.what, g_outfits[pick].name.c_str(), wear.size() > 1 ? " (picked at random)" : "");
-    s.swapped = true, s.put_on = int(pick);
+    s.swapped = true;
     start_loading(self, pick);
     fx_carry();
 }
@@ -511,57 +353,36 @@ bool sleep_evaluator_hooked() { return g_eval_orig != nullptr; }
 
 void sleep_install()
 {
+    // the helmet animations' branch and flight (anim.cpp, looks.cpp) - not the sleep's
     if (!have({kRvaBranchEval})) {
-        LOG("sleep: the action chart evaluator wasn't found; sleepwear is off");
-        return;
-    }
-    void* t = reinterpret_cast<void*>(g_base + kRvaBranchEval);
-    if (MH_CreateHook(t, reinterpret_cast<void*>(&eval_hook), reinterpret_cast<void**>(&g_eval_orig)) != MH_OK ||
-        MH_EnableHook(t) != MH_OK) {
-        LOG("sleep: the action chart evaluator couldn't be hooked; sleepwear is off");
+        LOG("sleep: the action chart evaluator wasn't found (helmet animations and flight need it)");
+    } else if (void* t = reinterpret_cast<void*>(g_base + kRvaBranchEval);
+               MH_CreateHook(t, reinterpret_cast<void*>(&eval_hook), reinterpret_cast<void**>(&g_eval_orig)) != MH_OK ||
+               MH_EnableHook(t) != MH_OK) {
+        LOG("sleep: the action chart evaluator couldn't be hooked (helmet animations and flight need it)");
+        MH_RemoveHook(t);
         g_eval_orig = nullptr;
-        return;
+    } else {
+        LOG("sleep: watching the action charts (evaluator +%llX)", kRvaBranchEval);
     }
-    LOG("sleep: watching for sleep (evaluator +%llX)", kRvaBranchEval);
-    // getting out of bed: the end of the bed's stage chart - without it no sleepwear (it would never come off)
-    if (!have({kRvaStageEnd, kRvaClassNames, kOffStageProcChart, kOffStageChartStates, kOffStageChartCount,
-               kOffStageBranches, kOffStageBranchCount, kOffStageBranchTarget})) {
-        LOG("sleep: the end of a stage chart wasn't found; sleepwear is off (getting out of bed couldn't be seen)");
+    // a bed: its stage chart's verdict (in bed) and end (out of bed) - without both no sleepwear (nothing guessed)
+    if (!have({kRvaStageEnd, kRvaStageBranchByName, kRvaClassNames, kOffStageProcChart, kOffStageChartStates,
+               kOffStageChartCount, kOffStageBranches, kOffStageBranchCount, kOffStageBranchTarget, kOffStageProcState})) {
+        LOG("sleep: a bed's stage chart wasn't found; sleepwear is off");
         return;
     }
     void* et = reinterpret_cast<void*>(g_base + kRvaStageEnd);
+    void* bt = reinterpret_cast<void*>(g_base + kRvaStageBranchByName);
     if (MH_CreateHook(et, reinterpret_cast<void*>(&stage_end_hook), reinterpret_cast<void**>(&g_stage_end_orig)) != MH_OK ||
-        MH_EnableHook(et) != MH_OK) {
-        LOG("sleep: the end of a stage chart couldn't be hooked; sleepwear is off (getting out of bed couldn't be seen)");
-        MH_RemoveHook(et);
-        g_stage_end_orig = nullptr;
+        MH_CreateHook(bt, reinterpret_cast<void*>(&stage_branch_hook), reinterpret_cast<void**>(&g_stage_branch_orig)) !=
+            MH_OK ||
+        MH_EnableHook(et) != MH_OK || MH_EnableHook(bt) != MH_OK) {
+        LOG("sleep: a bed's stage chart couldn't be hooked; sleepwear is off");
+        MH_RemoveHook(et), MH_RemoveHook(bt);
+        g_stage_end_orig = nullptr, g_stage_branch_orig = nullptr;
         return;
     }
-    LOG("sleep: watching for the end of a bed (stage chart end +%llX)", kRvaStageEnd);
-    // which state a bed's chart goes to (log only: without it nothing else changes)
-    if (!have({kRvaStageBranchByName, kOffStageProcState})) {
-        LOG("sleep: a stage chart's branch wasn't found; the bed's stages aren't logged");
-    } else if (void* bt = reinterpret_cast<void*>(g_base + kRvaStageBranchByName);
-               MH_CreateHook(bt, reinterpret_cast<void*>(&stage_branch_hook), reinterpret_cast<void**>(&g_stage_branch_orig)) !=
-                   MH_OK ||
-               MH_EnableHook(bt) != MH_OK) {
-        LOG("sleep: a stage chart's branch couldn't be hooked; the bed's stages aren't logged");
-        MH_RemoveHook(bt);
-        g_stage_branch_orig = nullptr;
-    } else {
-        LOG("sleep: watching a bed's stages (stage chart branch +%llX)", kRvaStageBranchByName);
-    }
-    // getting into bed: the pack lookup (MO2CDLoader may hook it too: MinHook chains)
-    U64 f = find_pack_lookup();
-    void* ft = reinterpret_cast<void*>(f);
-    if (!f || MH_CreateHook(ft, reinterpret_cast<void*>(&find_hook), reinterpret_cast<void**>(&g_find_orig)) != MH_OK ||
-        MH_EnableHook(ft) != MH_OK) {
-        LOG("sleep: the pack lookup %s; sleepwear goes on at the sleep itself, not when getting into bed",
-            f ? "couldn't be hooked" : "wasn't found");
-        g_find_orig = nullptr;
-        return;
-    }
-    LOG("sleep: watching beds (pack lookup +%llX)", f - g_base);
+    LOG("sleep: watching beds (stage chart branch +%llX, end +%llX)", kRvaStageBranchByName, kRvaStageEnd);
 }
 
 // The HUD frame (peek_frame): a sleep that began or ended since the last frame.
@@ -576,13 +397,6 @@ void sleep_tick(U64 self)
         else end(self, g_combat_swap);
     }
     if (g_fell.exchange(false) && !g_asleep) fell_asleep(self);
-    // (only the sleepwear's own effect: an outfit loaded meanwhile, or the idle of getting up, is left alone)
-    if (g_refused.exchange(false) && g_asleep && g_sleep_swap.swapped && fx_busy_target() == g_sleep_swap.put_on &&
-        fx_cancel_pending()) {
-        g_sleep_swap.swapped = false, g_sleep_swap.pending_end = false, g_asleep = false; // (nothing was put on)
-        LOG("sleep: refused before the sleepwear went on: nothing changes");
-        update_look_mode();
-    }
     if (g_woke.exchange(false) && g_asleep) woke_up(self);
     for (Swap* s : {&g_combat_swap, &g_sleep_swap}) // (an end held for a running change: now that it is over)
         if (s->pending_end && !change_running()) end(self, *s);

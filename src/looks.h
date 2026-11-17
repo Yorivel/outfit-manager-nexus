@@ -38,7 +38,6 @@ void fx_weapon_glow(const std::vector<U32>& names, bool sheathe);
 void fx_scabbard_holo(const std::vector<U32>& handles, bool sheathe);
 bool fx_scab_applied_after(U64 t);
 bool fx_transition_busy(); // (an outfit transition runs)
-bool fx_cancel_pending(); // (the glow still rising: the load it waits for is called off)
 bool transition_on();      // (the Effects setting isn't Off, and they work)
  // (the scabbard hologram went out after tick t)
 extern U64 g_case_wait_since; // (GetTickCount64: until then, weapons about to be hidden stay - the transition's glow)
