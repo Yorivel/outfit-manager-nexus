@@ -103,6 +103,10 @@ using BagInfoFn = RecordGetFn; // (key)
 // equip takes an item copy {200-byte item, u16 +0xc8, u16 bag position +0xca} (its bag comes from the item type).
 using EquipRequestFn = int*(__fastcall*)(U64, int*, const void*, short);
 using UnequipRequestFn = int*(__fastcall*)(U64, int*, short);
+// #53: the weapons tab's change to a slot's piece (inventory, err, bag, pos, slot; bag 0xFFFF: the worn piece), and the
+// slots of a weapon group (inventory, group*, {u16* p, u32 n, u32 cap, u16 inline[]}*).
+using QuickSlotChangeFn = int*(__fastcall*)(U64, int*, U16, U16, short);
+using WeaponGroupSlotsFn = void(__fastcall*)(U64, const int*, void*);
 using ToastFn = void(__fastcall*)(U64, const char*, U32);
 using FindViewFn = U64(__fastcall*)(U64, const char*);
 using OpenTextModalFn = U64(__fastcall*)(U64, U64, unsigned char*, int);

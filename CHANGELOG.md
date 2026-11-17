@@ -2,6 +2,11 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
+## Unreleased
+
+- New: loading a weapon set also picks the weapon its icon shows, as picking it in the game's weapons tab does - a set with your woodcutter's axe or pickaxe as its icon puts that tool in your hands, no trip to the weapons tab (#53). The icon's weapon is the one the set's Icon setting chose, else its main-hand weapon, else its first weapon; loading a set you already wear picks it too. When that weapon isn't worn after the load, or isn't one the game lets you pick (or the game refuses), a message says so. Thanks for the idea, FF7Seph!
+- Technical: the weapons tab's click on a slot showing its worn piece calls the inventory's change function (bag 0xFFFF, the equip slot); for a hand weapon (its equip type's flag) outside the weapon group in hand it sends TrocTrReserveToChangeEquipFromQuickSlotReq and the character changes weapons (ChangeEquipByQuickSlot), which OM now does the same way once a set's load is done. A piece in the group in hand is left alone (there the game would run the item's own actions instead). 3 new recipes (the change function, the equip type getter, a weapon group's slots) and 3 offsets (an item's equip type +4A, the type's hand-weapon flag +F, the group in hand +B0); any of them not found or unsure: no weapon is picked. Backtested on every older build: no wrong address or offset (before 2.05 the equip type getter took its key by value and isn't found, and the offsets aren't witnessed: off there).
+
 ## 0.8.1 (2026-11-17)
 
 - Fix: viewing a memory with a hidden helmet now shows the Visione the game puts on for it, and its take-off afterwards takes off something you can see. Outfit Manager hid the Visione along with your helmet, since it sits in the helmet slot; while the game shows the Visione there, the slot is now left to the game. Other visual items (a transmog mod's) keep the slot's visibility. Thanks for the report, Emophaze!

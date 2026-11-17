@@ -17,6 +17,7 @@ extern const char* g_badge_class[kOutfitSlots];
 extern std::string g_plus_icon;
 extern std::string g_worn_chest; // (the worn chest's icon, whatever is worn: the "+" slot's picture)
 std::uint8_t slot_mode_of(U32 i);
+const OutfitItem* weapon_set_icon_piece(const Outfit& o); // (#27 / #53: the piece its icon shows)
 std::string weapon_set_picture(const Outfit& o); // (#27: the main weapon)
 extern int g_worn_set;                            // (#27: the weapon set worn when the slots were last drawn) // (what slot i's lit dot does: the "+" slot's three are Unequip / Save / Settings)
 extern bool g_amber;

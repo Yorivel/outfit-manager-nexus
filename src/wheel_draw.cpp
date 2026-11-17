@@ -657,20 +657,29 @@ void apply_outfit_slots(U64 self, U32 only)
     g_slots_logged = true;
 }
 
-// A weapon set's picture (#27): its main weapon (equipment-0, else its first weapon) - saved with it, else from the item.
-std::string weapon_set_picture(const Outfit& o)
+// The piece a weapon set's icon shows (#27; #53 selects it after a load): its Icon setting's weapon, else its main-hand
+// weapon (equipment-0), else its first weapon. nullptr: it holds no weapon.
+const OutfitItem* weapon_set_icon_piece(const Outfit& o)
 {
     if (o.icon_slot) // (its Icon setting: the weapon chosen)
         for (const OutfitItem& it : o.items)
-            if (it.slot + 1 == o.icon_slot && it.key != 0xFFFF) return piece_icon(it);
-    if (!o.weapon_icon.empty()) return o.weapon_icon;
+            if (it.slot + 1 == o.icon_slot && it.key != 0xFFFF) return &it;
     const OutfitItem* first = nullptr;
     for (const OutfitItem& it : o.items)
         if (is_weapon_slot(it.slot) && it.key != 0xFFFF) {
-            if (it.slot == kHandR) return piece_icon(it);
+            if (it.slot == kHandR) return &it;
             if (!first) first = &it;
         }
-    return first ? piece_icon(*first) : o.chest_icon;
+    return first;
+}
+
+// A weapon set's picture (#27): its icon piece's - the main weapon's saved with it, else from the item.
+std::string weapon_set_picture(const Outfit& o)
+{
+    const OutfitItem* p = weapon_set_icon_piece(o);
+    if (p && o.icon_slot && p->slot + 1 == o.icon_slot) return piece_icon(*p); // (the Icon setting's: from the item)
+    if (!o.weapon_icon.empty()) return o.weapon_icon;
+    return p ? piece_icon(*p) : o.chest_icon;
 }
 int g_worn_set = -1; // (the weapon set worn when the slots were last drawn)
 

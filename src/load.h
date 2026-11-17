@@ -16,6 +16,12 @@ std::string piece_label(const Outfit& o, U16 slot);
 void finish_load(U64 self, AskedLoad& p);
 void start_loading(U64 self, U32 index);
 void pump_async(U64 self);
+extern QuickSlotChangeFn g_quickslot_change; // (#53: a weapon set's weapon selected after its load; null: off)
+extern RecordGetFn g_equip_type_info;
+extern WeaponGroupSlotsFn g_weapon_group_slots;
+void select_set_weapon(U64 self, const Outfit& o);
+void weapon_select_install(); // (#53; DIAG: the weapons tab's own calls are logged)
+void diag_weapon_state();     // DIAG
 void prepare_outfits();
 
 } // namespace om

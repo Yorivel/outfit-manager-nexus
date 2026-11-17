@@ -242,6 +242,9 @@ extern U64 kRvaSaveHandlerVt, kRvaSaveWrite, kRvaSaveDelete, kRvaSaveCommit, kRv
 extern U64 kRvaStageProcVt, kRvaStageEnd, kRvaStageBranchApply, kRvaStageBranchByName, kOffStageProcChart,
     kOffStageChartStates, kOffStageChartCount, kOffStageProcState, kOffStageBranches, kOffStageBranchCount,
     kOffStageBranchTarget;
+// A weapon set's weapon selected as the weapons tab does (load.cpp, #53)
+extern U64 kRvaQuickSlotChange, kRvaEquipTypeInfo, kRvaWeaponGroupSlots, kOffItemEquipType, kOffEquipTypeHand,
+    kOffInvWeaponGroup;
 void resolve_addresses();
 
 } // namespace om
