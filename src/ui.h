@@ -4,6 +4,7 @@
 
 namespace om {
 
+std::string class_name(U32 id); // (a name the game interned: UI classes, stage chart states; "#id" if unknown)
 bool is_element(U64 e);
 std::string describe(U64 p);
 void dump_quickslotinfo();
