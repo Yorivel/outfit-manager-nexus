@@ -203,7 +203,9 @@ void barber_done(U64 actor, U16 character)
     }
     {
         std::lock_guard<std::mutex> lock(g_store_mu);
-        store_for(character).look_base = live;
+        std::string& base = store_for(character).look_base;
+        if (base == live) return; // (nothing changed: the reply was for another character - it comes for NPCs too)
+        base = live;
     }
     LOG("character look: the barber's change is the character's own look (%s)", brief(live).c_str());
     save_outfits();
@@ -291,7 +293,8 @@ U64 __fastcall ack_hook(U64 a, U64 b, U64 c, U64 d)
     // confirming the saved look as it logs into the save, just before the load itself - and that one is no barber
     // visit: only one with the world up counts, and only if no load came after it (checked in charlook_tick), 2026-11-17)
     if (world_up()) g_barber_gen = g_generation.load(), g_barber_at = GetTickCount64();
-    else LOG("character look: the game confirmed the saved look while loading (not the barber)");
+    else if (static std::atomic<U32> said{0xFFFFFFFF}; said.exchange(g_generation.load()) != g_generation.load())
+        LOG("character look: the game confirmed the saved looks while loading (not the barber; it does so for every character)");
     return r;
 }
 
