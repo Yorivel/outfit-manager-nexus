@@ -63,7 +63,7 @@ const char* const kBedScenes[] = {"gimmick_sleep_bed_", "gimmick_camp_straw"};
 constexpr U64 kStepWindowMs = 4000; // (the step before the scene: within this)
 constexpr U32 kPlayerIdle = 0x662EC8AD; // (basic_upper s109: the played character's plain idle, taken by his context only)
 constexpr U32 kGotUp = 0x804A069D;  // (common_gimmick_action s930: the bed interaction's way out - out of bed)
-constexpr U64 kOutAfterMs = 1500;   // (DIAG only: the old rule's wait, to log where it would have ended the sleep)
+constexpr U64 kOutAfterMs = 1500;   // (the old rule: getting out needs the bed to have lasted - see eval_hook)
 
 using EvalFn = U32*(__fastcall*)(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64 a7, const U64* link, U64 a9,
                                  U64 a10);
@@ -141,20 +141,20 @@ U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64
             into_bed(ctx, 0, "the sleep itself"); // (no bed seen getting in: in bed now)
             sleep_began(target);
             if (g_hook_ctx[0].load() != ctx && !g_hook_ctx[1].load()) g_hook_ctx[1] = ctx;
-        } else if (g_hook_asleep.load() && (ctx == g_hook_ctx[0].load() || ctx == g_hook_ctx[1].load()) &&
-                   target != kGotUp) {
-            // DIAG (sleep-out, 2026-11-17; remove): where the old rule (any state outside kQuiet after kOutAfterMs)
-            // would have ended the sleep - kGotUp should follow in every bed (camp straw, either side of a bed)
-            if (now - g_hook_since.load() >= kOutAfterMs && !std::binary_search(std::begin(kQuiet), std::end(kQuiet), target))
-                LOG("DIAG sleep-out: state %08X (ctx %llX, %llu ms in bed): the old rule would have ended the sleep here",
-                    target, ctx, now - g_hook_since.load());
-        } else if (g_hook_asleep.load() && (ctx == g_hook_ctx[0].load() || ctx == g_hook_ctx[1].load()) &&
-                   target == kGotUp) {
-            if (g_hook_asleep.exchange(false)) {
+        } else if (g_hook_asleep.load() && (ctx == g_hook_ctx[0].load() || ctx == g_hook_ctx[1].load())) {
+            // Out of bed: the bed interaction's way out (kGotUp), or - not every way out of a bed takes it (2026-11-17:
+            // got in, stood up again before the sleep began: idle 662EC8AD + 25DC7FB9 at +13.5 s, no kGotUp) - the old
+            // rule, any state outside the scripted / hand-over ones once the bed lasted kOutAfterMs. Whichever is first.
+            // (Issue: the real getting-up event for every way out, so the old rule can go.)
+            const bool got_up = target == kGotUp;
+            if ((got_up || (now - g_hook_since.load() >= kOutAfterMs &&
+                            !std::binary_search(std::begin(kQuiet), std::end(kQuiet), target))) &&
+                g_hook_asleep.exchange(false)) {
                 g_woke = true;
                 g_out_at = now;
                 post();
-                LOG("sleep: out of bed (state %08X, ctx %llX, after %llu ms)", target, ctx, now - g_hook_since.load());
+                LOG("sleep: out of bed (state %08X%s, ctx %llX, after %llu ms)", target,
+                    got_up ? ", the bed's way out" : ", the old rule", ctx, now - g_hook_since.load());
             }
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
