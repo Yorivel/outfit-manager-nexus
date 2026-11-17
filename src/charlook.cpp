@@ -286,7 +286,10 @@ U64 __fastcall ack_hook(U64 a, U64 b, U64 c, U64 d)
     t_own_apply = true; // (the barber's change: never swapped)
     const U64 r = g_ack_orig(a, b, c, d);
     t_own_apply = false;
-    g_barber_at = GetTickCount64(); // (the barber confirmed a change: sorted out once out of it)
+    // (the barber confirmed a change: sorted out once out of it. The same reply comes while a save loads - the game
+    // confirming the saved look - and that one is no barber visit: only one with the world up counts, 2026-11-17)
+    if (world_up()) g_barber_at = GetTickCount64();
+    else LOG("character look: the game confirmed the saved look while loading (not the barber)");
     return r;
 }
 
