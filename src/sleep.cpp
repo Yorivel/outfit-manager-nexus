@@ -136,9 +136,24 @@ bool is_bed_chart(U64 chart)
 // A stage chart ends (the game's threads; the client's copy and the internal server's alike - the first one counts).
 // A bed's ending is getting out of bed - after a sleep, a refused sleep, standing up from the hours menu, or the game
 // breaking it off.
+// DIAG (stage-any, 2026-11-17; remove): every stage chart end, with its first state names (rp / r32 read guarded)
+void diag_stage_any(U64 proc, U64 type)
+{
+    static std::atomic<int> diag_n{0};
+    if (diag_n++ >= 400) return;
+    const U64 ch = rp(proc + kOffStageProcChart), sts = ch ? rp(ch + kOffStageChartStates) : 0;
+    const U32 n = ch ? r32(ch + kOffStageChartCount) : 0;
+    std::string names;
+    for (U32 i = 0; sts && i < n && i < 40; ++i)
+        if (const U64 st = rp(sts + 8ull * i)) names += " " + class_name(r32(st + kOffStageStateName));
+    LOG("DIAG stage-any: end type %u, vtable +%llX, chart %llX, %u states:%s", unsigned(type & 0xFF),
+        rp(proc) ? rp(proc) - g_base : 0, ch, n, names.c_str());
+}
+
 U64 __fastcall stage_end_hook(U64 proc, U64 type, U64 a3, U64 a4)
 {
     __try {
+        diag_stage_any(proc, type); // DIAG (stage-any)
         if (const U64 chart = rp(proc + kOffStageProcChart); chart && is_bed_chart(chart)) {
             const U64 now = GetTickCount64();
             const bool was_in = g_hook_asleep.load();
