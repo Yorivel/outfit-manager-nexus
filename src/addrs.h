@@ -240,7 +240,8 @@ extern U64 kRvaPartUseTable, kOffArmEntry, kRvaPoseIKVt, kRvaPoseIKParams, kRvaP
 extern U64 kRvaSaveHandlerVt, kRvaSaveWrite, kRvaSaveDelete, kRvaSaveCommit, kRvaSaveLoadSlot, kOffSaveReqWrites, kOffSaveReqDeletes;
 // The end of a sequencer stage chart (sleep.cpp: out of bed)
 extern U64 kRvaStageProcVt, kRvaStageEnd, kRvaStageBranchApply, kRvaStageBranchByName, kOffStageProcChart,
-    kOffStageChartStates, kOffStageChartCount, kOffStageStateName;
+    kOffStageChartStates, kOffStageChartCount, kOffStageProcState, kOffStageBranches, kOffStageBranchCount,
+    kOffStageBranchTarget;
 void resolve_addresses();
 
 } // namespace om

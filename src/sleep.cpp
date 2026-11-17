@@ -15,7 +15,11 @@
 // LEAVE (standing up), or SLEEP_NEGATIVE / _COOLTIME / _EXCLUSIVE (refused) - and every way ends with
 // Timeline.branch(Terminate) once its last timeline is over (ForceTerminate when the game breaks it off: a crime, a
 // fight...). That end, the stage chart processor's end (kRvaStageEnd), is getting out of bed: one exact event for every
-// way out. A bed's chart is told by its hours menu state (kHoursMenu, by name). Before (until 2026-11-17): the chart
+// way out. A bed's chart is told by its hours menu state (kHoursMenu, by name: a branch of one of the chart's states goes
+// to it - the processor's chart, not the state it is in, which on the chart's end has one branch, Terminate: the first
+// round of 2026-11-17 read that one and never saw a bed). The server's branch to a named state (kRvaStageBranchByName)
+// says which state a bed's chart goes to and when - the hours menu (the sleep accepted) or SLEEP_NEGATIVE* (refused):
+// logged only, for now (#49: the sleepwear might wait for the hours menu). Before (until 2026-11-17): the chart
 // state common_gimmick_action s943 804A069D (which some exits never took), or any state outside the scripted / hand-over
 // ones a second and a half into the bed - the played character's plain idle during the time skip's loading (+22.4 s of
 // a sleep) ended the sleep 2.6 s before he got up.
@@ -61,7 +65,8 @@ constexpr UINT kWmSleep = WM_APP + 0x51;
 
 namespace {
 
-// bed_sleep start / loop states (sequencer_action_pc, game 2.04.08): the sleep itself (the fallback signal)
+// bed_sleep start / loop states (sequencer_action_pc, game 2.04.08): the sleep itself (the fallback signal; ing_02 also
+// comes while the hours menu waits - +13.9 s at the menu, 2026-11-17)
 constexpr U32 kSleepStart[] = {0xD1F9862D, 0xE2B2EE2F, 0x70571FD6, 0xF50A6DC9}; // stt_02, ing_02, stt_03, ing_03
 // ai_basic_lower's one-step states: the game taking the character over for an interaction
 constexpr U32 kStep[] = {0x00D286FD, 0x2CAC00E9, 0x7D527861, 0x96A64775, 0xEF3C23FF};
@@ -79,6 +84,9 @@ using FindFn = bool(__fastcall*)(U64 map, U64 key, U64* out_path, std::uint8_t* 
 FindFn g_find_orig = nullptr;
 using StageEndFn = U64(__fastcall*)(U64 proc, U64 type, U64 a3, U64 a4); // (kRvaStageEnd: processor, u8 end type)
 StageEndFn g_stage_end_orig = nullptr;
+using StageBranchFn = U64(__fastcall*)(U64 proc, U64 a2, U64 a3, U64 a4, const U32* name, U64 a6, U64 a7, U64 a8, U64 a9,
+                                       U64 a10); // (kRvaStageBranchByName: processor, ..., the state's name 5th)
+StageBranchFn g_stage_branch_orig = nullptr;
 
 // set on the game's threads, taken on the UI thread
 std::atomic<bool> g_hook_asleep{false}; // (in bed: sleeping, or at the hours menu)
@@ -91,6 +99,7 @@ std::atomic<U64> g_step_at{0};
 // that bed's, not a new one)
 std::atomic<bool> g_bed_ended{false};
 std::atomic<U64> g_out_at{0}; // DIAG (bed-free, 2026-11-17; remove): out of bed, when - for the first free state after it
+std::atomic<U32> g_bed_state{0}; // (the state a bed's chart last went to, its name; 0: none since the last bed's end)
 std::atomic<U64> g_player_ctx{0}; // (the context that last took kPlayerIdle: the played character's upper body)
 std::atomic<U64> g_player_ring[8] = {}; // (its last states: target << 32 | the tick's low 32 bits; logged at a bed)
 std::atomic<U32> g_player_ring_at{0};
@@ -122,56 +131,78 @@ void sleep_began(U32 state)
     if (!g_slept.exchange(true)) LOG("sleep: the sleep itself began (state %08X)", state), post(); // (the looks step back)
 }
 
-// A bed's stage chart: one of its states is the hours menu (kHoursMenu).
-bool is_bed_chart(U64 chart)
+// A bed's stage chart: a branch of one of its states goes to the hours menu (kHoursMenu). (A state's own name is no
+// resolver entry - offset 0 - so the names are read from the branches.)
+bool is_bed_chart(U64 proc)
 {
-    const U64 states = rp(chart + kOffStageChartStates);
-    const U32 n = r32(chart + kOffStageChartCount);
+    const U64 chart = rp(proc + kOffStageProcChart);
+    const U64 states = chart ? rp(chart + kOffStageChartStates) : 0;
+    const U32 n = chart ? r32(chart + kOffStageChartCount) : 0;
     if (!states || !n || n > 4096) return false;
-    for (U32 i = 0; i < n; ++i)
-        if (const U64 st = rp(states + 8ull * i); st && class_name(r32(st + kOffStageStateName)) == kHoursMenu) return true;
+    for (U32 i = 0; i < n; ++i) {
+        const U64 st = rp(states + 8ull * i);
+        const U64 br = st ? rp(st + kOffStageBranches) : 0;
+        const U32 m = st ? r32(st + kOffStageBranchCount) : 0;
+        if (!br || m > 256) continue;
+        for (U32 k = 0; k < m; ++k)
+            if (const U64 b = rp(br + 8ull * k); b && class_name(r32(b + kOffStageBranchTarget)) == kHoursMenu) return true;
+    }
     return false;
 }
 
-// A stage chart ends (the game's threads; the client's copy and the internal server's alike - the first one counts).
-// A bed's ending is getting out of bed - after a sleep, a refused sleep, standing up from the hours menu, or the game
-// breaking it off.
-// DIAG (stage-any, 2026-11-17; remove): every stage chart end, with its first state names (rp / r32 read guarded)
-void diag_stage_any(U64 proc, U64 type)
+// A bed's stage chart ends (the client's copy and the internal server's alike - the first one counts): getting out of
+// bed - after a sleep, a refused sleep, standing up from the hours menu, or the game breaking it off.
+void bed_chart_ended(U64 proc, U64 type)
 {
-    static std::atomic<int> diag_n{0};
-    if (diag_n++ >= 400) return;
-    const U64 ch = rp(proc + kOffStageProcChart), sts = ch ? rp(ch + kOffStageChartStates) : 0;
-    const U32 n = ch ? r32(ch + kOffStageChartCount) : 0;
-    std::string names;
-    for (U32 i = 0; sts && i < n && i < 40; ++i)
-        if (const U64 st = rp(sts + 8ull * i)) names += " " + class_name(r32(st + kOffStageStateName));
-    LOG("DIAG stage-any: end type %u, vtable +%llX, chart %llX, %u states:%s", unsigned(type & 0xFF),
-        rp(proc) ? rp(proc) - g_base : 0, ch, n, names.c_str());
+    const U64 now = GetTickCount64();
+    const U32 last = g_bed_state.exchange(0);
+    // DIAG (bed-stage, 2026-11-17; remove): which processor ends the bed's chart (client / server copy), how
+    LOG("DIAG bed-stage: a bed's stage chart ends (type %u; processor %llX, vtable +%llX; %s)", unsigned(type & 0xFF), proc,
+        rp(proc) ? rp(proc) - g_base : 0, g_hook_asleep.load() ? "in bed" : "not in bed");
+    g_bed_ended = true; // (until he takes a state of his own: a bed scene read meanwhile is this bed's)
+    g_out_at = now;
+    if (g_hook_asleep.exchange(false)) {
+        g_woke = true;
+        post();
+        LOG("sleep: out of bed (the bed's stage chart ended, type %u, after %s; %llu ms in bed)", unsigned(type & 0xFF),
+            last ? class_name(last).c_str() : "no state seen", now - g_hook_since.load());
+    }
 }
 
 U64 __fastcall stage_end_hook(U64 proc, U64 type, U64 a3, U64 a4)
 {
     __try {
-        diag_stage_any(proc, type); // DIAG (stage-any)
-        if (const U64 chart = rp(proc + kOffStageProcChart); chart && is_bed_chart(chart)) {
-            const U64 now = GetTickCount64();
-            const bool was_in = g_hook_asleep.load();
-            // DIAG (bed-stage, 2026-11-17; remove): which processor ends the bed's chart (client / server copy), how
-            LOG("DIAG bed-stage: a bed's stage chart ends (type %u; processor %llX, vtable +%llX; %s)", unsigned(type & 0xFF),
-                proc, rp(proc) ? rp(proc) - g_base : 0, was_in ? "in bed" : "not in bed");
-            g_bed_ended = true; // (until he takes a state of his own: a bed scene read meanwhile is this bed's)
-            g_out_at = now;
-            if (g_hook_asleep.exchange(false)) {
-                g_woke = true;
-                post();
-                LOG("sleep: out of bed (the bed's stage chart ended, type %u; %llu ms in bed)", unsigned(type & 0xFF),
-                    now - g_hook_since.load());
-            }
-        }
+        if (is_bed_chart(proc)) bed_chart_ended(proc, type);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
     return g_stage_end_orig(proc, type, a3, a4);
+}
+
+// A stage chart went to the state `to` (the server's branch to a named state): a bed's SLEEP_* states are logged - the
+// hours menu (accepted) or SLEEP_NEGATIVE* (refused), and when (#49). Log only: nothing changes on it.
+void bed_chart_branched(U64 proc, U32 to)
+{
+    const std::string n = class_name(to);
+    if (n.rfind("SLEEP_", 0) != 0 || !is_bed_chart(proc)) return;
+    g_bed_state = to;
+    if (g_hook_asleep.load()) LOG("sleep: the bed's stage: %s (%llu ms in bed)", n.c_str(), GetTickCount64() - g_hook_since.load());
+    else LOG("sleep: the bed's stage: %s (before getting into bed was seen)", n.c_str());
+}
+
+U64 __fastcall stage_branch_hook(U64 proc, U64 a2, U64 a3, U64 a4, const U32* name, U64 a6, U64 a7, U64 a8, U64 a9, U64 a10)
+{
+    U64 was = 0;
+    U32 to = 0;
+    __try {
+        was = rp(proc + kOffStageProcState), to = name ? *name : 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    const U64 r = g_stage_branch_orig(proc, a2, a3, a4, name, a6, a7, a8, a9, a10);
+    __try {
+        if (to && to != g_bed_state.load() && rp(proc + kOffStageProcState) != was) bed_chart_branched(proc, to);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    return r;
 }
 
 U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64 a7, const U64* link, U64 a9, U64 a10)
@@ -483,7 +514,7 @@ void sleep_install()
     LOG("sleep: watching for sleep (evaluator +%llX)", kRvaBranchEval);
     // getting out of bed: the end of the bed's stage chart - without it no sleepwear (it would never come off)
     if (!have({kRvaStageEnd, kRvaClassNames, kOffStageProcChart, kOffStageChartStates, kOffStageChartCount,
-               kOffStageStateName})) {
+               kOffStageBranches, kOffStageBranchCount, kOffStageBranchTarget})) {
         LOG("sleep: the end of a stage chart wasn't found; sleepwear is off (getting out of bed couldn't be seen)");
         return;
     }
@@ -496,6 +527,19 @@ void sleep_install()
         return;
     }
     LOG("sleep: watching for the end of a bed (stage chart end +%llX)", kRvaStageEnd);
+    // which state a bed's chart goes to (log only: without it nothing else changes)
+    if (!have({kRvaStageBranchByName, kOffStageProcState})) {
+        LOG("sleep: a stage chart's branch wasn't found; the bed's stages aren't logged");
+    } else if (void* bt = reinterpret_cast<void*>(g_base + kRvaStageBranchByName);
+               MH_CreateHook(bt, reinterpret_cast<void*>(&stage_branch_hook), reinterpret_cast<void**>(&g_stage_branch_orig)) !=
+                   MH_OK ||
+               MH_EnableHook(bt) != MH_OK) {
+        LOG("sleep: a stage chart's branch couldn't be hooked; the bed's stages aren't logged");
+        MH_RemoveHook(bt);
+        g_stage_branch_orig = nullptr;
+    } else {
+        LOG("sleep: watching a bed's stages (stage chart branch +%llX)", kRvaStageBranchByName);
+    }
     // getting into bed: the pack lookup (MO2CDLoader may hook it too: MinHook chains)
     U64 f = find_pack_lookup();
     void* ft = reinterpret_cast<void*>(f);

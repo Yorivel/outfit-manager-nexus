@@ -398,7 +398,8 @@ void resolve_addresses()
                            // (what tells a load from a save write: unsure = loads told the old way)
                            &kOffSaveReqWrites, &kOffSaveReqDeletes,
                            // (what tells the end of a bed's stage chart: unsure = sleepwear off, never stuck on)
-                           &kOffStageProcChart, &kOffStageChartStates, &kOffStageChartCount, &kOffStageStateName};
+                           &kOffStageProcChart, &kOffStageChartStates, &kOffStageChartCount, &kOffStageProcState,
+                           &kOffStageBranches, &kOffStageBranchCount, &kOffStageBranchTarget};
     for (std::size_t i = 0; i < kOffsetCount; ++i) {
         *kOffsetVars[i] = values[i];
         bool unsure = status[i] == resolver::OffsetStatus::Doubtful ||
@@ -568,18 +569,26 @@ U64 kOffSaveReqDeletes = 0x6c8;      // save request: u32 the number of saves to
 // its stage chart (.pastage: SLEEP_IDLE -> SLEEP_START -> SLEEP_SELECT_UI, the hours menu -> SLEEP_nHOUR ->
 // SLEEP_COMPLETE, or SLEEP_CANCEL -> LEAVE, or SLEEP_NEGATIVE*; every one of them ends with Timeline.branch(Terminate)).
 // The stage chart processor's slot 1 ends it (processor, u8 end type): the Common and the Server processor have it as
-// is, the Client's slot 1 calls it first. The processor's +kOffStageProcChart is its chart: +kOffStageChartStates
-// the states (pointers), +kOffStageChartCount their number; a state's +kOffStageStateName its interned name (id).
+// is, the Client's slot 1 calls it first. The processor's +kOffStageProcChart is its chart: +kOffStageChartStates the
+// states (pointers), +kOffStageChartCount their number. +kOffStageProcState is the state it is in: +kOffStageBranches
+// that state's branches (pointers), +kOffStageBranchCount their number; a branch's +kOffStageBranchTarget the name of
+// the state it goes to (interned: kRvaClassNames). (A state's own name is its first u32 - offset 0, no resolver entry:
+// OM reads names from the branches only.) Until the second round of 2026-11-17 the current state was taken for the chart
+// (on a chart's end it holds one branch, Terminate: no bed was ever told).
 U64 kRvaStageProcVt = 0x5d40a38;     // pa::CommonSequencerStage_StageChartProcessor (anchor for its slot)
 U64 kRvaStageEnd = 0x226be60;        // its slot 1: a stage chart ends (processor, u8 type: 0 Terminate, 1 ForceTerminate,
                                      // ...) - hooked (sleep.cpp: the bed's stage chart ending is getting out of bed)
 U64 kRvaStageBranchApply = 0xbe1b80; // (witness only) the client's branch of a stage chart to the server's state index
-                                     // (TrocTrStageOnBranchEventAck): chart, its states, the state's name (vs Terminate)
-U64 kRvaStageBranchByName = 0x226db80; // (witness only) the server's branch of a stage chart to a named state: chart,
-                                     // the state count, the states
-U64 kOffStageProcChart = 0x38;       // stage chart processor: its chart
-U64 kOffStageChartStates = 0x8;      // stage chart: the states (array of pointers)
-U64 kOffStageChartCount = 0x10;      // stage chart: u32 the number of states
-U64 kOffStageStateName = 0x10;       // stage chart state: u32 its name (interned: kRvaClassNames)
+                                     // (TrocTrStageOnBranchEventAck): current state, its branches, a branch's target
+U64 kRvaStageBranchByName = 0x226db80; // the server's branch of a stage chart to a named state: (processor, ..., u32* name
+                                     // 5th, ... 10 arguments); searches the chart's states for that name - hooked
+                                     // (sleep.cpp, log only: which state a bed's chart goes to, and when)
+U64 kOffStageProcChart = 0x18;       // stage chart processor: its chart
+U64 kOffStageChartStates = 0x10;     // stage chart: the states (array of pointers)
+U64 kOffStageChartCount = 0x18;      // stage chart: u32 the number of states
+U64 kOffStageProcState = 0x38;       // stage chart processor: the state it is in
+U64 kOffStageBranches = 0x8;         // stage chart state: its branches (array of pointers)
+U64 kOffStageBranchCount = 0x10;     // stage chart state: u32 the number of branches
+U64 kOffStageBranchTarget = 0x10;    // stage chart branch: u32 the name of the state it goes to (interned: kRvaClassNames)
 
 } // namespace om
