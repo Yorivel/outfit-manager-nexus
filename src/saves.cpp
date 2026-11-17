@@ -345,7 +345,8 @@ void commit_done(bool ok, U32 writes, U32 deletes, const U32* written, int writt
         g_pending_writes.erase(it);
         changed = true;
     }
-    if (writes && !written_n) LOG("the game wrote a save without opening a save.save the mod knows: nothing bound");
+    // (a manual save sends one request for the slot's lobby.save first, then one for its save.save, 2026-11-17)
+    if (writes && !written_n) LOG("the game's save request wrote no save.save (the slot's lobby.save, or a file the mod doesn't know): nothing to bind");
     if (deletes && ok) // (a deleted save: its folder is gone)
         for (auto it = g_bound.begin(); it != g_bound.end();)
             if (!quick_id(slot_save_path(it->first)).size) {
