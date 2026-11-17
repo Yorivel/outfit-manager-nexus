@@ -542,7 +542,7 @@ float __fastcall frame_hook(U64 self)
         if (g_unhide_retry.empty() && g_rehide_retry.empty()) LOG("centre restore done");
     }
     pump(self);
-    if (GetCurrentThreadId() == g_ui_thread) look_pending(), anchor_recheck();
+    if (GetCurrentThreadId() == g_ui_thread) look_pending(), anchor_recheck(), diag_weapon_state(); // DIAG
     return g_frame_orig(self);
 }
 
