@@ -116,14 +116,13 @@ void post()
 // character back in his plain idle (kPlayerIdle) in bed before the sleep began calls the pending load off.
 std::atomic<bool> g_slept{false};   // (this bed's sleep has begun)
 std::atomic<bool> g_refused{false}; // (old way only: back to idle in bed before the sleep began)
-std::atomic<bool> g_accept_early{false}; // (the bed accepted before getting in was seen: taken by into_bed)
 void into_bed(U64 ctx0, U64 ctx1, const char* why, bool accepted = false)
 {
     if (!g_stage_end_orig) return; // (getting out couldn't be seen: no sleepwear - sleep_install)
     if (g_hook_asleep.exchange(true)) return;
     g_hook_ctx[0] = ctx0, g_hook_ctx[1] = ctx1, g_hook_since = GetTickCount64();
     g_slept = false, g_refused = false;
-    const bool now = accepted || !g_stage_branch_orig || g_accept_early.exchange(false);
+    const bool now = accepted || !g_stage_branch_orig;
     if (now) g_fell = true, post();
     LOG("sleep: into bed (%s; ctx %llX %llX)%s", why, ctx0, ctx1, now ? "" : "; the sleepwear waits for the bed's verdict");
 }
@@ -157,7 +156,6 @@ void bed_chart_ended(U64 proc, U64 type)
 {
     const U64 now = GetTickCount64();
     const U32 last = g_bed_state.exchange(0);
-    g_accept_early = false; // (a verdict belongs to its own bed)
     // DIAG (bed-stage, 2026-11-17; remove): which processor ends the bed's chart (client / server copy), how
     LOG("DIAG bed-stage: a bed's stage chart ends (type %u; processor %llX, vtable +%llX; %s)", unsigned(type & 0xFF), proc,
         rp(proc) ? rp(proc) - g_base : 0, g_hook_asleep.load() ? "in bed" : "not in bed");
@@ -198,7 +196,8 @@ void bed_chart_branched(U64 proc, U32 to)
         return;
     }
     if (in_bed) g_fell = true, post();
-    else g_accept_early = true;
+    else into_bed(g_player_ctx.load(), 0, "the bed's stage accepted it: a new bed, its scene read before he was free of the last one",
+                  true); // (the verdict itself starts the bed)
 }
 
 U64 __fastcall stage_branch_hook(U64 proc, U64 a2, U64 a3, U64 a4, const U32* name, U64 a6, U64 a7, U64 a8, U64 a9, U64 a10)
