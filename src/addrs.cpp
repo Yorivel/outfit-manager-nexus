@@ -396,7 +396,9 @@ void resolve_addresses()
                            // (what shows a hidden piece while its working part is in use)
                            &kOffArmEntry, &kOffArmEnabled, &kOffArmUnbound, &kOffArmInUse,
                            // (what tells a load from a save write: unsure = loads told the old way)
-                           &kOffSaveReqWrites, &kOffSaveReqDeletes};
+                           &kOffSaveReqWrites, &kOffSaveReqDeletes,
+                           // (what tells the end of a bed's stage chart: unsure = sleepwear off, never stuck on)
+                           &kOffStageProcChart, &kOffStageChartStates, &kOffStageChartCount, &kOffStageStateName};
     for (std::size_t i = 0; i < kOffsetCount; ++i) {
         *kOffsetVars[i] = values[i];
         bool unsure = status[i] == resolver::OffsetStatus::Doubtful ||
@@ -561,5 +563,23 @@ U64 kRvaSaveLoadSlot = 0x22951b0;    // (into, u32* result, handler, slot name, 
                                      // save slot into the game (its only caller is "Start Load SaveSlot"); *result 0 = loaded
 U64 kOffSaveReqWrites = 0x6b8;       // save request: u32 the number of saves to write (its list is at -8)
 U64 kOffSaveReqDeletes = 0x6c8;      // save request: u32 the number of saves to delete (its list is at -8)
+
+// Out of bed (sleep.cpp; game 2.05). A bed's scene (sequencer gimmickcalledseq/gimmick_sleep_bed_left / _right) runs
+// its stage chart (.pastage: SLEEP_IDLE -> SLEEP_START -> SLEEP_SELECT_UI, the hours menu -> SLEEP_nHOUR ->
+// SLEEP_COMPLETE, or SLEEP_CANCEL -> LEAVE, or SLEEP_NEGATIVE*; every one of them ends with Timeline.branch(Terminate)).
+// The stage chart processor's slot 1 ends it (processor, u8 end type): the Common and the Server processor have it as
+// is, the Client's slot 1 calls it first. The processor's +kOffStageProcChart is its chart: +kOffStageChartStates
+// the states (pointers), +kOffStageChartCount their number; a state's +kOffStageStateName its interned name (id).
+U64 kRvaStageProcVt = 0x5d40a38;     // pa::CommonSequencerStage_StageChartProcessor (anchor for its slot)
+U64 kRvaStageEnd = 0x226be60;        // its slot 1: a stage chart ends (processor, u8 type: 0 Terminate, 1 ForceTerminate,
+                                     // ...) - hooked (sleep.cpp: the bed's stage chart ending is getting out of bed)
+U64 kRvaStageBranchApply = 0xbe1b80; // (witness only) the client's branch of a stage chart to the server's state index
+                                     // (TrocTrStageOnBranchEventAck): chart, its states, the state's name (vs Terminate)
+U64 kRvaStageBranchByName = 0x226db80; // (witness only) the server's branch of a stage chart to a named state: chart,
+                                     // the state count, the states
+U64 kOffStageProcChart = 0x38;       // stage chart processor: its chart
+U64 kOffStageChartStates = 0x8;      // stage chart: the states (array of pointers)
+U64 kOffStageChartCount = 0x10;      // stage chart: u32 the number of states
+U64 kOffStageStateName = 0x10;       // stage chart state: u32 its name (interned: kRvaClassNames)
 
 } // namespace om
