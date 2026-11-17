@@ -8,7 +8,6 @@
 #include "pads.h"
 #include "addrs.h"
 #include <MinHook.h>
-#include <intrin.h>
 
 namespace om {
 
@@ -313,7 +312,7 @@ void load_done(U32 slot, U32 result, bool read)
 
 U32* __fastcall load_slot_hook(U64 into, U32* result, U64 handler, U64 name, U32 slot)
 {
-    LOG("saves: the game loads save slot %u (from +%llX)", slot, reinterpret_cast<U64>(_ReturnAddress()) - g_base); // DIAG
+    LOG("saves: the game loads save slot %u", slot);
     const int outer = t_load_slot; // (one load inside another: not seen, but kept apart if it happens)
     const bool outer_read = t_load_read;
     t_load_slot = int(slot), t_load_read = false;
@@ -370,9 +369,6 @@ bool __fastcall commit_hook(U64 self, U64 request)
     }
     const int outer = t_commit; // (one request inside another: not seen, but kept apart if it happens)
     t_commit = writes || deletes ? kWriteCommit : t_load_slot >= 0 ? kLoadCommit : kReadCommit;
-    LOG("saves: request %llX from +%llX: %u to write, %u to delete, %s", request, // DIAG
-        reinterpret_cast<U64>(_ReturnAddress()) - g_base, writes, deletes, // DIAG
-        t_commit == kLoadCommit ? "inside the game's load" : t_commit == kReadCommit ? "read only, no load" : "writing"); // DIAG
     t_commit_written_n = 0;
     const bool ok = g_commit_orig(self, request);
     const int written_n = t_commit_written_n;
