@@ -130,7 +130,7 @@ U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64
         if (target == kPlayerIdle && g_hook_asleep.load() && !g_slept.load() &&
             (ctx == g_hook_ctx[0].load() || ctx == g_hook_ctx[1].load()) && !g_refused.exchange(true)) {
             post(); // (the game refused the sleep: sleep_tick calls the sleepwear off)
-            LOG("sleep: back to idle in bed before the sleep began: the game refused it");
+            LOG("sleep: back to idle in bed before the sleep began (the game refused it, or the player got up)");
         }
         if (std::find(std::begin(kStep), std::end(kStep), target) != std::end(kStep)) {
             if (now - g_step_at.load() > 500) g_step_ctx[0] = ctx, g_step_ctx[1] = 0; // (a new take-over)
