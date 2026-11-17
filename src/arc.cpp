@@ -264,6 +264,7 @@ void peek_draw(U64 self)
         if (!std::strcmp(c, "om-heat2-c")) return "cd_icon_temperature_burn_phase_00";
         if (!std::strcmp(c, "om-sleep-c")) return "cd_uitexture_tab_icon_housing_Bed";
         if (!std::strcmp(c, "om-combat-c")) return "cd_uitexture_tab_icon_skilltree_SwordDualWeapon";
+        if (!std::strcmp(c, "om-swim-c")) return "cd_icon_skill_WaterMove_Enhanced";
         return nullptr;
     };
     for (int k = 0; k < 5; ++k) {
@@ -638,8 +639,8 @@ void peek_close(bool choose)
         !choose ? "" : load ? "; putting it on" : " (nothing to change)", g_peek_by_pad ? "pad" : "key",
         g_wheel_notches.load());
     // as a click on it in the wheel: where each piece is, the questions (pieces on other characters, copies), the load
-    if (load) start_loading(p.self, static_cast<U32>(e));
-    else if (choose && e == -1 && p.applied && e != p.opened_on) release_outfit(p.self); // (#21: No outfit)
+    if (load) swim_player_load(e), start_loading(p.self, static_cast<U32>(e));
+    else if (choose && e == -1 && p.applied && e != p.opened_on) swim_player_load(-1), release_outfit(p.self); // (#21: No outfit)
 }
 
 // The outfits' hotkeys, in play (not in menus, prompts or with the arc open): a press of exactly the combination loads
@@ -729,7 +730,7 @@ void peek_hotkeys(U64 self, bool free)
         int worn = is_weapon_set(g_outfits[size_t(idx)]) ? worn_weapon_set(self) : find_worn_outfit(self); // (#27)
         LOG("hotkey %s: \"%s\"%s", hotkey_name(vk, m).c_str(), g_outfits[size_t(idx)].name.c_str(),
             idx == worn ? " (already worn)" : "; putting it on");
-        if (idx != worn) start_loading(self, U32(idx));
+        if (idx != worn) swim_player_load(idx), start_loading(self, U32(idx));
         break; // (one load per frame)
     }
 }

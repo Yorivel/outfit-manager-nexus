@@ -2,7 +2,7 @@
 quickslotitem.css.merge between the BADGES markers (rerun replaces them; 2026-11-13):
 
 - the badge row: the slot's badge spot (the occupancy-chain element: the thermometer's place) shows the first of
-  Climate, the bed / swords (Activity: Sleeping / Combat) and the Character Look (#35, om-lookmain-c: the game's barber map icon); the
+  Climate, the bed / swords / wave (Activity: Sleeping / Combat / Swimming) and the Character Look (#35, om-lookmain-c: the game's barber map icon); the
   others go left of it on the side badges OmSideBadge0 / 1 (in the mark wrap, uibin_patch.cpp), placed for the wrap's
   state (om-sb-plain: the bare anchor at the slot's centre; -eye: the eye's 50px box, 12px left / 4px under the centre;
   -eye2: the raised eye's box, 24px higher);
@@ -26,7 +26,8 @@ SPOT = (13, 29)                 # the badge spot's centre from the slot's centre
 EYE_BOX = 50                    # the eye marker's box (om-eye-c / om-eye2-c), its corner from the slot's centre:
 BOX = {'plain': (0, 0), 'eye': (-12, 4), 'eye2': (-12, -20)}
 CAPS_AT = {'plain': (-90, 42), 'eye': (-78, 38), 'eye2': (-78, 62)}
-TEX = {'bed': 'cd_uitexture_tab_icon_housing_Bed', 'combat': 'cd_uitexture_tab_icon_skilltree_SwordDualWeapon', 'look': 'cd_icon_map_beauty'}
+TEX = {'bed': 'cd_uitexture_tab_icon_housing_Bed', 'combat': 'cd_uitexture_tab_icon_skilltree_SwordDualWeapon',
+       'swim': 'cd_icon_skill_WaterMove_Enhanced', 'look': 'cd_icon_map_beauty'}
 
 
 def fmt(v):
@@ -52,7 +53,7 @@ def base_rules():
     for k, tex in (('eye', 'outfitmanager_badge_eye'), ('cold', 'cd_icon_temperature_freeze_00'),
                    ('heat', 'cd_icon_temperature_burn_00'), ('cold2', 'cd_icon_temperature_freeze_phase_00'),
                    ('heat2', 'cd_icon_temperature_burn_phase_00'), ('bed', 'cd_uitexture_tab_icon_housing_Bed'),
-                   ('combat', 'cd_uitexture_tab_icon_skilltree_SwordDualWeapon'),
+                   ('combat', 'cd_uitexture_tab_icon_skilltree_SwordDualWeapon'), ('swim', 'cd_icon_skill_WaterMove_Enhanced'),
                    ('look', 'cd_icon_map_beauty')):
         out.append(f'.om-cb-icon.om-cbi-{k} {{ background-image: textureid({tex}); }}')
     # (the eye's texture is a 50px badge canvas with margins: drawn larger to match the others)

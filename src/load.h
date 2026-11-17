@@ -15,6 +15,7 @@ std::string slot_list(const Outfit& o, const std::vector<U16>& slots);
 std::string piece_label(const Outfit& o, U16 slot);
 void finish_load(U64 self, AskedLoad& p);
 void start_loading(U64 self, U32 index);
+void swim_player_load(int index); // (sleep.cpp: an outfit the player puts on himself - -1 Unequip Outfit - wins over a swim)
 void pump_async(U64 self);
 extern QuickSlotChangeFn g_quickslot_change; // (#53: a weapon set's weapon selected after its load; null: off)
 extern RecordGetFn g_equip_type_info;

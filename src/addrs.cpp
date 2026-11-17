@@ -401,7 +401,10 @@ void resolve_addresses()
                            &kOffStageProcChart, &kOffStageChartStates, &kOffStageChartCount, &kOffStageProcState,
                            &kOffStageBranches, &kOffStageBranchCount, &kOffStageBranchTarget,
                            // (what decides whether a weapon set's weapon is picked as the weapons tab does: #53)
-                           &kOffItemEquipType, &kOffEquipTypeHand, &kOffInvWeaponGroup};
+                           &kOffItemEquipType, &kOffEquipTypeHand, &kOffInvWeaponGroup,
+                           // (what tells wet from dry: unsure = Swimming off, never stuck in swimwear - #54)
+                           &kOffCompSkill, &kOffSkillBuffs, &kOffSkillBuffCount, &kOffSkillBuffSize, &kOffBuffSkill,
+                           &kOffSkillKey};
     for (std::size_t i = 0; i < kOffsetCount; ++i) {
         *kOffsetVars[i] = values[i];
         bool unsure = status[i] == resolver::OffsetStatus::Doubtful ||
@@ -609,5 +612,30 @@ U64 kRvaWeaponGroupSlots = 0x22fab00; // (inventory, const int* group, {u16* p, 
 U64 kOffItemEquipType = 0x4a;        // item info: u16 its equip type
 U64 kOffEquipTypeHand = 0xf;         // equip type info: u8 a hand weapon (picking it changes the weapon in hand)
 U64 kOffInvWeaponGroup = 0xb0;       // inventory: int the weapon group in hand (0: none)
+
+// Activity: Swimming - the played character's wetness (#54, sleep.cpp; game 2.05). The game's wet state is skills it
+// puts on a character in and out of the water (their buffs: WetNessState, data skill.staticinfo / buffinfo
+// BuffLevel_WetNess): Passive_Wetness (key 89997: touching water), Passive_UnderWater (30010: under it), Active_Wetness
+// (89998: a while after leaving the water or the rain - its buff's duration is the drying; level 4 the water's, 3 the
+// rain's). The server's buffs reach the client by TrocTrApplyBuffAck / TrocTrUnapplyBuffAck: their slot 2 hands them to
+// the character's skill component (actor +kOffActorComp -> +kOffCompSkill, ClientSkillActorComponent), which keeps his
+// active buffs at +kOffSkillBuffs (kOffSkillBuffSize bytes each, +kOffSkillBuffCount of them): a buff's +kOffBuffSkill is
+// its skill's row (u16; 0xFFFF none), kRvaSkillInfo(&row) that skill's record, the record's +kOffSkillKey its key.
+U64 kRvaSkillCompVt = 0x59d02f0;     // ClientSkillActorComponent (what +kOffCompSkill must hold)
+U64 kRvaSkillInfo = 0x3da9e0;        // (const u16* skill row) -> the skill's record; an unknown row: the default record - called
+U64 kRvaBuffApplyAckVt = 0x5a138d8;  // TrocTrApplyBuffAck (anchor for its slot)
+U64 kRvaBuffApplyAck = 0xd7d830;     // (witness only) its slot 2: the actor's +kOffActorComp -> +kOffCompSkill gets the buff
+U64 kRvaBuffApply = 0xb55f90;        // (witness only) the skill component's apply of a buff (component, int* err, buff*):
+                                     // looks it up in its buffs by serial, adds it there
+U64 kRvaSkillBuffFind = 0x2433d30;   // (witness only) (component, u16 skill row, int level, ...): whether its buffs hold
+                                     // every buff of that skill level - reads each buff's skill row
+U64 kRvaSkillRowOfKey = 0x1799470;   // (witness only) a skill key read from a stream -> its row: the record of that key
+                                     // (its +kOffSkillKey compared) gives its row
+U64 kOffCompSkill = 0xf0;            // actor component -> the skill component (the character's buffs)
+U64 kOffSkillBuffs = 0x58;           // skill component: its active buffs (an array of kOffSkillBuffSize-byte records)
+U64 kOffSkillBuffCount = 0x60;       // skill component: u32 the number of active buffs
+U64 kOffSkillBuffSize = 0x150;       // an active buff's size
+U64 kOffBuffSkill = 0xe8;            // active buff: u16 its skill's row (0xFFFF: none - an item's buff)
+U64 kOffSkillKey = 0x4;              // skill record: u32 its key (skill.staticinfo's)
 
 } // namespace om

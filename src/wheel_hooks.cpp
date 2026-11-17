@@ -472,11 +472,11 @@ void pump(U64 self)
             center_for_focus(self, focused_script(self), true);
         } else if (press && mode == kModeSettings && o <= g_outfits.size()) cfg_enter(self, o); // (the "+" slot: the plugin's)
         else if (press && mode == kModeRelease) { // (the "+" slot's Unequip Outfit, #21; none applied: nothing to do)
-            if (anchor_outfit() >= 0) release_outfit(self);
+            if (anchor_outfit() >= 0) swim_player_load(-1), release_outfit(self);
             refresh_wheel(self);
             center_for_focus(self, focused_script(self), true);
         } else if (press && o == g_outfits.size()) save_new_outfit(self);
-        else if (press && o < g_outfits.size()) start_loading(self, o), refresh_wheel(self);
+        else if (press && o < g_outfits.size()) swim_player_load(int(o)), start_loading(self, o), refresh_wheel(self);
     }
     // The worn armor can also change outside our loader (Armor tab, game events): rechecked when a model swaps (without
     // that hook: a few times a second).
