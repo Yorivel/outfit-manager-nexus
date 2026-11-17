@@ -132,6 +132,7 @@ std::string brief(const std::string& l) // (hairstyle, beard, hair colour: for t
 U16 g_follow_char = kNoCharacter;
 U64 g_follow_at = 0, g_follow_wait = 0;
 std::atomic<U64> g_barber_at{0};
+std::atomic<U32> g_barber_gen{0}; // (the load the confirmation came in: a load since = it was the login's, not the barber's)
 std::string g_barber_look; // (the change asked about; its outfit's name: g_barber_outfit)
 std::string g_barber_outfit;
 
@@ -286,9 +287,10 @@ U64 __fastcall ack_hook(U64 a, U64 b, U64 c, U64 d)
     t_own_apply = true; // (the barber's change: never swapped)
     const U64 r = g_ack_orig(a, b, c, d);
     t_own_apply = false;
-    // (the barber confirmed a change: sorted out once out of it. The same reply comes while a save loads - the game
-    // confirming the saved look - and that one is no barber visit: only one with the world up counts, 2026-11-17)
-    if (world_up()) g_barber_at = GetTickCount64();
+    // (the barber confirmed a change: sorted out once out of it. The same reply comes when a save loads - the game
+    // confirming the saved look as it logs into the save, just before the load itself - and that one is no barber
+    // visit: only one with the world up counts, and only if no load came after it (checked in charlook_tick), 2026-11-17)
+    if (world_up()) g_barber_gen = g_generation.load(), g_barber_at = GetTickCount64();
     else LOG("character look: the game confirmed the saved look while loading (not the barber)");
     return r;
 }
@@ -421,6 +423,10 @@ void charlook_tick()
         }
     }
     // (on the HUD frame again: out of the barber - its change sorted out, a moment later)
+    if (const U64 at = g_barber_at.load(); at && g_barber_gen.load() != g_generation.load()) {
+        g_barber_at = 0;
+        LOG("character look: the game confirmed the saved look as a save loaded (not the barber)");
+    }
     if (const U64 at = g_barber_at.load(); at && now - at > 800 && !look_changing()) {
         g_barber_at = 0;
         U64 ctx[4] = {};
