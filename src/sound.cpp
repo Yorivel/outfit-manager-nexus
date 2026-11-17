@@ -94,15 +94,7 @@ bool muted(U32 id, U64 go)
         if (id == kEvShield) return g_shield_hidden.load();
         if (id == kEvPlateShoe) return g_boots_hidden.load();
     } else if (go == kUiObj) {
-        if (id == kEvEquipA || id == kEvEquipB) {
-            const bool mute = g_async.active || GetTickCount64() - g_async.started < 500;
-            // DIAG (equip-sound, 2026-11-17; remove): is each muted sound posted inside OM's own call (then the call is
-            // the event and the 500 ms can go), or later (the server's reply)?
-            LOG("DIAG equip-sound: %08X %s OM's call (thread %lu), outfit steps %s, +%llu ms since they began: %s", id,
-                in_om_item_call() ? "inside" : "outside", GetCurrentThreadId(), g_async.active ? "running" : "done",
-                GetTickCount64() - g_async.started, mute ? "muted" : "played");
-            return mute;
-        }
+        if (id == kEvEquipA || id == kEvEquipB) return g_async.active || GetTickCount64() - g_async.started < 500;
     }
     return false;
 }

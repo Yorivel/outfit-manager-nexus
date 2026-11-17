@@ -17,6 +17,5 @@ void finish_load(U64 self, AskedLoad& p);
 void start_loading(U64 self, U32 index);
 void pump_async(U64 self);
 void prepare_outfits();
-bool in_om_item_call(); // DIAG (equip-sound, 2026-11-17; remove): inside one of OM's own equip / unequip calls
 
 } // namespace om

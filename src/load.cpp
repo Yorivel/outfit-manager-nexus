@@ -100,23 +100,15 @@ std::string fault_text()
     return s;
 }
 
-// DIAG (equip-sound, 2026-11-17; remove): OM's own equip / unequip calls, tagged on their thread - to tell the UI equip
-// sounds they cause from the player's own (sound.cpp mutes them for 500 ms after an outfit change starts).
-thread_local bool t_om_item_call = false;
-bool in_om_item_call() { return t_om_item_call; }
-
 int call_unequip(U64 inv, U16 slot)
 {
     int err = kFault;
     if (!g_unequip) return err;
-    const bool tag = t_om_item_call;
-    t_om_item_call = true;
     __try {
         g_unequip(inv, &err, static_cast<short>(slot));
     } __except (note_fault(GetExceptionInformation())) {
         err = kFault;
     }
-    t_om_item_call = tag;
     return err;
 }
 CompanionEquipFn g_companion_equip_orig = nullptr;
@@ -138,8 +130,6 @@ int call_equip_request_raw(U64 actor, U64 item, short pos, U16 slot)
     int err = kFault;
     if (!g_equip_request) return err;
     alignas(16) unsigned char copy[0xd0];
-    const bool tag = t_om_item_call;
-    t_om_item_call = true;
     __try {
         std::memcpy(copy, reinterpret_cast<const void*>(item), 200);
         *reinterpret_cast<U16*>(copy + 0xc8) = 0xFFFF;
@@ -148,7 +138,6 @@ int call_equip_request_raw(U64 actor, U64 item, short pos, U16 slot)
     } __except (note_fault(GetExceptionInformation())) {
         err = kFault;
     }
-    t_om_item_call = tag;
     return err;
 }
 
@@ -166,14 +155,11 @@ int call_unequip_request(U64 actor, U16 slot)
 {
     int err = kFault;
     if (!g_unequip_request) return err;
-    const bool tag = t_om_item_call;
-    t_om_item_call = true;
     __try {
         g_unequip_request(actor, &err, static_cast<short>(slot));
     } __except (note_fault(GetExceptionInformation())) {
         err = kFault;
     }
-    t_om_item_call = tag;
     return err;
 }
 
@@ -181,14 +167,11 @@ int call_equip(U64 inv, U16 bag, short pos, U16 slot)
 {
     int err = kFault;
     if (!g_equip) return err;
-    const bool tag = t_om_item_call;
-    t_om_item_call = true;
     __try {
         g_equip(inv, &err, bag, pos, static_cast<short>(slot), 0);
     } __except (note_fault(GetExceptionInformation())) {
         err = kFault;
     }
-    t_om_item_call = tag;
     return err;
 }
 
