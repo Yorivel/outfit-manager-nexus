@@ -109,22 +109,23 @@ void post()
     if (HWND w = g_game_hwnd.load()) PostMessageW(w, kWmSleep, 0, 0); // (now, not at the next HUD frame)
 }
 
-// In bed: the sleepwear starts going on (its effect's glow rises first). A sleep the game refuses shows right after:
-// the character back in his plain idle (kPlayerIdle) while in bed, before the sleep itself began - about 0.1 s in
-// (states logged for both, 2026-11-17: refused 662EC8AD at +94 ms; accepted: nothing until ing_02 E2B2EE2F at +13.9 s,
-// idle only when getting up). The refusal calls the pending load off while the glow still rises, so a refused sleep
-// changes nothing (user: the game's refusal must not swap; getting into bed still does).
+// In bed: the sleepwear goes on once the game accepts the bed. Its stage chart gives the verdict within about 0.1 s of
+// getting in (2026-11-17: accepted SLEEP_PET_START at +93 ms, refused SLEEP_NEGATIVE_COOLTIME at +78 ms), before the
+// outfit effect would show - so a refused bed plays nothing (#49; user: the game's refusal must not swap; getting into
+// bed still does). Without the stage branch hook (not found): the old way - the swap starts on getting in, and the
+// character back in his plain idle (kPlayerIdle) in bed before the sleep began calls the pending load off.
 std::atomic<bool> g_slept{false};   // (this bed's sleep has begun)
-std::atomic<bool> g_refused{false}; // (back to idle in bed before the sleep began: the game refused it)
-void into_bed(U64 ctx0, U64 ctx1, const char* why)
+std::atomic<bool> g_refused{false}; // (old way only: back to idle in bed before the sleep began)
+std::atomic<bool> g_accept_early{false}; // (the bed accepted before getting in was seen: taken by into_bed)
+void into_bed(U64 ctx0, U64 ctx1, const char* why, bool accepted = false)
 {
     if (!g_stage_end_orig) return; // (getting out couldn't be seen: no sleepwear - sleep_install)
     if (g_hook_asleep.exchange(true)) return;
     g_hook_ctx[0] = ctx0, g_hook_ctx[1] = ctx1, g_hook_since = GetTickCount64();
     g_slept = false, g_refused = false;
-    g_fell = true;
-    post();
-    LOG("sleep: into bed (%s; ctx %llX %llX)", why, ctx0, ctx1);
+    const bool now = accepted || !g_stage_branch_orig || g_accept_early.exchange(false);
+    if (now) g_fell = true, post();
+    LOG("sleep: into bed (%s; ctx %llX %llX)%s", why, ctx0, ctx1, now ? "" : "; the sleepwear waits for the bed's verdict");
 }
 void sleep_began(U32 state)
 {
@@ -156,6 +157,7 @@ void bed_chart_ended(U64 proc, U64 type)
 {
     const U64 now = GetTickCount64();
     const U32 last = g_bed_state.exchange(0);
+    g_accept_early = false; // (a verdict belongs to its own bed)
     // DIAG (bed-stage, 2026-11-17; remove): which processor ends the bed's chart (client / server copy), how
     LOG("DIAG bed-stage: a bed's stage chart ends (type %u; processor %llX, vtable +%llX; %s)", unsigned(type & 0xFF), proc,
         rp(proc) ? rp(proc) - g_base : 0, g_hook_asleep.load() ? "in bed" : "not in bed");
@@ -178,15 +180,25 @@ U64 __fastcall stage_end_hook(U64 proc, U64 type, U64 a3, U64 a4)
     return g_stage_end_orig(proc, type, a3, a4);
 }
 
-// A stage chart went to the state `to` (the server's branch to a named state): a bed's SLEEP_* states are logged - the
-// hours menu (accepted) or SLEEP_NEGATIVE* (refused), and when (#49). Log only: nothing changes on it.
+// A stage chart went to the state `to` (the server's branch to a named state): a bed's SLEEP_* states. The first one
+// past SLEEP_IDLE is the game's verdict: SLEEP_NEGATIVE* refused (nothing changes), any other (SLEEP_START,
+// SLEEP_PET_START, ...) accepted - the sleepwear goes on.
 void bed_chart_branched(U64 proc, U32 to)
 {
     const std::string n = class_name(to);
     if (n.rfind("SLEEP_", 0) != 0 || !is_bed_chart(proc)) return;
-    g_bed_state = to;
-    if (g_hook_asleep.load()) LOG("sleep: the bed's stage: %s (%llu ms in bed)", n.c_str(), GetTickCount64() - g_hook_since.load());
+    const U32 before = g_bed_state.exchange(to);
+    const bool in_bed = g_hook_asleep.load();
+    if (in_bed) LOG("sleep: the bed's stage: %s (%llu ms in bed)", n.c_str(), GetTickCount64() - g_hook_since.load());
     else LOG("sleep: the bed's stage: %s (before getting into bed was seen)", n.c_str());
+    const bool verdict = n != "SLEEP_IDLE" && (!before || class_name(before) == "SLEEP_IDLE");
+    if (!verdict) return;
+    if (n.rfind("SLEEP_NEGATIVE", 0) == 0) {
+        LOG("sleep: the game refused the bed: nothing changes");
+        return;
+    }
+    if (in_bed) g_fell = true, post();
+    else g_accept_early = true;
 }
 
 U64 __fastcall stage_branch_hook(U64 proc, U64 a2, U64 a3, U64 a4, const U32* name, U64 a6, U64 a7, U64 a8, U64 a9, U64 a10)
@@ -230,7 +242,7 @@ U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64
                     target, now - g_out_at.load());
             }
         }
-        if (target == kPlayerIdle && g_hook_asleep.load() && !g_slept.load() &&
+        if (!g_stage_branch_orig && target == kPlayerIdle && g_hook_asleep.load() && !g_slept.load() && // (old way)
             (ctx == g_hook_ctx[0].load() || ctx == g_hook_ctx[1].load()) && !g_refused.exchange(true)) {
             post(); // (the game refused the sleep: sleep_tick calls the sleepwear off)
             LOG("sleep: back to idle in bed before the sleep began (the game refused it, or the player got up)");
@@ -241,7 +253,7 @@ U32* __fastcall eval_hook(U64 ctx, U32* out, U64 a3, U64 a4, U64 a5, U64 a6, U64
             g_step_at = now;
         }
         if (std::find(std::begin(kSleepStart), std::end(kSleepStart), target) != std::end(kSleepStart)) {
-            into_bed(ctx, 0, "the sleep itself"); // (no bed seen getting in: in bed now)
+            into_bed(ctx, 0, "the sleep itself", true); // (no bed seen getting in: in bed now, and asleep)
             sleep_began(target);
             if (g_hook_ctx[0].load() != ctx && !g_hook_ctx[1].load()) g_hook_ctx[1] = ctx;
         } else if (g_hook_asleep.load() && (ctx == g_hook_ctx[0].load() || ctx == g_hook_ctx[1].load()) &&
