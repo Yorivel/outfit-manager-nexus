@@ -35,8 +35,8 @@
 // the water, and what he wore before comes back once he is dry again - both the game's own state, nothing timed:
 // - in the water: his lower body's action chart layer in one of the swim / underwater charts' states (swim_states.inc),
 //   seen at the branch evaluator (the same hook as flight; his own chart: its actor's id is the played character's);
-// - wet: the game's wet state skills' buffs on him (Passive_Wetness, Passive_UnderWater, Active_Wetness - the last one
-//   holds for a while after he leaves the water or the rain: its end is the game's drying), read from his skill
+// - wet: the game's wet state's buffs on him (the buff info BuffLevel_WetNess: touching water, under it, a while after
+//   he leaves the water or the rain - that one's end is the game's drying; or the wet state skills' buffs), read from his skill
 //   component's active buffs each HUD frame (player_wet). The swim begins in the water once he is wet (so a wetness
 //   that can't be read never starts one: never stuck in swimwear), and ends out of the water once he is dry.
 // Hopping in and out while still wet changes nothing. Combat and Sleeping win over it: a fight or a bed begun while he
@@ -421,14 +421,19 @@ void drop_temp()
 }
 
 // --- Swimming: the game's wetness ---------------------------------------------------------------------------------
-// The wet state's skills (skill.staticinfo keys): Passive_UnderWater, Passive_Wetness, Active_Wetness.
+// A buff on him comes from a skill level (its +kOffBuffSkill: the skill's row) or straight from a buff info (its
+// +kOffBuffInfo: the buff info's row; then +0x134 is the buff's place in it) - the game's wetness came the second way
+// (2026-11-18: every buff on Kliff had no skill row, the buff info row set). The wet state: the buff info
+// BuffLevel_WetNess (buffinfo key 1000272: in / out of the water, the rain, the water jar's spray) or a buff of the wet
+// state's skills (skill.staticinfo keys Passive_UnderWater, Passive_Wetness, Active_Wetness).
+constexpr U32 kWetBuffInfo = 1000272;
 constexpr U32 kWetSkills[] = {30010, 89997, 89998};
-using SkillInfoFn = U64(__fastcall*)(const U16*);
+using StaticInfoFn = U64(__fastcall*)(const U16*);
 
-U64 skill_record(U16 row)
+U64 info_record(U64 getter_rva, U16 row)
 {
     __try {
-        return reinterpret_cast<SkillInfoFn>(g_base + kRvaSkillInfo)(&row);
+        return reinterpret_cast<StaticInfoFn>(g_base + getter_rva)(&row);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return 0;
     }
@@ -436,18 +441,29 @@ U64 skill_record(U16 row)
 
 U32 skill_key(U16 row) // (0: unreadable)
 {
-    const U64 rec = skill_record(row);
+    const U64 rec = info_record(kRvaSkillInfo, row);
     U32 key = 0;
     return plausible(rec) && rd(rec + kOffSkillKey, key) ? key : 0;
 }
 
-bool wet_skill(U16 row) // (a skill's row stays the same for the session: each looked up once)
+U32 buff_info_key(U16 row) // (0: unreadable)
 {
-    static std::unordered_map<U16, bool> known;
-    if (const auto k = known.find(row); k != known.end()) return k->second;
-    const U32 key = skill_key(row);
-    const bool wet = std::find(std::begin(kWetSkills), std::end(kWetSkills), key) != std::end(kWetSkills);
-    if (key) known[row] = wet;
+    const U64 rec = info_record(kRvaBuffInfo, row);
+    U32 key = 0;
+    return plausible(rec) && rd(rec + kOffBuffInfoKey, key) ? key : 0;
+}
+
+// Whether a buff's skill row (info false) or buff info row (info true) is the wet state's (a row stays the same for
+// the session: each looked up once).
+bool wet_row(U16 row, bool info)
+{
+    static std::unordered_map<U32, bool> known;
+    const U32 id = U32(row) | (info ? 0x10000u : 0u);
+    if (const auto k = known.find(id); k != known.end()) return k->second;
+    const U32 key = info ? buff_info_key(row) : skill_key(row);
+    const bool wet = info ? key == kWetBuffInfo
+                          : std::find(std::begin(kWetSkills), std::end(kWetSkills), key) != std::end(kWetSkills);
+    if (key) known[id] = wet;
     return wet;
 }
 
@@ -459,7 +475,7 @@ U64 skill_component(U64 actor)
     return sc && rd(sc, vt) && vt == g_base + kRvaSkillCompVt ? sc : 0;
 }
 
-// 1 wet (one of the wet state's skills has a buff on him), 0 dry, -1 unreadable.
+// 1 wet (a buff of the wet state on him), 0 dry, -1 unreadable.
 int player_wet(U64 actor)
 {
     const U64 sc = skill_component(actor);
@@ -468,14 +484,16 @@ int player_wet(U64 actor)
     const U32 n = r32(sc + kOffSkillBuffCount);
     if (n > 1024 || (n && !buffs)) return -1;
     for (U32 i = 0; i < n; ++i) {
-        U16 row = 0xFFFF;
-        if (!rd(buffs + i * kOffSkillBuffSize + kOffBuffSkill, row)) return -1;
-        if (row != 0xFFFF && wet_skill(row)) return 1;
+        const U64 b = buffs + i * kOffSkillBuffSize;
+        U16 info = 0xFFFF, row = 0xFFFF;
+        if (!rd(b + kOffBuffInfo, info) || !rd(b + kOffBuffSkill, row)) return -1;
+        if (info != 0xFFFF ? wet_row(info, true) : row != 0xFFFF && wet_row(row, false)) return 1;
     }
     return 0;
 }
 
-// DIAG: the played character's buffs whenever they change (skill row and key; +0x144 level, +0x130 serial)
+// DIAG: the played character's buffs whenever they change (buff info row / key and the buff's place in it +0x134, skill
+// row / key, +0x144 level, +0x130 serial)
 void diag_buffs(U64 actor) // DIAG
 { // DIAG
     const U64 sc = skill_component(actor); // DIAG
@@ -493,11 +511,12 @@ void diag_buffs(U64 actor) // DIAG
     std::string t; // DIAG
     for (U32 i = 0; buffs && i < n && i < 256; ++i) { // DIAG
         const U64 b = buffs + i * kOffSkillBuffSize; // DIAG
-        U16 row = 0xFFFF, alt = 0xFFFF; // DIAG
-        rd(b + kOffBuffSkill, row), rd(b + kOffBuffSkill + 2, alt); // DIAG
-        char x[96]; // DIAG
-        std::snprintf(x, sizeof x, " [row %u key %u lv %u serial %08X alt %u]", row, row != 0xFFFF ? skill_key(row) : 0, // DIAG
-                      r32(b + 0x144), r32(b + 0x130), alt); // DIAG
+        U16 row = 0xFFFF, info = 0xFFFF; // DIAG
+        rd(b + kOffBuffSkill, row), rd(b + kOffBuffInfo, info); // DIAG
+        char x[128]; // DIAG
+        std::snprintf(x, sizeof x, " [info %u key %u #%u | skill %u key %u lv %u | serial %08X]", info, // DIAG
+                      info != 0xFFFF ? buff_info_key(info) : 0, r32(b + 0x134), row, row != 0xFFFF ? skill_key(row) : 0, // DIAG
+                      r32(b + 0x144), r32(b + 0x130)); // DIAG
         t += x; // DIAG
     } // DIAG
     LOG("DIAG swim: %u buffs (component %llX):%s", n, sc, t.c_str()); // DIAG
@@ -605,9 +624,10 @@ void sleep_install()
         LOG("sleep: watching the action charts (evaluator +%llX)", kRvaBranchEval);
     }
     // Swimming: the water from the evaluator, the wetness from the skill component - without either, no swim starts
-    g_swim_ok = g_eval_orig && have({kRvaSkillCompVt, kRvaSkillInfo, kOffCompSkill, kOffSkillBuffs, kOffSkillBuffCount,
-                                     kOffSkillBuffSize, kOffBuffSkill, kOffSkillKey}) &&
-                kOffSkillBuffSize > kOffBuffSkill + 1;
+    g_swim_ok = g_eval_orig && have({kRvaSkillCompVt, kRvaSkillInfo, kRvaBuffInfo, kOffCompSkill, kOffSkillBuffs,
+                                     kOffSkillBuffCount, kOffSkillBuffSize, kOffBuffSkill, kOffSkillKey, kOffBuffInfo,
+                                     kOffBuffInfoKey}) &&
+                kOffSkillBuffSize > kOffBuffSkill + 1 && kOffSkillBuffSize > kOffBuffInfo + 1;
     LOG(g_swim_ok ? "swim: watching the water and the wetness (skill component +%llX)"
                   : "swim: the water or the wetness wasn't found; Swimming is off (+%llX)", kOffCompSkill);
     // a bed: its stage chart's verdict (in bed) and end (out of bed) - without both no sleepwear (nothing guessed)

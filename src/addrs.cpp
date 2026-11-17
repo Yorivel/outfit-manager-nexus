@@ -404,7 +404,7 @@ void resolve_addresses()
                            &kOffItemEquipType, &kOffEquipTypeHand, &kOffInvWeaponGroup,
                            // (what tells wet from dry: unsure = Swimming off, never stuck in swimwear - #54)
                            &kOffCompSkill, &kOffSkillBuffs, &kOffSkillBuffCount, &kOffSkillBuffSize, &kOffBuffSkill,
-                           &kOffSkillKey};
+                           &kOffSkillKey, &kOffBuffInfo, &kOffBuffInfoKey};
     for (std::size_t i = 0; i < kOffsetCount; ++i) {
         *kOffsetVars[i] = values[i];
         bool unsure = status[i] == resolver::OffsetStatus::Doubtful ||
@@ -621,6 +621,10 @@ U64 kOffInvWeaponGroup = 0xb0;       // inventory: int the weapon group in hand 
 // the character's skill component (actor +kOffActorComp -> +kOffCompSkill, ClientSkillActorComponent), which keeps his
 // active buffs at +kOffSkillBuffs (kOffSkillBuffSize bytes each, +kOffSkillBuffCount of them): a buff's +kOffBuffSkill is
 // its skill's row (u16; 0xFFFF none), kRvaSkillInfo(&row) that skill's record, the record's +kOffSkillKey its key.
+// A buff can also come straight from a buff info: then +kOffBuffInfo is that buff info's row (u16; 0xFFFF none) and the
+// skill row is 0xFFFF; kRvaBuffInfo(&row) the buff info's record, its +kOffBuffInfoKey the key (buffinfo's). The wetness
+// came that way (2026-11-18, in game: every buff on Kliff had a buff info row and no skill row) - the buff info
+// BuffLevel_WetNess (key 1000272), each of its buffs one wet state (touching water, under it, after the water, the rain).
 U64 kRvaSkillCompVt = 0x59d02f0;     // ClientSkillActorComponent (what +kOffCompSkill must hold)
 U64 kRvaSkillInfo = 0x3da9e0;        // (const u16* skill row) -> the skill's record; an unknown row: the default record - called
 U64 kRvaBuffApplyAckVt = 0x5a138d8;  // TrocTrApplyBuffAck (anchor for its slot)
@@ -637,5 +641,10 @@ U64 kOffSkillBuffCount = 0x60;       // skill component: u32 the number of activ
 U64 kOffSkillBuffSize = 0x150;       // an active buff's size
 U64 kOffBuffSkill = 0xe8;            // active buff: u16 its skill's row (0xFFFF: none - an item's buff)
 U64 kOffSkillKey = 0x4;              // skill record: u32 its key (skill.staticinfo's)
+U64 kRvaBuffInfo = 0x76a9f0;         // (const u16* buff info row) -> the buff info's record; an unknown row: the default - called
+U64 kRvaBuffRowOfKey = 0x1744250;    // (witness only) a buff info key read from a stream -> its row: the record of that
+                                     // key (its +kOffBuffInfoKey compared) gives its row
+U64 kOffBuffInfo = 0xea;             // active buff: u16 its buff info's row (0xFFFF: none - a skill's buff)
+U64 kOffBuffInfoKey = 0x4;           // buff info record: u32 its key (buffinfo.staticinfo's)
 
 } // namespace om
