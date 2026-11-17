@@ -5,6 +5,7 @@
 #include <intrin.h>
 #include "ui.h"
 #include "addrs.h"
+#include "items.h"
 #include "gear.h"
 #include "store.h"
 #include "looks_view.h"
@@ -41,6 +42,7 @@ struct PartLook { // (Visibility Extras: a part group of a piece, with its look)
 };
 std::map<U16, std::vector<PartLook>> g_part_looks; // character -> the worn outfit's part groups with a look (same lock)
 
+std::atomic<U32> g_in_use_slots{0}; // (slots whose working part is in use now: shown - look_pending)
 std::mutex g_appear_mu; // the maps below; one sync at a time (game thread, job threads, UI thread)
 std::map<U64, std::map<U16, int>> g_look_applied; // inventory -> slot -> the model handle our layer decides
 std::map<U64, bool> g_in_battle;                  // inventory -> the headgear switch's last in-battle flag
@@ -535,6 +537,22 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
         if (!underwear) {
             if (!e || !rd(e, uid) || !rd(e + 8, key)) { state += " empty"; continue; }
             if (key == 0xFFFF) { state += " empty"; continue; } // (a look belongs to the slot: whatever is there)
+            // (the game shows another item there than the one equipped - a visual item: the Visione it puts on for a
+            // memory over any helmet. That is the game's for the moment: not hidden, not kept off the presentation.
+            // Hidden as the helmet, it vanished, and its take-off afterwards took off nothing - Emophaze, 2026-11-17)
+            // (the item the game last put on there - its presentation change brings the Visione over the equipped helmet;
+            // the slot's record keeps the helmet, seen in play)
+            U16 shown_key = p.slot < 32 ? present_put_on(inv, p.slot) : U16(0xFFFF);
+            // (only the Visione, by its permanent id: other visual items - a transmog mod's - keep the slot's look)
+            if (shown_key != 0xFFFF && shown_key != key) {
+                if (pid_of(shown_key) == kPidVisionePropItem) {
+                    // (its "keep off" stays: the put-on filter lets the Visione through by its id, and the helmet the game puts
+                    // back as the memory ends stays off - no flash)
+                    state += " left to the game (it shows the Visione, item " + std::to_string(shown_key) + ")";
+                    continue;
+                }
+                state += " (shows item " + std::to_string(shown_key) + ", a visual item: its look applies)";
+            }
         }
         int h = underwear ? named_handle(model, "Underwear") : look_handle(inv, p.slot);
         if (!h) { state += " no model part"; continue; }
@@ -542,6 +560,8 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
         bool shown = p.look == kLookShown || (p.look == kLookCombat && in_battle) || (p.look == kLookPeace && !in_battle);
         bool case_shown = shown; // (a weapon's case: with its look, and while the weapon is drawn)
         bool drawn = false;
+        // (a working part in use - the Tech Gloves' arm out - shows like a lit lantern, in any slot; parts.cpp)
+        if (p.slot < 32 && inv == player_inventory() && ((g_in_use_slots.load() >> p.slot) & 1)) drawn = true;
         int ch_case = 0;
         std::vector<int> extras;
         bool armour_like = false;
@@ -737,7 +757,16 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
             // chest's Upperbody, the gloves' Hand, the boots' Foot share their names with the body's. Taken for the
             // piece, the slot was taken off a second time as a load ended: a blink on the loading screen, 2026-11-16)
             const U64 part = present_is_off(inv, p.slot) ? 0 : look_part(model, h);
-            const bool off = present_on() && !shown && !flying && sleep != 2;
+            // (a piece with a working part - the Tech Gloves' arm - is never taken off: hidden on our layer, the game's
+            // build untouched; one not checked yet stays on too, so the game builds it and parts.cpp can tell)
+            U16 ekey = 0xFFFF;
+            if (e) rd(e + 8, ekey);
+            int kind = ekey != 0xFFFF ? working_part_known(ekey) : 0;
+            if (kind < 0 && part && world_up() && !present_built_by_om(inv, p.slot) && !model_loading(model))
+                kind = working_part_check(inv, model, p.slot, ekey);
+            const bool keep = kind != 0;
+            if (keep && !shown) state += kind > 0 ? " (working part: on its layer only)" : " (not checked yet: on its layer)";
+            const bool off = present_on() && !shown && !flying && sleep != 2 && !keep;
             U64& asked = g_present_asked[{inv, p.slot}];
             present_want(inv, p.slot, off); // (from now on its put-on is left out: it never shows for a moment)
             if (off && part && asked != part) asked = part, present_request(inv, p.slot, true), state += " (taking it off)";
@@ -989,6 +1018,7 @@ float __fastcall equip_vis_check_hook(U64 vc, const U32* part, std::uint8_t* rec
 }
 ModelSwapFn g_model_swap_orig = nullptr;
 std::atomic<bool> g_worn_dirty{true}; // a model swapped (gear changed somewhere): the wheel rechecks what is worn
+std::atomic<bool> g_look_dirty_world{false}; // (the world just came up: the looks again, on the UI thread)
 std::atomic<bool> g_anchor_dirty{false}; // ... and, with the menu closed, the anchor (anchor_recheck)
 
 void __fastcall model_swap_hook(U64 job, U64 a, U64 b, char c, std::uint8_t* state)
@@ -1008,6 +1038,21 @@ void __fastcall model_swap_hook(U64 job, U64 a, U64 b, char c, std::uint8_t* sta
 // UI thread, every frame: the characters whose model was rebuilt.
 void look_pending()
 {
+    if (g_look_dirty_world.exchange(false)) look_refresh(); // (the world is up: unchecked pieces get their check)
+    { // (a working part in use - the Tech Gloves' arm out - or put away: its piece shows / its look decides again)
+        const U64 inv = player_inventory(), actor = inv ? rp(inv + 8) : 0, model = actor ? look_model(actor) : 0;
+        const U32 now = model ? working_parts_in_use(inv, model) : 0;
+        if (const U32 was = g_in_use_slots.exchange(now); was != now) {
+            for (U16 s = 0; s < 32; ++s)
+                if (((was ^ now) >> s) & 1)
+                    LOG("working parts: equipment-%u's working part %s", s, (now >> s) & 1 ? "is in use: shown" : "is put away: its look again");
+            look_refresh();
+        }
+    }
+    if (working_parts_dirty()) { // (a piece's working part found or ruled out: into the outfits file now)
+        std::lock_guard<std::mutex> lock(g_store_mu);
+        write_store_file();
+    }
     struct Todo {
         U64 inv;
         bool battle, swapped;
@@ -1291,8 +1336,13 @@ void bag_use_tick()
     shown = want;
 }
 
+std::atomic<U32> g_world_gen{~0u}; // (the load whose world is up: a HUD frame ran since it - parts.cpp's checks wait)
+bool world_up() { return g_world_gen.load() == g_generation.load(); }
 float __fastcall hud_frame_hook(U64 self)
 {
+    // (HUD frames only run in the world, never on a loading screen; the first one after a load syncs the looks, so the
+    // pieces left on for their working-part check get it now - parts.cpp)
+    if (const U32 gen = g_generation.load(); g_world_gen.exchange(gen) != gen) g_look_dirty_world = true;
     bag_use_tick();
     if (GetCurrentThreadId() == g_ui_thread) {
         if (g_stash_check.at) stash_verify(self);

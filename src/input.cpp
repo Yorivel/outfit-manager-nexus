@@ -96,14 +96,13 @@ bool game_focused()
     return pid == GetCurrentProcessId();
 }
 
-// Latches Space / Cross / A presses and left clicks (game window focused, menu open) for the UI thread (pump), and
-// follows the game's save files (poll_saves). The keys are only read while the menu is open.
+// Latches Space / Cross / A presses and left clicks (game window focused, menu open) for the UI thread (pump). The keys
+// are only read while the menu is open.
 DWORD WINAPI key_thread(LPVOID)
 {
     bool space = false, lmb = false, open = false;
     for (U32 tick = 0;; ++tick) {
         Sleep(15);
-        if (tick % 16 == 0) poll_saves();
         bool was_open = open;
         open = g_menu_open && !g_name_modal && !g_ask_modal; // not while a prompt is open (re-baselined afterwards)
         if (!open) continue;

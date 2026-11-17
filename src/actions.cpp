@@ -181,7 +181,6 @@ void open_clean_confirm(U64 self, int what)
     p.confirm = what;
     g_pending = std::move(p);
     g_ask_self = self;
-    g_ask_opened = GetTickCount64();
     rd(modal + kOffModalShown, g_ask_shown);
     g_ask_modal = modal;
     LOG("clean up question %d %llX open: %s", what, modal, msg.c_str());
@@ -209,7 +208,6 @@ void open_confirm(U64 self, U32 index, int what, U32 other)
     if (what == kConfirmSwap) p.other_name = g_outfits[other].name;
     g_pending = std::move(p);
     g_ask_self = self;
-    g_ask_opened = GetTickCount64();
     rd(modal + kOffModalShown, g_ask_shown);
     g_ask_modal = modal;
     LOG("confirm %d %llX open: %s", what, modal, msg.c_str());

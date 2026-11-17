@@ -308,7 +308,7 @@ void eye_scroll(U64 self, U32 i, int step)
         OutfitItem tmp{};
         const OutfitItem& it = *eye_item(pieces[k], tmp);
         LOG("appearance: \"%s\" equipment-%u %s%s -> look %u", o.name.c_str(), it.slot, (it.key != 0xFFFF ? item_name(it.key) : std::string("(empty)")).c_str(),
-            pieces[k] >= kExtraBase ? (" part " + g_extra_rows[pieces[k] - kExtraBase].group).c_str() : "", look);
+            is_extra_row(pieces[k]) ? (" part " + g_extra_rows[pieces[k] - kExtraBase].group).c_str() : "", look);
         save_outfits(); // (publishes the looks)
         look_refresh(); // (the worn outfit's pieces change at once)
         apply_outfit_slots(self, i);

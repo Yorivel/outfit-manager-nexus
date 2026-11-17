@@ -297,7 +297,6 @@ desc.visibility.extras = Выберите, как отображаются до�
 value.pieces = Части
 value.extras = Доп. детали
 extras.row = {look} ({item})
-extras.piece = Нажмите, чтобы выбрать, как отображаются её детали.
 extras.back = Назад к частям
 extras.back_desc = Назад к частям этой страницы.
 extras.none_here = На этой странице нет дополнительных деталей.

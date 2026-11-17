@@ -228,6 +228,20 @@ extern U64 kRvaMeshCollectNamed;
 extern U64 kRvaMeshColour;
 extern U64 kRvaMeshColourArg;
 extern U64 kRvaLookCtor, kRvaLookDtor, kRvaLookApply, kRvaCompStoreLook, kOffCompLook, kRvaBarberAckVt, kRvaBarberAck;
+// Visibility Extras' chain (parts.cpp) and the working-parts check
+extern U64 kRvaPartsBody, kRvaPrefabIds, kRvaPartsMapFind, kRvaPartsGlobal;
+extern U64 kOffInvActor, kOffPartsComp, kOffPartsBodyArg, kOffPartsBodyId, kOffEquipListEntries, kOffEquipListCount,
+    kOffEquipEntrySize, kOffEntryShownKey, kOffEntryKey, kOffPartsG, kOffPartsG1, kOffPartsG2, kOffPartsG3, kOffPartsMap,
+    kOffPrefabRecKey;
+extern U64 kRvaChestPartCheck, kRvaPartCast, kOffPartScene, kOffSceneInner, kOffSceneSkip, kOffSceneCastAdj, kOffCastTable;
+extern U64 kRvaPartUseTable, kOffArmEntry, kRvaPoseIKVt, kRvaPoseIKParams, kRvaPoseIKUpdate, kRvaPoseIKBind, kOffArmEnabled,
+    kOffArmUnbound, kOffArmInUse;
+// The game's save requests (saves.cpp)
+extern U64 kRvaSaveHandlerVt, kRvaSaveWrite, kRvaSaveDelete, kRvaSaveCommit, kRvaSaveLoadSlot, kOffSaveReqWrites, kOffSaveReqDeletes;
+// The end of a sequencer stage chart (sleep.cpp: out of bed)
+extern U64 kRvaStageProcVt, kRvaStageEnd, kRvaStageBranchApply, kRvaStageBranchByName, kOffStageProcChart,
+    kOffStageChartStates, kOffStageChartCount, kOffStageProcState, kOffStageBranches, kOffStageBranchCount,
+    kOffStageBranchTarget;
 void resolve_addresses();
 
 } // namespace om

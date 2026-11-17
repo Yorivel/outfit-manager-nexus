@@ -291,7 +291,6 @@ desc.visibility.extras = اختر كيف تظهر الأجزاء الإضافي�
 value.pieces = القطع
 value.extras = أجزاء إضافية
 extras.row = {look} ({item})
-extras.piece = انقر لاختيار كيف تظهر أجزاؤها.
 extras.back = العودة إلى القطع
 extras.back_desc = العودة إلى قطع هذه الصفحة.
 extras.none_here = لا توجد أجزاء إضافية في هذه الصفحة.

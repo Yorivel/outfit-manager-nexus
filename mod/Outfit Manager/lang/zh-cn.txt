@@ -280,7 +280,6 @@ desc.visibility.extras = 选择此套装各部位的额外部件如何显示：�
 value.pieces = 部位
 value.extras = 额外部件
 extras.row = {look}（{item}）
-extras.piece = 点击以选择其部件的显示方式。
 extras.back = 返回部位
 extras.back_desc = 返回此页的部位。
 extras.none_here = 此页没有额外部件。

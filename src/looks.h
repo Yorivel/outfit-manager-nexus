@@ -64,6 +64,9 @@ void present_request(U64 inv, U16 slot, bool take_off);
 void present_game_thread();
 void present_seen(U64 inv, U16 slot);
 bool present_is_off(U64 inv, U16 slot);
+bool present_built_by_om(U64 inv, U16 slot);
+U16 present_put_on(U64 inv, U16 slot); // (the item the game last put on there: 0xFFFF none seen)
+bool world_up(); // (a HUD frame since the last load: the character is in the world, not on a loading screen)
 void present_want(U64 inv, U16 slot, bool off); // (present.cpp: a look wants the slot off: its put-on is left out)
 void present_want_only(U64 inv, U32 slots);
 void present_install();

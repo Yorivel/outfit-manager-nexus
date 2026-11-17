@@ -4,6 +4,7 @@
 #include "items.h"
 #include "gear.h"
 #include "looks.h"
+#include "parts.h"
 #include "prompts.h"
 #include "actions.h"
 #include "settings.h"
@@ -183,6 +184,10 @@ bool write_store_file()
         std::string ks;
         for (U16 k : g_keep_slots) ks += (ks.empty() ? "" : " ") + std::to_string(k);
         put(out, "keepslots\t%s\n", ks.c_str());
+        // (pieces checked for a working part in the world, by permanent id: never taken off / may be taken off - parts.cpp;
+        // "workingparts" / "plainparts" were checked too early - on a loading screen - and are ignored)
+        put(out, "workingpieces\t%s\n", working_parts_line(true).c_str());
+        put(out, "plainpieces\t%s\n", working_parts_line(false).c_str());
     }
     put(out, "setting\tstash\t%d\nsetting\tcompanions\t%d\nsetting\tmessages\t%d\n", g_stash ? 1 : 0,
         g_take_from_companions ? 1 : 0, g_messages ? 1 : 0);
@@ -352,7 +357,7 @@ void load_outfits()
                 if (skipping) continue;
             } else if (v[0] == "character" || v[0] == "save" || v[0] == "pending") {
                 skipping = false;
-            } else if (skipping && v[0] != "setting" && v[0] != "keepslots" && v[0] != "placeholders" && v[0] != "placeholderids" && v[0] != "version") {
+            } else if (skipping && v[0] != "setting" && v[0] != "keepslots" && v[0] != "workingpieces" && v[0] != "plainpieces" && v[0] != "placeholders" && v[0] != "placeholderids" && v[0] != "version") {
                 continue;
             }
             std::vector<Outfit>& list = cur->outfits;
@@ -380,6 +385,8 @@ void load_outfits()
                 char* e = nullptr;
                 for (unsigned long k = std::strtoul(q, &e, 10); e != q; k = std::strtoul(q = e, &e, 10))
                     if (k < 0xFFFF) g_keep_slots.insert(U16(k));
+            } else if ((v[0] == "workingpieces" || v[0] == "plainpieces") && v.size() >= 2) { // (parts.cpp)
+                working_parts_read(v[1], v[0] == "workingpieces");
             } else if (v[0] == "placeholderids" && v.size() >= 2) { // (turned into keys at the first menu open)
                 std::istringstream ids(v[1]);
                 for (std::string one; ids >> one;) g_placeholder_ids.push_back(static_cast<U32>(std::strtoul(one.c_str(), nullptr, 16)));

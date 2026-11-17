@@ -283,7 +283,6 @@ desc.visibility.extras = Choisissez comment s'affichent les parties en plus des 
 value.pieces = Pièces
 value.extras = Parties en plus
 extras.row = {look} ({item})
-extras.piece = Cliquez pour choisir comment ses parties s'affichent.
 extras.back = Retour aux pièces
 extras.back_desc = Retour aux pièces de cette page.
 extras.none_here = Aucune partie en plus sur cette page.

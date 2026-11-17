@@ -132,6 +132,7 @@ std::string brief(const std::string& l) // (hairstyle, beard, hair colour: for t
 U16 g_follow_char = kNoCharacter;
 U64 g_follow_at = 0, g_follow_wait = 0;
 std::atomic<U64> g_barber_at{0};
+std::atomic<U32> g_barber_gen{0}; // (the load the confirmation came in: a load since = it was the login's, not the barber's)
 std::string g_barber_look; // (the change asked about; its outfit's name: g_barber_outfit)
 std::string g_barber_outfit;
 
@@ -202,7 +203,9 @@ void barber_done(U64 actor, U16 character)
     }
     {
         std::lock_guard<std::mutex> lock(g_store_mu);
-        store_for(character).look_base = live;
+        std::string& base = store_for(character).look_base;
+        if (base == live) return; // (nothing changed: the reply was for another character - it comes for NPCs too)
+        base = live;
     }
     LOG("character look: the barber's change is the character's own look (%s)", brief(live).c_str());
     save_outfits();
@@ -223,7 +226,7 @@ U64 apply_body()
     return U64(std::int64_t(kRvaLookApply) + 5 + rel);
 }
 ApplyFn g_apply_orig = nullptr;
-std::atomic<U64> g_swap_until{0};
+std::atomic<bool> g_swap_armed{false}; // (a load since the last swap: its loading-screen build gets OM's look)
 std::atomic<U32> g_swap_gen{0xFFFFFFFF};
 
 // The look a loaded save wants for a character: its applied outfit's snapshot, else its No Outfit look ("" unknown).
@@ -247,16 +250,18 @@ std::string load_want(U16 character, bool* busy = nullptr)
 
 U32* __fastcall apply_hook(U64 comp, U32* result, GameLook* look, U64 zero)
 {
-    const U64 now = GetTickCount64();
-    if (const U32 gen = g_generation.load(); gen != g_swap_gen.load()) g_swap_gen = gen, g_swap_until = now + 90000;
-    if (t_own_apply || now > g_swap_until.load() || (g_ui_thread && GetCurrentThreadId() != g_ui_thread) || !look)
+    // (only the loading screen's build: from a load until the world is up - HUD frames only run in the world. It was a
+    // 90 s window: the barber's own apply a minute after a save + reload fell into it, OM put its stored look back and
+    // read that back as the barber's change - hairstyles and makeup never stuck, 2026-11-17, berzeker89 / MalteDEV583)
+    if (const U32 gen = g_generation.load(); gen != g_swap_gen.load()) g_swap_gen = gen, g_swap_armed = true;
+    if (t_own_apply || !g_swap_armed.load() || world_up() || (g_ui_thread && GetCurrentThreadId() != g_ui_thread) || !look)
         return g_apply_orig(comp, result, look, zero);
     U64 ctx[4] = {};
     const U64 actor = acquire_player(ctx);
     const U16 ch = actor && look_component(actor) == comp ? character_of(actor) : kNoCharacter;
     if (ctx[0]) release_player(ctx);
     if (ch == kNoCharacter) return g_apply_orig(comp, result, look, zero);
-    g_swap_until = 0; // (the played character's build after the load: once)
+    g_swap_armed = false; // (the played character's build after the load: once)
     const std::string want = load_want(ch);
     if (want.size() != kLookBytes || look->mesh.n != kMeshCount || look->values.n != kValueCount || !look->mesh.p ||
         !look->values.p)
@@ -284,7 +289,12 @@ U64 __fastcall ack_hook(U64 a, U64 b, U64 c, U64 d)
     t_own_apply = true; // (the barber's change: never swapped)
     const U64 r = g_ack_orig(a, b, c, d);
     t_own_apply = false;
-    g_barber_at = GetTickCount64(); // (the barber confirmed a change: sorted out once out of it)
+    // (the barber confirmed a change: sorted out once out of it. The same reply comes when a save loads - the game
+    // confirming the saved look as it logs into the save, just before the load itself - and that one is no barber
+    // visit: only one with the world up counts, and only if no load came after it (checked in charlook_tick), 2026-11-17)
+    if (world_up()) g_barber_gen = g_generation.load(), g_barber_at = GetTickCount64();
+    else if (static std::atomic<U32> said{0xFFFFFFFF}; said.exchange(g_generation.load()) != g_generation.load())
+        LOG("character look: the game confirmed the saved looks while loading (not the barber; it does so for every character)");
     return r;
 }
 
@@ -416,6 +426,10 @@ void charlook_tick()
         }
     }
     // (on the HUD frame again: out of the barber - its change sorted out, a moment later)
+    if (const U64 at = g_barber_at.load(); at && g_barber_gen.load() != g_generation.load()) {
+        g_barber_at = 0;
+        LOG("character look: the game confirmed the saved look as a save loaded (not the barber)");
+    }
     if (const U64 at = g_barber_at.load(); at && now - at > 800 && !look_changing()) {
         g_barber_at = 0;
         U64 ctx[4] = {};

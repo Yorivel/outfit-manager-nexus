@@ -201,7 +201,7 @@ void center_for_focus(U64 self, U64 script, bool hide_otherwise)
                 g_center_name = part_label(g_extra_rows[pieces[k] - kExtraBase].group);
                 g_center_desc = lang::f("extras.row", {{"look", g_center_desc}, {"item", nm}});
             } else if (is_extra_piece(pieces[k])) {
-                g_center_desc = lang::t("extras.piece");
+                g_center_desc.clear(); // (its name only: the click prompt on the slot says what a click does, #48)
             }
             if (pieces[k] == kHelmetSlot) // (the helmet key overrides it: say so, #34)
                 if (const std::uint8_t pin = helmet_pin(g_character))

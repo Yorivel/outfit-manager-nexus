@@ -386,7 +386,20 @@ void resolve_addresses()
                            // (not written, but what the game plays and shows follows them: off rather than wrong)
                            &kOffCompLantern, &kOffLanternLit, &kOffCompEffects, &kOffEffectsSound, &kOffSoundHandle,
                            &kOffHandleObject, &kOffContactBody, &kOffEventId, &kOffEventAlt, &kOffCompModel, &kOffModelScenes,
-                           &kOffSwitchEvent, &kOffHolderGimmick, &kOffGimmickParent, &kOffSceneObjPart};
+                           &kOffSwitchEvent, &kOffHolderGimmick, &kOffGimmickParent, &kOffSceneObjPart,
+                           // (Visibility Extras calls game functions with them; their witnesses also hold the call shapes)
+                           &kOffInvActor, &kOffPartsComp, &kOffPartsBodyArg, &kOffPartsBodyId, &kOffEquipListEntries,
+                           &kOffEquipListCount, &kOffEquipEntrySize, &kOffEntryShownKey, &kOffEntryKey, &kOffPartsG,
+                           &kOffPartsG1, &kOffPartsG2, &kOffPartsG3, &kOffPartsMap, &kOffPrefabRecKey,
+                           // (the working-parts check calls the cast on what they reach)
+                           &kOffPartScene, &kOffSceneInner, &kOffSceneSkip, &kOffSceneCastAdj, &kOffCastTable,
+                           // (what shows a hidden piece while its working part is in use)
+                           &kOffArmEntry, &kOffArmEnabled, &kOffArmUnbound, &kOffArmInUse,
+                           // (what tells a load from a save write: unsure = loads told the old way)
+                           &kOffSaveReqWrites, &kOffSaveReqDeletes,
+                           // (what tells the end of a bed's stage chart: unsure = sleepwear off, never stuck on)
+                           &kOffStageProcChart, &kOffStageChartStates, &kOffStageChartCount, &kOffStageProcState,
+                           &kOffStageBranches, &kOffStageBranchCount, &kOffStageBranchTarget};
     for (std::size_t i = 0; i < kOffsetCount; ++i) {
         *kOffsetVars[i] = values[i];
         bool unsure = status[i] == resolver::OffsetStatus::Doubtful ||
@@ -482,5 +495,100 @@ U64 kRvaCompStoreLook = 0x1932f80;   // (component, look*): the component keeps 
 U64 kOffCompLook = 0x3b0;            // the actor's look component (+kOffActorComp -> +0x20) -> its look record
 U64 kRvaBarberAckVt = 0x5a170b8;     // TrocTrCharacterCustomizationAck
 U64 kRvaBarberAck = 0xcba740;        // (its slot 2: the barber's reply, applies the confirmed look - hooked)
+
+// Visibility Extras (parts.cpp; game 2.05): the model parts a worn piece brings, asked for as kRvaSlotHandle does. Its
+// own code is the witness of every offset below, at the instruction that uses it (the call shapes come with it: on
+// 2.04 the body getter took a u16 by value, on 1.0.0 the body id sat at +0 - their witnesses don't match there, and
+// parts.cpp stays off). The item info and the prefab record are kRvaItemInfo / kRvaStringInfoGet (same functions).
+U64 kRvaPartsBody = 0x3db330;        // (character's component +kOffPartsComp, +kOffPartsBodyArg) -> body: u32 id +kOffPartsBodyId
+U64 kRvaPrefabIds = 0x267ab70;       // (item info, u32 body id, u32 slot, {0, {u16* ids, u32 count}*}*): the item's prefab ids
+U64 kRvaPartsMapFind = 0x45f300;     // (map, key*) -> node: -> {u32 handle, u32}[] entries, u32 count (the parts' handles)
+U64 kRvaPartsGlobal = 0x72451c0;     // -> G: [[[G+kOffPartsG]+kOffPartsG1]+kOffPartsG2]+kOffPartsG3 + kOffPartsMap = the map
+U64 kOffInvActor = 0x8;              // inventory (equip component) -> its actor
+U64 kOffPartsComp = 0x20;            // actor component (+kOffActorComp) -> the one the body getter takes
+U64 kOffPartsBodyArg = 0x30;         // ... + this is the body getter's argument
+U64 kOffPartsBodyId = 0x8;           // body -> u32 its id (the prefab ids' argument)
+U64 kOffEquipListEntries = 0x8;      // equipment list (inventory +kOffInvEquipList) -> entries (kOffEquipEntrySize each)
+U64 kOffEquipListCount = 0x10;       // equipment list: u32 entry count
+U64 kOffEquipEntrySize = 0xd0;       // equipment entry size (the u16 slot at +kOffEntrySlot)
+U64 kOffEntryShownKey = 0x90;        // equipment entry: u16 the shown item's key (0xFFFF: the equipped one's)
+U64 kOffEntryKey = 0x8;              // equipment entry: u16 the equipped item's key (0xFFFF: empty)
+U64 kOffPartsG = 0xd8;               // G -> x
+U64 kOffPartsG1 = 0x8;               // x -> y
+U64 kOffPartsG2 = 0x2c0;             // y -> z
+U64 kOffPartsG3 = 0x40068;           // z -> the map's holder (the map at +kOffPartsMap)
+U64 kOffPartsMap = 0x50;
+U64 kOffPrefabRecKey = 0x10;         // prefab record (kRvaStringInfoGet) + this = the map's key
+
+// Working parts (2026-11-16, the Tech Gloves crash; wired in parts.cpp by its own change): the chest path's check in
+// kRvaChestPartCheck (+0x135 on 2.05): part +kOffPartScene -> +kOffSceneInner = q; q's u8 +kOffSceneSkip == 0, then
+// kRvaPartCast(q - kOffSceneCastAdj) -> object, its table +kOffCastTable (then +3BBF420: (table, 27)). The function is
+// plain code on disk (only .data1 holds code the game unpacks); its offsets are witnessed there, at their instructions.
+U64 kRvaChestPartCheck = 0x3044690;  // (witness only) the function holding the check
+U64 kRvaPartCast = 0x5b4f60;         // (object) -> the object if it is of the type the chest path wants, else 0
+U64 kOffPartScene = 0x28;            // part -> a
+U64 kOffSceneInner = 0x8;            // a -> q
+U64 kOffSceneSkip = 0x15;            // q: u8, nonzero = the chest path skips it
+U64 kOffSceneCastAdj = 0x28;         // the cast takes q - this (the code adds -0x28; its witness reads it negated)
+U64 kOffCastTable = 0x228;           // cast object -> the table (null: the part has no working component)
+
+// The working part in use (2026-11-17, the Tech Gloves' arm out): the table's entry the chest path asks for is a
+// pa::engineScript::PoseModifierManipulatorIK (the arm's IK). Its constructor sets +kOffArmUnbound = 1 (+kOffArmInUse 0).
+// The chest path hands it its parameters (vtable slot 87: target +74, the enabled u8 +kOffArmEnabled, blend-out time
+// +50). Its update (slot 90): +kOffArmUnbound == 1 -> looks its bones up (kRvaPoseIKBind, which sets it to 0); then, if
+// enabled, runs the IK and sets +kOffArmInUse = 1; if not, at +kOffArmInUse 0 it does nothing (weights reset), at 1 it
+// blends out (+58 += 2*dt up to +50) and then sets it back to 0. Only 0 and 1 are written to all three.
+U64 kRvaPartUseTable = 0x3bbf420;    // (witness only) what the chest path hands the table to: (table, kOffArmEntry, ...)
+U64 kOffArmEntry = 0x1b;             // the table's entry (an index, not a byte offset) the chest path asks for: the arm's IK
+                                     // (26 on 1.0.0.2976; read from "mov edx, N; call" in kRvaPartUseTable)
+U64 kRvaPoseIKVt = 0x5b155c8;        // pa::engineScript::PoseModifierManipulatorIK (anchor for its slots)
+U64 kRvaPoseIKParams = 0x1351f00;    // (witness only) its slot 87: takes the parameters (writes +kOffArmEnabled)
+U64 kRvaPoseIKUpdate = 0x1352890;    // (witness only) its slot 90: the update (reads all three, keeps +kOffArmInUse)
+U64 kRvaPoseIKBind = 0x1351f70;      // (witness only) the update's bone lookup (clears +kOffArmUnbound)
+U64 kOffArmEnabled = 0x80;           // IK: u8, 1 while the chest path has it on (set on every use)
+U64 kOffArmUnbound = 0x81;           // IK: u8, 1 from its construction until its first update (bones not looked up yet)
+U64 kOffArmInUse = 0x82;             // IK: u8, 1 once the update has posed the arm, until it has blended out; 0 at rest
+
+// Saves (saves.cpp; game 2.05). pa::GamePlaySaveDataFileHandler (its _Steam class shares these slots): slot 4 reads a
+// request's saves ("Commit Load"), 5 writes them (copies the slot folder to slotN_backup, writes slotN_new, renames
+// that to slotN, deletes the backup), 6 deletes them, 7 reads every save (the start-up list).
+// The commit runs one request through 4, a check, 5 and 6, each skipping an empty list. The commit itself sits in the
+// game's protected code: the thunk to it is what the game calls (and what OM hooks). A request with nothing to write or
+// delete only reads: the game's load of a slot makes two (lobby.save, save.save), and so does its slot refresh for
+// every listed slot (the Load menu's list; also before a login) - so a load is told by the load function, not the request.
+U64 kRvaSaveHandlerVt = 0x5dbfcb0;   // pa::GamePlaySaveDataFileHandler (anchor for its slots)
+U64 kRvaSaveWrite = 0x25bc8c0;       // (witness only) its slot 5: writes the request's saves (tests +kOffSaveReqWrites)
+U64 kRvaSaveDelete = 0x25bd320;      // (witness only) its slot 6: deletes the request's saves (tests +kOffSaveReqDeletes)
+U64 kRvaSaveCommit = 0x25bac30;      // (thunk) (self, request*) -> bool: one save request - read, check, write, delete
+U64 kRvaSaveLoadSlot = 0x22951b0;    // (into, u32* result, handler, slot name, u32 slot) -> result: the game's load of a
+                                     // save slot into the game (its only caller is "Start Load SaveSlot"); *result 0 = loaded
+U64 kOffSaveReqWrites = 0x6b8;       // save request: u32 the number of saves to write (its list is at -8)
+U64 kOffSaveReqDeletes = 0x6c8;      // save request: u32 the number of saves to delete (its list is at -8)
+
+// Out of bed (sleep.cpp; game 2.05). A bed's scene (sequencer gimmickcalledseq/gimmick_sleep_bed_left / _right) runs
+// its stage chart (.pastage: SLEEP_IDLE -> SLEEP_START -> SLEEP_SELECT_UI, the hours menu -> SLEEP_nHOUR ->
+// SLEEP_COMPLETE, or SLEEP_CANCEL -> LEAVE, or SLEEP_NEGATIVE*; every one of them ends with Timeline.branch(Terminate)).
+// The stage chart processor's slot 1 ends it (processor, u8 end type): the Common and the Server processor have it as
+// is, the Client's slot 1 calls it first. The processor's +kOffStageProcChart is its chart: +kOffStageChartStates the
+// states (pointers), +kOffStageChartCount their number. +kOffStageProcState is the state it is in: +kOffStageBranches
+// that state's branches (pointers), +kOffStageBranchCount their number; a branch's +kOffStageBranchTarget the name of
+// the state it goes to (interned: kRvaClassNames). (A state's own name is its first u32 - offset 0, no resolver entry:
+// OM reads names from the branches only.) Until the second round of 2026-11-17 the current state was taken for the chart
+// (on a chart's end it holds one branch, Terminate: no bed was ever told).
+U64 kRvaStageProcVt = 0x5d40a38;     // pa::CommonSequencerStage_StageChartProcessor (anchor for its slot)
+U64 kRvaStageEnd = 0x226be60;        // its slot 1: a stage chart ends (processor, u8 type: 0 Terminate, 1 ForceTerminate,
+                                     // ...) - hooked (sleep.cpp: the bed's stage chart ending is getting out of bed)
+U64 kRvaStageBranchApply = 0xbe1b80; // (witness only) the client's branch of a stage chart to the server's state index
+                                     // (TrocTrStageOnBranchEventAck): current state, its branches, a branch's target
+U64 kRvaStageBranchByName = 0x226db80; // the server's branch of a stage chart to a named state: (processor, ..., u32* name
+                                     // 5th, ... 10 arguments); searches the chart's states for that name - hooked
+                                     // (sleep.cpp, log only: which state a bed's chart goes to, and when)
+U64 kOffStageProcChart = 0x18;       // stage chart processor: its chart
+U64 kOffStageChartStates = 0x10;     // stage chart: the states (array of pointers)
+U64 kOffStageChartCount = 0x18;      // stage chart: u32 the number of states
+U64 kOffStageProcState = 0x38;       // stage chart processor: the state it is in
+U64 kOffStageBranches = 0x8;         // stage chart state: its branches (array of pointers)
+U64 kOffStageBranchCount = 0x10;     // stage chart state: u32 the number of branches
+U64 kOffStageBranchTarget = 0x10;    // stage chart branch: u32 the name of the state it goes to (interned: kRvaClassNames)
 
 } // namespace om

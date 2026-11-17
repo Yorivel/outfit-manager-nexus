@@ -345,7 +345,9 @@ void apply_eye_slot(U64 self, U64 script, U64 root, U32 i, U32 visible, const st
     if (i < visible) show_mode_dots(script, mode_count(i), mode_lit(i));
     U64 badge = find_by_class(root, "quickslot-occupancy-icon-chain"), low = find_by_class(root, "cpp-icon-disable-item");
     // (Back and the page slot: the click prompt, as actions - the page slot's click opens the page its dots chose)
-    const char* want = it ? look_badge(it->look) : back || page ? prompt_class() : nullptr;
+    // (a slot a click acts on shows the click prompt: Back, the page slot, a piece with extra parts that opens them - #48)
+    const bool opens = back || page || (piece && is_extra_piece(pieces[k]));
+    const char* want = opens ? prompt_class() : it ? look_badge(it->look) : nullptr;
     g_badge_elem[i] = badge, g_badge_class[i] = want;
     bool ok = true;
     if (badge) {
