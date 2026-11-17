@@ -2,6 +2,10 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
+## Unreleased
+
+- Changed: a weapon set's badge now shows what kind of set it is, from the weapon its picture shows: crossed swords for melee, a bow for ranged weapons (bows, crossbows, guns, cannons), and an axe for tools (axes and pickaxes for gathering, saws, brooms, fishing rods, lanterns...). Still gold while the set is equipped and pulsing while it loads.
+
 ## 0.8.1 (2026-11-17)
 
 - Fix: viewing a memory with a hidden helmet now shows the Visione the game puts on for it, and its take-off afterwards takes off something you can see. Outfit Manager hid the Visione along with your helmet, since it sits in the helmet slot; while the game shows the Visione there, the slot is now left to the game. Other visual items (a transmog mod's) keep the slot's visibility. Thanks for the report, Emophaze!

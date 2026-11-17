@@ -275,7 +275,9 @@ using ItemInfoFn = RecordGetFn; // (key)
 const char* const kBadges[] = {"om-plus-big", "om-cog-big", "om-plus-c", "om-cog-c", "om-flag-c", "om-cold-c", "om-heat-c",
                                "om-cold2-c", "om-heat2-c", "om-eye-c", "om-look-shown-c", "om-look-hidden-c",
                                "om-look-combat-c", "om-look-peace-c", "om-return-c", "om-prompt-c", "om-cross-c",
-                               "om-abtn-c", "om-unequip-c", "om-wset-c", "om-wset-gold-c", "om-wset-busy-c",
+                               "om-abtn-c", "om-unequip-c", "om-wset-melee-c", "om-wset-melee-gold-c", "om-wset-melee-busy-c",
+                               "om-wset-ranged-c", "om-wset-ranged-gold-c", "om-wset-ranged-busy-c", "om-wset-tool-c",
+                               "om-wset-tool-gold-c", "om-wset-tool-busy-c",
                                "om-sleep-c", "om-combat-c", "om-lookmain-c"};
 // The game's slot refresh (after every equipment change) re-selects every slot's dots with its own count (0 for ours:
 // no items) and -1: the select is hooked, and for our slots' selectors it gets our count and mode instead, so the dots

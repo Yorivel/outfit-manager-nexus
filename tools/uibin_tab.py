@@ -34,7 +34,7 @@ CHILDREN = 7
 PARENT = struct.pack('<I', 28) + b'quickslot-tabbar-header-wrap' + bytes([1]) + struct.pack('<I', CHILDREN)
 FILES = ['ui/bin__/quickslotitem_game.uibinary', 'ui/bin__/quickslotitem_component_game.uibinary',
          'ui/bin__/itemquickslotview2_game.uibinary']
-MOD = 'F:/MyProjects/CDInventory/mod/Outfit Manager/files/0012'   # the mod's source (DMM's copy is an install)
+MOD = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'mod', 'Outfit Manager', 'files', '0012')  # (this repo's mod, the source since 0.5.0; CDInventory's copy is the old one)
 
 
 class Bad(Exception):

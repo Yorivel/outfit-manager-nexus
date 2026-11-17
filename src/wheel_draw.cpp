@@ -9,6 +9,7 @@
 #include "looks.h"
 #include "looks_view.h"
 #include "settings.h"
+#include <cctype>
 #include "wheel_hooks.h"
 #include "pads.h"
 #include "arc.h"
@@ -560,8 +561,8 @@ void apply_outfit_slots(U64 self, U32 only)
                            : mode == kModeSettings               ? "om-cog-c"
                            : mode == kModeAppearance             ? "om-eye-c"
                            : empty && g_outfit_count < kMaxOutfits ? (kPlusSlotCentred ? "om-plus-big" : "om-plus-c")
-                           : set ? (int(slot_outfit(i)) == fx_busy_target() ? "om-wset-busy-c" // (loading: pulses)
-                                    : int(slot_outfit(i)) == worn_set ? "om-wset-gold-c" : "om-wset-c") // (#27)
+                           : set ? wset_badge(g_outfits[slot_outfit(i)], int(slot_outfit(i)) == fx_busy_target() ? 2 // (loading: pulses)
+                                              : int(slot_outfit(i)) == worn_set ? 1 : 0) // (#27)
                            : saved ? row[0] // (the badge row's first: its Climate marker, the bed or the look, or none)
                                                                    : nullptr; // (at the cap: no "+")
         g_badge_elem[i] = badge, g_badge_class[i] = want;
@@ -658,6 +659,31 @@ void apply_outfit_slots(U64 self, U32 only)
 }
 
 // A weapon set's picture (#27): its main weapon (equipment-0, else its first weapon) - saved with it, else from the item.
+// A weapon set's badge (#27): its kind by the piece its picture shows - ranged (bows, crossbows, guns, cannons,
+// throwers: the item icon's PHM_04..08 / 13 / 14 groups, or the names), tool (life-skill gear, T0000_ axe / pickaxe /
+// saw / broom / hammer / hoe / shovel / fishing rod / lantern / torch...) or melee (everything else); state 0 saved, 1 worn (gold),
+// 2 loading (pulsing gold). (2026-11-17, chosen with the user: crossed swords, offense bow, axe.)
+const char* wset_badge(const Outfit& o, int state)
+{
+    static const char* const kClass[3][3] = {
+        {"om-wset-melee-c", "om-wset-melee-gold-c", "om-wset-melee-busy-c"},
+        {"om-wset-ranged-c", "om-wset-ranged-gold-c", "om-wset-ranged-busy-c"},
+        {"om-wset-tool-c", "om-wset-tool-gold-c", "om-wset-tool-busy-c"}};
+    std::string pic = weapon_set_picture(o);
+    for (char& c : pic) c = char(std::tolower(static_cast<unsigned char>(c)));
+    auto has = [&](const char* s) { return pic.find(s) != std::string::npos; };
+    int kind = 0;
+    if (has("_t0000_")) {
+        for (const char* t : {"_axe", "pickaxe", "_saw", "broom", "hammer", "_hoe", "shovel", "fishingrod", "chainsaw", "sickle", "lantern", "torch"})
+            if (has(t)) kind = 2;
+    }
+    if (!kind)
+        for (const char* r : {"_phm_04_", "_phm_05_", "_phm_06_", "_phm_07_shotgun", "_phm_08_", "_phm_13_cannon", "_phm_14_",
+                              "_bow_", "crossbow", "musket", "pistol", "shotgun", "_cannon_", "thrower", "greekfire"})
+            if (has(r)) kind = 1;
+    return kClass[kind][state < 0 ? 0 : state > 2 ? 2 : state];
+}
+
 std::string weapon_set_picture(const Outfit& o)
 {
     if (o.icon_slot) // (its Icon setting: the weapon chosen)

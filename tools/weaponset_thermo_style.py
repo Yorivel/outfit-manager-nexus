@@ -52,6 +52,25 @@ def finish(img):
     return out.resize((46, 46), Image.LANCZOS)
 
 
+def from_icon(src, pal):
+    """A game icon (white glyph on clear) coloured like the badges: light / shade by the glyph's own shading, the dark
+    outline, 46 px (the weapon set badges since 2026-11-17: the game's crossed swords, offense bow and axe)."""
+    light, shade = pal
+    g = src.resize((40 * K, 40 * K), Image.LANCZOS)
+    lum, a = g.convert('L'), g.getchannel('A')
+    lo, hi = min(lum.getextrema()[0], 200), max(lum.getextrema()[1], 1)
+    col = Image.new('RGBA', g.size)
+    px, lp = col.load(), lum.load()
+    for y in range(g.height):
+        for x in range(g.width):
+            t = max(0.0, min(1.0, (lp[x, y] - lo) / max(1, hi - lo)))
+            px[x, y] = tuple(int(shade[i] + (light[i] - shade[i]) * t) for i in range(3)) + (255,)
+    col.putalpha(a)
+    img = Image.new('RGBA', (N, N), (0, 0, 0, 0))
+    img.alpha_composite(col, ((N - g.width) // 2, (N - g.height) // 2))
+    return finish(img)
+
+
 def variant(kind, pal):
     light, shade = pal
     img = Image.new('RGBA', (N, N), (0, 0, 0, 0))
