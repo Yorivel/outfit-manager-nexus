@@ -17,6 +17,7 @@
 #include "addrs.h"
 #include "gear.h"
 #include "lang.h"
+#include "load.h"
 #include "log.h"
 #include "looks.h"
 #include "mem.h"
@@ -159,6 +160,9 @@ std::string wanted(U16 character, const std::string& live, const char** what)
 
 void follow(U64 actor, U16 character)
 {
+    // (the loaded save's outfits first: right after a load the active set can still be the save before's, and its own
+    // look went onto another save's character - 2026-11-18, slot 106 got slot 0's hairstyle)
+    prepare_outfits();
     const std::string live = read_look(actor);
     if (live.empty()) { // (right after a character switch the game fills it in a little later)
         static int tries = 0;
@@ -184,6 +188,7 @@ void follow(U64 actor, U16 character)
 // goes; else it is the character's own look.
 void barber_done(U64 actor, U16 character)
 {
+    prepare_outfits(); // (as follow: the loaded save's outfits, not the save before's)
     const std::string live = read_look(actor);
     if (live.empty()) return;
     const int a = anchor_outfit();
