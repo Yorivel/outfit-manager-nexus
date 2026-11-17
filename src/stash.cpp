@@ -8,10 +8,6 @@
 #include "store.h"
 #include "load.h"
 #include "settings.h"
-#include "game.h"
-#include "log.h"
-#include <MinHook.h>
-#include <cstdio>
 
 namespace om {
 
@@ -49,67 +45,6 @@ int call_item_move(U64 mgr, U32 owner, const ItemAt& at, U32 rule)
 }
 StashCheck g_stash_check;
 constexpr U64 kStashCheckMs = 1500; // (only the give-up: a move counts when its piece is found in storage)
-
-// DIAG (item-acks, 2026-11-17; remove): the server's replies to item moves and equips, to replace kStashCheckMs and
-// load.cpp's kAsyncMs (the give-ups for a move / equip the game refuses) with the reply itself. Each TrocTr*Ack class
-// has one handler (vtable slot 2: self, u32* result, packet: +10 u16 size, +18 payload); logged while a stash check or
-// an outfit's asynchronous steps are pending, with the time since they began and the payload's first bytes (to find
-// the result and the item in it). Found by name at run time: no resolver entries for a diagnostic.
-using AckFn = U64(__fastcall*)(U64 self, U32* result, U64 packet, U64 a4);
-struct DiagAck {
-    const char* rtti;
-    const char* name;
-    AckFn orig;
-};
-DiagAck g_diag_acks[] = {{".?AVTrocTrTransferItemAck@pa@@", "TransferItem", nullptr},
-                         {".?AVTrocTrEquipItemAck@pa@@", "EquipItem", nullptr},
-                         {".?AVTrocTrFailEquipItemAck@pa@@", "FailEquipItem", nullptr},
-                         {".?AVTrocTrUnequipItemAck@pa@@", "UnequipItem", nullptr}};
-
-void diag_ack(int i, U64 packet, U32 result)
-{
-    const U64 now = GetTickCount64();
-    const U64 stash = g_stash_check.at, load = g_async.active ? g_async.started : 0;
-    if (!stash && !load) return;
-    char hex[3 * 40 + 1] = {};
-    U32 size = 0;
-    __try {
-        size = *reinterpret_cast<const U16*>(packet + 0x10);
-        const unsigned char* b = *reinterpret_cast<const unsigned char* const*>(packet + 0x18);
-        for (U32 k = 0; b && k < 40 && k < size; ++k) std::snprintf(hex + 3 * k, 4, "%02X ", b[k]);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-    }
-    LOG("DIAG item-ack: %s (result %u; stash check +%lld ms, outfit steps +%lld ms) size %u: %s", g_diag_acks[i].name, result,
-        stash ? (long long)(now - stash) : -1, load ? (long long)(now - load) : -1, size, hex);
-}
-
-template <int I>
-U64 __fastcall diag_ack_hook(U64 self, U32* result, U64 packet, U64 a4)
-{
-    U64 r = g_diag_acks[I].orig(self, result, packet, a4);
-    U32 res = 0;
-    __try {
-        res = result ? *result : 0;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-    }
-    diag_ack(I, packet, res);
-    return r;
-}
-
-void diag_item_acks_install()
-{
-    void* hooks[] = {reinterpret_cast<void*>(&diag_ack_hook<0>), reinterpret_cast<void*>(&diag_ack_hook<1>),
-                     reinterpret_cast<void*>(&diag_ack_hook<2>), reinterpret_cast<void*>(&diag_ack_hook<3>)};
-    for (int i = 0; i < 4; ++i) {
-        void** vt = game::find_vtable(g_diag_acks[i].rtti);
-        void* t = vt ? vt[2] : nullptr;
-        if (!t || MH_CreateHook(t, hooks[i], reinterpret_cast<void**>(&g_diag_acks[i].orig)) != MH_OK ||
-            MH_EnableHook(t) != MH_OK) {
-            LOG("DIAG item-ack: %s not hooked", g_diag_acks[i].name);
-            g_diag_acks[i].orig = nullptr;
-        }
-    }
-}
 
 bool stash_pending(U64 uid)
 {
