@@ -673,6 +673,7 @@ void helmet_apply(U16 c, std::uint8_t pin, const char* how)
 {
     prepare_outfits(); // (a save loaded since: taken over first, else the change is dropped and not saved)
     helmet_set(c, pin);
+    g_helmet_pending = ~0u; // (the store has it now)
     LOG("helmet key: character %u: %s%s", c, pin == 1 ? "helmet hidden" : pin == 2 ? "helmet shown" : "the outfit decides again",
         how);
     save_outfits();
@@ -703,7 +704,7 @@ void helmet_press()
     if (const U64 e = display_item(kHelmetSlot)) rd(e + 8, key);
     // (mounted: none - the animation is on foot only, the game would get him off the horse for it)
     if (plan.shown_before != plan.shown_after && key != 0xFFFF && !riding_mount() && anim_helmet_start(!plan.shown_after, key))
-        g_helmet_pend_char = ch, g_helmet_pend_pin = plan.pin;
+        g_helmet_pend_char = ch, g_helmet_pend_pin = plan.pin, g_helmet_pending = U32(ch) << 8 | plan.pin;
     else
         helmet_apply(ch, plan.pin, "");
 }

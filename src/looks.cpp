@@ -423,6 +423,18 @@ HelmetPress helmet_press_plan(U16 character)
     return p;
 }
 
+std::atomic<U32> g_helmet_pending{~0u};
+void record_helmet_for_save(Store& s)
+{
+    const U32 p = g_helmet_pending.load();
+    if (p == ~0u) return;
+    for (CharacterOutfits& c : s)
+        if (c.character == U16(p >> 8)) {
+            c.helmet_pin = std::uint8_t(p & 0xFF);
+            LOG("helmet key: the save gets character %u's helmet as the press sets it (its animation still plays)", c.character);
+        }
+}
+
 void helmet_set(U16 character, std::uint8_t pin) // (then save_outfits: it binds it to the next save, publishes it)
 {
     {

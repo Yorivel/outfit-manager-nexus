@@ -199,6 +199,7 @@ bool begin_write(U32 slot, const wchar_t* what, DWORD action)
     GetSystemTimeAsFileTime(&ft);
     Store with = g_published;
     record_worn_for_save(with); // (the applied outfit as the equipment says, not a swap's moment - gear.cpp)
+    record_helmet_for_save(with); // (a helmet press whose animation still plays: where it goes - looks.cpp)
     g_pending_writes.push_back(
         {slot, slot_save_path(slot), with, {}, GetTickCount64(), (U64(ft.dwHighDateTime) << 32) | ft.dwLowDateTime});
     write_store_file(); // noted at once, in case the game closes before the write is bound

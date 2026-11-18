@@ -5,6 +5,7 @@ Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods
 ## Unreleased
 
 - New: on controllers, the Outfit Arc has a Helmet entry right above No Outfit: letting go of L1 / LB on it, or pressing A / Cross, does what the helmet key does - your helmet comes off or goes on with its animation, and the Arc closes. Its name says what it does now, Hide Helmet or Show Helmet; its icon is the game's empty helmet slot. With mouse and keyboard there's no such entry: the helmet key does it. Thanks for the idea, Youseff2204!
+- Fixed: a save the game made right as you hid or showed your helmet kept the helmet as it was before.
 - Fixed: with a PlayStation controller, the Outfit Arc (L1 + down) only opened after the outfits menu had been opened once.
 - Fix: after an outfit with no visibility settings went on, getting out of the water (or waking up, or a fight ending) could leave the swimwear, sleepwear or combat outfit on: Outfit Manager waited for the outfit change to finish, and noticed it had only when another piece changed. It now follows the game's own loading state.
 - Fix: loading another save no longer gives your character the previous save's look (hairstyle, beard...) when the loaded save has none of its own stored, or a different one. Outfit Manager applied the look before switching to the loaded save's outfits.
