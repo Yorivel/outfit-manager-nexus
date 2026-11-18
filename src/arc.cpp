@@ -164,7 +164,7 @@ std::atomic<int> g_peek_clicks{0};    // left clicks taken from the game while t
 constexpr size_t kPeekRecent = 3;     // the recent outfits on the arc
 constexpr int kPeekEdit = -2;         // (the first entry: Edit Pins / Back while editing)
 constexpr int kPeekSwitch = -3;       // (the weapon sets' second entry: back to the outfits - No Outfit's place)
-constexpr int kPeekHelmet = -4;       // (the last entry on pads: the helmet key's press - Youseff2204's idea)
+constexpr int kPeekHelmet = -4;       // (on pads, above No outfit: the helmet key's press - Youseff2204's idea)
 constexpr U64 kPeekHoldMs = 450;      // a hold this long on a pinned outfit picks it up (tools/peek_gen.py HOLD_MS)
 std::atomic<int> g_peek_ups{0};       // left button releases taken while it is open (input.cpp)
 bool g_peek_down = false;             // the arc key on the last frame
@@ -446,12 +446,14 @@ void peek_close(bool choose);
 
 // #32: the arc's entries - Edit Pins (Back while editing) and No outfit (not while editing: nothing to pin there) in one
 // group, then the pinned outfits in pin order, then the last applied ones not pinned. In its weapon sets mode the same
-// with the weapon sets (#27), and Outfits (back to the outfits) in No outfit's place. Last, while a controller is in use
-// (pads have no helmet key) and not editing: Helmet, the helmet key's press (Hide / Show Helmet).
+// with the weapon sets (#27), and Outfits (back to the outfits) in No outfit's place. While a controller is in use
+// (pads have no helmet key) and not editing: Helmet, the helmet key's press (Hide / Show Helmet), right above No outfit
+// (the user's call, 2026-11-18) - so No outfit's index is peek_home(), not a fixed 1.
 void peek_build(Peek& p)
 {
     const bool weapons = p.weapons;
     p.entries.assign(1, kPeekEdit), p.group.assign(1, 0);
+    if (!p.edit && (g_pad_in_use || g_peek_by_pad)) p.entries.push_back(kPeekHelmet), p.group.push_back(0);
     if (!p.edit) p.entries.push_back(weapons ? kPeekSwitch : -1), p.group.push_back(0);
     normalize_pins(g_outfits);
     std::vector<int> pinned, recent;
@@ -465,7 +467,13 @@ void peek_build(Peek& p)
     if (recent.size() > kPeekRecent) recent.resize(kPeekRecent);
     for (int i : pinned) p.entries.push_back(i), p.group.push_back(1);
     for (int i : recent) p.entries.push_back(i), p.group.push_back(2);
-    if (!p.edit && (g_pad_in_use || g_peek_by_pad)) p.entries.push_back(kPeekHelmet), p.group.push_back(0);
+}
+size_t peek_find(const Peek& p, int e, size_t fallback); // (the entry showing e)
+size_t peek_home(const Peek& p) // (No outfit's entry - Outfits in the weapon sets mode: after Edit Pins and Helmet)
+{
+    for (size_t i = 0; i < p.entries.size(); ++i)
+        if (p.entries[i] == -1 || p.entries[i] == kPeekSwitch) return i;
+    return 0;
 }
 size_t peek_find(const Peek& p, int e, size_t fallback) // (the entry showing e)
 {
@@ -503,7 +511,7 @@ void peek_land(Peek& p)
     } else {
         p.opened_on = p.applied ? anchor_outfit() : -1;
     }
-    p.sel = p.sel0 = peek_find(p, p.opened_on, 1);
+    p.sel = p.sel0 = peek_find(p, p.opened_on, peek_home(p));
 }
 
 void peek_open(U64 self)
@@ -591,7 +599,7 @@ void peek_toggle(U64 self)
         p.weapons = g_peek_weapons;
         peek_build(p);
         peek_land(p); // (what is worn in this mode: letting go there changes nothing)
-        p.sel = p.sel0 = 1, p.landed = true; // (on the other mode's switch: Outfits / No Outfit, the user's call)
+        p.sel = p.sel0 = peek_home(p), p.landed = true; // (on the other mode's switch: Outfits / No Outfit, the user's call)
         LOG("Outfit Arc: %s", p.weapons ? "the weapon sets" : "the outfits");
         save_outfits(); // (the mode is kept)
         peek_draw(self);
