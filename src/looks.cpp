@@ -1049,6 +1049,21 @@ void look_pending()
             look_refresh();
         }
     }
+    { // (a load's hold whose last part came in after the last part swap: let go once the game's model says nothing is
+      // loading - before, only a later part swap re-checked it, so an outfit with no visibility flags (no take-offs
+      // after its load, no swaps) kept the hold for good: Damiane's swim end waited on it, 2026-11-18. The game's own
+      // state, read each frame, as the release at the load's end reads it.)
+        const U64 inv = player_inventory(), actor = inv ? rp(inv + 8) : 0, model = actor ? look_model(actor) : 0;
+        bool release = false;
+        if (model) {
+            std::lock_guard<std::mutex> lock(g_appear_mu);
+            if (g_look_hold.count(inv) && g_look_steps_in.count(inv) && !model_loading(model)) {
+                g_look_hold.erase(inv), g_look_swap_seen.erase(inv), g_look_steps_in.erase(inv);
+                release = true;
+            }
+        }
+        if (release) look_refresh();
+    }
     if (working_parts_dirty()) { // (a piece's working part found or ruled out: into the outfits file now)
         std::lock_guard<std::mutex> lock(g_store_mu);
         write_store_file();
