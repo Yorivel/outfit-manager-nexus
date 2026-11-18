@@ -32,18 +32,19 @@
 // menu on (he lies down; getting in, the hidden pieces would show while he climbs in).
 //
 // Activity: Swimming (#54, 2026-11-18; keksdieb101's idea): the swimwear goes on when the played character gets into
-// the water, and what he wore before comes back once he is dry again - both the game's own state, nothing timed:
-// - in the water: his lower body's action chart layer in one of the swim / underwater charts' states (swim_states.inc),
-//   seen at the branch evaluator (the same hook as flight; his own chart: its actor's id is the played character's);
-// - wet: the game's wet state's buffs on him (the buff info BuffLevel_WetNess: touching water, under it, a while after
-//   he leaves the water or the rain - that one's end is the game's drying; or the wet state skills' buffs), read from his skill
-//   component's active buffs each HUD frame (player_wet). The swim begins in the water once he is wet (so a wetness
-//   that can't be read never starts one: never stuck in swimwear), and ends out of the water once he is dry.
-// Hopping in and out while still wet changes nothing. Combat and Sleeping win over it: a fight or a bed begun while he
-// swims takes the swimwear as what comes back after it - and if he dried meanwhile, what he wore before the swim instead
-// (hand_over); getting into the water in a fight puts the swimwear on after it, if he is still wet (swim_after). An
-// outfit the player puts on himself while wet stays (nothing comes back when he is dry); a weapon set changes nothing.
-// A save loaded drops the swim's state.
+// the water, and what he wore before comes back once he is on ground again - both the game's own state, nothing timed.
+// Where his lower body is: its action chart layer's states, seen at the branch evaluator (the same hook as flight; his
+// own chart: its actor's id is the played character's):
+// - in the water: one of the swim / underwater charts' states (swim_states.inc) - the swim begins;
+// - on ground: one of basic_lower's / basic_lower_crouch's ground states (ground_states.inc: standing, walking,
+//   running on land, a deck or a dock - and the WaterMove skill's run on the water, which is ground, never the water)
+//   - the swim ends;
+// - anything else (a jump, a fall, a glide, the rocket pack, climbing, wading) changes nothing: jumping out and dropping
+//   back in keeps the swimwear on. (The game's wet buffs end the instant he leaves the water: no "dry" to wait for.)
+// Combat and Sleeping win over it: a fight or a bed begun while he swims takes the swimwear as what comes back after it
+// - and if he got on ground meanwhile, what he wore before the swim instead (hand_over); getting into the water in a
+// fight puts the swimwear on after it, if he isn't on ground by then (swim_after). An outfit the player puts on himself
+// during a swim stays (nothing comes back on ground); a weapon set changes nothing. A save loaded drops the swim's state.
 #include "om.h"
 #include "addrs.h"
 #include "gear.h"
@@ -61,7 +62,6 @@
 #include <atomic>
 #include <random>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace om {
@@ -175,25 +175,38 @@ U64 __fastcall stage_branch_hook(U64 proc, U64 a2, U64 a3, U64 a4, const U32* na
     return r;
 }
 
-// Swimming: the played character's lower body in the water (one of the swim / underwater charts' states) - set by the
+// Swimming: where the played character's lower body last was - in the water or on ground (0: neither yet) - set by the
 // branch evaluator on the game's threads, taken on the UI thread (swim_tick).
+#include "ground_states.inc"
 #include "swim_states.inc"
-std::atomic<bool> g_in_water{false};
+constexpr int kInWater = 1, kOnGround = 2;
+std::atomic<int> g_lower_place{0};
 std::atomic<U32> g_player_id{0}; // (the played character's actor id, actor +0x60: swim_tick)
-bool g_swim_ok = false;          // (the wetness readable and the evaluator hooked: sleep_install)
+bool g_swim_ok = false;          // (the evaluator hooked: sleep_install)
+std::atomic<bool> g_swim_trace{false}; // DIAG (his lower layer's states from leaving the water to the water or ground)
 
 // A branch of an action chart layer passed (comp: the chart's control component, +8 its actor; layer 1: the lower body)
-// to the state `to`: in or out of the water, if it is the played character's.
+// to the state `to`: into the water or onto ground, if it is the played character's. Any other state: nothing changes.
 void swim_branch(U64 comp, U32 layer, U32 to)
 {
     if (layer != 1 || !g_swim_ok) return;
-    const bool water = std::binary_search(std::begin(kSwimStates), std::end(kSwimStates), to);
-    if (water == g_in_water.load()) return; // (no change: the common case, nothing read)
+    const int place = std::binary_search(std::begin(kSwimStates), std::end(kSwimStates), to)       ? kInWater
+                    : std::binary_search(std::begin(kGroundStates), std::end(kGroundStates), to) ? kOnGround
+                                                                                                    : 0;
+    const int was = g_lower_place.load();
+    const bool trace = g_swim_trace.load() || (was == kInWater && place != kInWater); // DIAG
+    if (!trace) // DIAG (guards the next line: tracing, every state of his is read)
+    if (!place || place == was) return; // (no change: the common case, nothing read)
     U64 actor = 0;
     U32 id = 0;
     const U32 player = g_player_id.load();
     if (!player || !rd(comp + 8, actor) || !plausible(actor) || !rd(actor + 0x60, id) || id != player) return;
-    g_in_water = water;
+    if (trace) { // DIAG
+        g_swim_trace = !place; // DIAG (until the water or ground)
+        LOG("DIAG swim: lower layer -> %08X (%s)", to, place == kInWater ? "water" : place == kOnGround ? "ground" : "-"); // DIAG
+    } // DIAG
+    if (!place || place == was) return; // DIAG (a traced state that changes nothing)
+    g_lower_place = place;
     post();
 }
 
@@ -238,10 +251,10 @@ struct Swap {
 };
 Swap g_sleep_swap{"sleep", "asleep", "awake", "(before sleep)", kActivitySleep};
 Swap g_combat_swap{"combat", "in combat", "out of combat", "(before combat)", kActivityCombat};
-Swap g_swim_swap{"swim", "in the water", "dry again", "(before swimming)", kActivitySwim};
-bool g_wet_session = false;    // (Swimming: from getting into the water, wet, until dry again - swim_tick)
-bool g_swim_dropped = false;   // (an outfit the player put on himself while wet: it stays, nothing comes back)
-bool g_swim_waiting = false;   // (into the water in a fight: the swimwear waits for its end, if he is still wet)
+Swap g_swim_swap{"swim", "in the water", "on ground again", "(before swimming)", kActivitySwim};
+bool g_swim_session = false;   // (Swimming: from getting into the water until on ground again - swim_tick)
+bool g_swim_dropped = false;   // (an outfit the player put on himself during a swim: it stays, nothing comes back)
+bool g_swim_waiting = false;   // (into the water in a fight: the swimwear waits for its end, if he isn't on ground by then)
 Swap* g_temp_for = nullptr;    // the swap whose pieces are going back on as a temporary outfit (removed after)
 bool g_in_combat = false;      // (the played character's combat, as the HUD side last took it)
 std::atomic<bool> g_combat_now{false}; // (the in-battle switch's last report, looks.cpp: the tick follows it)
@@ -329,13 +342,13 @@ bool begin(U64 self, Swap& s, Swap* from = nullptr)
     return true;
 }
 
-// Combat or a sleep ends while he is still wet from a swim that began during it (no swimwear on yet, none put on by
-// the player): the swimwear goes on instead of what was worn before it, which comes back once he is dry. True: done.
+// Combat or a sleep ends during a swim that began in it, before he got on ground (no swimwear on yet, none put on by
+// the player): the swimwear goes on instead of what was worn before it, which comes back once he is on ground. True: done.
 bool swim_after(U64 self, Swap& s)
 {
-    if (&s == &g_swim_swap || !g_wet_session || !g_swim_waiting || g_swim_dropped || g_character != s.ch) return false;
+    if (&s == &g_swim_swap || !g_swim_session || !g_swim_waiting || g_swim_dropped || g_character != s.ch) return false;
     if (g_in_combat && &s != &g_combat_swap) return false; // (a fight still on keeps its outfit)
-    LOG("swim: %s %s while he is still wet", s.what, s.ended);
+    LOG("swim: %s %s before he is on ground", s.what, s.ended);
     g_swim_waiting = false;
     return begin(self, g_swim_swap, &s);
 }
@@ -420,172 +433,53 @@ void drop_temp()
     LOG("%s: the pieces worn before are back on", s.what);
 }
 
-// --- Swimming: the game's wetness ---------------------------------------------------------------------------------
-// A buff on him comes from a skill level (its +kOffBuffSkill: the skill's row) or straight from a buff info (its
-// +kOffBuffInfo: the buff info's row; then +0x134 is the buff's place in it) - the game's wetness came the second way
-// (2026-11-18: every buff on Kliff had no skill row, the buff info row set). The wet state: the buff info
-// BuffLevel_WetNess (buffinfo key 1000272: in / out of the water, the rain, the water jar's spray) or a buff of the wet
-// state's skills (skill.staticinfo keys Passive_UnderWater, Passive_Wetness, Active_Wetness).
-constexpr U32 kWetBuffInfo = 1000272;
-constexpr U32 kWetSkills[] = {30010, 89997, 89998};
-using StaticInfoFn = U64(__fastcall*)(const U16*);
-
-U64 info_record(U64 getter_rva, U16 row)
-{
-    __try {
-        return reinterpret_cast<StaticInfoFn>(g_base + getter_rva)(&row);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return 0;
-    }
-}
-
-U32 skill_key(U16 row) // (0: unreadable)
-{
-    const U64 rec = info_record(kRvaSkillInfo, row);
-    U32 key = 0;
-    return plausible(rec) && rd(rec + kOffSkillKey, key) ? key : 0;
-}
-
-U32 buff_info_key(U16 row) // (0: unreadable)
-{
-    const U64 rec = info_record(kRvaBuffInfo, row);
-    U32 key = 0;
-    return plausible(rec) && rd(rec + kOffBuffInfoKey, key) ? key : 0;
-}
-
-// Whether a buff's skill row (info false) or buff info row (info true) is the wet state's (a row stays the same for
-// the session: each looked up once).
-bool wet_row(U16 row, bool info)
-{
-    static std::unordered_map<U32, bool> known;
-    const U32 id = U32(row) | (info ? 0x10000u : 0u);
-    if (const auto k = known.find(id); k != known.end()) return k->second;
-    const U32 key = info ? buff_info_key(row) : skill_key(row);
-    const bool wet = info ? key == kWetBuffInfo
-                          : std::find(std::begin(kWetSkills), std::end(kWetSkills), key) != std::end(kWetSkills);
-    if (key) known[id] = wet;
-    return wet;
-}
-
-// The played character's skill component (his active buffs): 0 if it isn't the one expected.
-U64 skill_component(U64 actor)
-{
-    const U64 comps = rp(actor + kOffActorComp), sc = comps ? rp(comps + kOffCompSkill) : 0;
-    U64 vt = 0;
-    return sc && rd(sc, vt) && vt == g_base + kRvaSkillCompVt ? sc : 0;
-}
-
-// 1 wet (a buff of the wet state on him), 0 dry, -1 unreadable.
-int player_wet(U64 actor)
-{
-    const U64 sc = skill_component(actor);
-    if (!sc) return -1;
-    const U64 buffs = rp(sc + kOffSkillBuffs);
-    const U32 n = r32(sc + kOffSkillBuffCount);
-    if (n > 1024 || (n && !buffs)) return -1;
-    for (U32 i = 0; i < n; ++i) {
-        const U64 b = buffs + i * kOffSkillBuffSize;
-        U16 info = 0xFFFF, row = 0xFFFF;
-        if (!rd(b + kOffBuffInfo, info) || !rd(b + kOffBuffSkill, row)) return -1;
-        if (info != 0xFFFF ? wet_row(info, true) : row != 0xFFFF && wet_row(row, false)) return 1;
-    }
-    return 0;
-}
-
-// DIAG: the played character's buffs whenever they change (buff info row / key and the buff's place in it +0x134, skill
-// row / key, +0x144 level, +0x130 serial)
-void diag_buffs(U64 actor) // DIAG
-{ // DIAG
-    const U64 sc = skill_component(actor); // DIAG
-    static U64 last = 0; // DIAG
-    if (!sc) { // DIAG
-        if (last != 1) last = 1, LOG("DIAG swim: no skill component (vtable not +%llX)", kRvaSkillCompVt); // DIAG
-        return; // DIAG
-    } // DIAG
-    const U64 buffs = rp(sc + kOffSkillBuffs); // DIAG
-    const U32 n = r32(sc + kOffSkillBuffCount); // DIAG
-    U64 sig = n; // DIAG
-    for (U32 i = 0; buffs && i < n && i < 256; ++i) sig = sig * 1000003 + r32(buffs + i * kOffSkillBuffSize + 0x130); // DIAG
-    if (sig == last) return; // DIAG
-    last = sig; // DIAG
-    std::string t; // DIAG
-    for (U32 i = 0; buffs && i < n && i < 256; ++i) { // DIAG
-        const U64 b = buffs + i * kOffSkillBuffSize; // DIAG
-        U16 row = 0xFFFF, info = 0xFFFF; // DIAG
-        rd(b + kOffBuffSkill, row), rd(b + kOffBuffInfo, info); // DIAG
-        static std::unordered_map<U32, bool> shown; // DIAG (each row's record once: its key and its first bytes)
-        for (const U32 id : {info != 0xFFFF ? U32(info) | 0x10000u : 0u, row != 0xFFFF ? U32(row) | 0x20000u : 0u}) { // DIAG
-            if (!id || shown[id]) continue; // DIAG
-            shown[id] = true; // DIAG
-            const bool is_info = id & 0x10000u; // DIAG
-            const U64 rec = info_record(is_info ? kRvaBuffInfo : kRvaSkillInfo, U16(id & 0xFFFF)); // DIAG
-            LOG("DIAG swim: %s row %u -> record %llX: key (+%llX) %u, +4 %u, first bytes %s", is_info ? "buff info" : "skill", // DIAG
-                id & 0xFFFF, rec, is_info ? kOffBuffInfoKey : kOffSkillKey, is_info ? buff_info_key(U16(id)) : skill_key(U16(id)), // DIAG
-                plausible(rec) ? r32(rec + 4) : 0, plausible(rec) ? hex(rec, 16).c_str() : "-"); // DIAG
-        } // DIAG
-        char x[128]; // DIAG
-        std::snprintf(x, sizeof x, " [info %u key %u #%u | skill %u key %u lv %u | serial %08X]", info, // DIAG
-                      info != 0xFFFF ? buff_info_key(info) : 0, r32(b + 0x134), row, row != 0xFFFF ? skill_key(row) : 0, // DIAG
-                      r32(b + 0x144), r32(b + 0x130)); // DIAG
-        t += x; // DIAG
-    } // DIAG
-    LOG("DIAG swim: %u buffs (component %llX):%s", n, sc, t.c_str()); // DIAG
-} // DIAG
-
-// Out of the water and dry: what was worn before the swim comes back - or, when a fight or a bed began while he swam
-// (its "before" is the swimwear), it comes back after that instead.
-void swim_dry(U64 self)
+// On ground again: what was worn before the swim comes back - or, when a fight or a bed began while he swam (its
+// "before" is the swimwear), it comes back after that instead.
+void swim_ashore(U64 self)
 {
     g_swim_waiting = false;
     Swap& s = g_swim_swap;
     if (!s.swapped) {
-        LOG("swim: dry again%s", g_swim_dropped ? " (the outfit put on meanwhile stays)" : ": nothing to give back");
+        LOG("swim: on ground again%s", g_swim_dropped ? " (the outfit put on meanwhile stays)" : ": nothing to give back");
         return;
     }
     for (Swap* o : {&g_combat_swap, &g_sleep_swap})
         if (o->swapped) {
             hand_over(s, *o);
-            LOG("swim: dry again while %s: what was worn before the swim comes back after it", o->began);
+            LOG("swim: on ground again while %s: what was worn before the swim comes back after it", o->began);
             return;
         }
     end(self, s);
 }
 
-// The HUD frame: the water and the wetness.
+// The HUD frame: into the water / on ground again.
 void swim_tick(U64 self)
 {
     if (!g_swim_ok) return;
     static U32 gen = g_generation.load();
     if (const U32 now = g_generation.load(); now != gen) { // (a save loaded: the swim's state doesn't survive it)
         gen = now;
-        if (g_wet_session || g_swim_swap.swapped) LOG("swim: a save was loaded: the swim's state is dropped");
-        g_wet_session = g_swim_dropped = g_swim_waiting = false;
+        if (g_swim_session || g_swim_swap.swapped) LOG("swim: a save was loaded: the swim's state is dropped");
+        g_swim_session = g_swim_dropped = g_swim_waiting = false;
         g_swim_swap.swapped = g_swim_swap.pending_end = g_swim_swap.have_items = false;
-        g_in_water = false;
+        g_lower_place = 0;
+        g_swim_trace = false; // DIAG
     }
     U64 ctx[4] = {};
     const U64 actor = acquire_player(ctx);
     U32 id = 0;
     if (actor) rd(actor + 0x60, id);
-    const int wet = actor ? player_wet(actor) : -1;
-    if (actor) diag_buffs(actor); // DIAG
     if (ctx[0]) release_player(ctx);
     g_player_id = id;
     if (!actor || !world_up()) return;
-    const bool water = g_in_water.load();
-    static bool was_water = false;
-    static int was_wet = -2;
-    if (water != was_water) was_water = water, LOG("swim: %s the water", water ? "in" : "out of");
-    if (wet != was_wet) {
-        if (wet < 0) LOG("swim: the wetness can't be read: no swim starts");
-        else LOG("swim: %s (the game's wet state)", wet ? "wet" : "dry");
-        was_wet = wet;
-    }
-    if (wet < 0) return;
-    if (!g_wet_session) {
-        if (!water || !wet) return;
-        g_wet_session = true, g_swim_dropped = false, g_swim_waiting = false;
-        if (g_in_combat || g_asleep) { // (Combat and Sleeping win: the swimwear after it, if he is still wet)
+    const int place = g_lower_place.load();
+    static int was_place = 0;
+    if (place != was_place)
+        was_place = place, LOG("swim: %s", place == kInWater ? "in the water" : place == kOnGround ? "on ground" : "-");
+    if (!g_swim_session) {
+        if (place != kInWater) return;
+        g_swim_session = true, g_swim_dropped = false, g_swim_waiting = false;
+        if (g_in_combat || g_asleep) { // (Combat and Sleeping win: the swimwear after it, if he isn't on ground by then)
             g_swim_waiting = true;
             LOG("swim: into the water %s: its outfit stays", g_in_combat ? "in combat" : "asleep");
             return;
@@ -593,25 +487,26 @@ void swim_tick(U64 self)
         begin(self, g_swim_swap);
         return;
     }
+    if (place == kOnGround) {
+        g_swim_session = false;
+        swim_ashore(self);
+        return;
+    }
     if (g_swim_waiting && !g_in_combat && !g_asleep && !g_combat_swap.swapped && !g_combat_swap.pending_end &&
         !g_sleep_swap.swapped && !g_sleep_swap.pending_end) { // (it ended with no outfit of its own to give back)
         g_swim_waiting = false;
         if (!g_swim_dropped) begin(self, g_swim_swap);
     }
-    if (!water && !wet) {
-        g_wet_session = false;
-        swim_dry(self);
-    }
 }
 
 } // namespace
 
-// An outfit the player puts on himself (the wheel, the Outfit Arc, a hotkey; index -1: Unequip Outfit): while he is
-// wet from a swim it wins - nothing comes back when he is dry. A weapon set changes no outfit: nothing changes.
+// An outfit the player puts on himself (the wheel, the Outfit Arc, a hotkey; index -1: Unequip Outfit): during a swim
+// it wins - nothing comes back on ground. A weapon set changes no outfit: nothing changes.
 void swim_player_load(int index)
 {
-    if (!g_wet_session || (index >= 0 && size_t(index) < g_outfits.size() && is_weapon_set(g_outfits[size_t(index)]))) return;
-    LOG("swim: the player puts on %s himself while wet: it stays (nothing comes back when he is dry)",
+    if (!g_swim_session || (index >= 0 && size_t(index) < g_outfits.size() && is_weapon_set(g_outfits[size_t(index)]))) return;
+    LOG("swim: the player puts on %s himself during a swim: it stays (nothing comes back on ground)",
         index < 0 ? "No outfit" : size_t(index) < g_outfits.size() ? ("\"" + g_outfits[size_t(index)].name + "\"").c_str() : "an outfit");
     g_swim_dropped = true, g_swim_waiting = false;
     g_swim_swap.swapped = g_swim_swap.pending_end = g_swim_swap.have_items = false;
@@ -633,13 +528,9 @@ void sleep_install()
     } else {
         LOG("sleep: watching the action charts (evaluator +%llX)", kRvaBranchEval);
     }
-    // Swimming: the water from the evaluator, the wetness from the skill component - without either, no swim starts
-    g_swim_ok = g_eval_orig && have({kRvaSkillCompVt, kRvaSkillInfo, kRvaBuffInfo, kOffCompSkill, kOffSkillBuffs,
-                                     kOffSkillBuffCount, kOffSkillBuffSize, kOffBuffSkill, kOffSkillKey, kOffBuffInfo,
-                                     kOffBuffInfoKey}) &&
-                kOffSkillBuffSize > kOffBuffSkill + 1 && kOffSkillBuffSize > kOffBuffInfo + 1;
-    LOG(g_swim_ok ? "swim: watching the water and the wetness (skill component +%llX)"
-                  : "swim: the water or the wetness wasn't found; Swimming is off (+%llX)", kOffCompSkill);
+    // Swimming: the water and the ground from the evaluator - without it, no swim starts
+    g_swim_ok = g_eval_orig != nullptr;
+    LOG(g_swim_ok ? "swim: watching the water and the ground" : "swim: the evaluator isn't hooked; Swimming is off");
     // a bed: its stage chart's verdict (in bed) and end (out of bed) - without both no sleepwear (nothing guessed)
     if (!have({kRvaStageEnd, kRvaStageBranchByName, kRvaClassNames, kOffStageProcChart, kOffStageChartStates,
                kOffStageChartCount, kOffStageBranches, kOffStageBranchCount, kOffStageBranchTarget, kOffStageProcState})) {
@@ -673,7 +564,7 @@ void sleep_tick(U64 self)
     }
     if (g_fell.exchange(false) && !g_asleep) fell_asleep(self);
     if (g_woke.exchange(false) && g_asleep) woke_up(self);
-    swim_tick(self); // (Swimming: in the water and wet / dry again)
+    swim_tick(self); // (Swimming: into the water / on ground again)
     for (Swap* s : {&g_combat_swap, &g_sleep_swap, &g_swim_swap}) // (an end held for a running change: now that it is over)
         if (s->pending_end && !change_running()) end(self, *s);
     drop_temp();

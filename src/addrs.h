@@ -245,10 +245,6 @@ extern U64 kRvaStageProcVt, kRvaStageEnd, kRvaStageBranchApply, kRvaStageBranchB
 // A weapon set's weapon selected as the weapons tab does (load.cpp, #53)
 extern U64 kRvaQuickSlotChange, kRvaEquipTypeInfo, kRvaWeaponGroupSlots, kOffItemEquipType, kOffEquipTypeHand,
     kOffInvWeaponGroup;
-// The played character's wetness (sleep.cpp, Activity: Swimming - #54)
-extern U64 kRvaSkillCompVt, kRvaSkillInfo, kRvaBuffApplyAckVt, kRvaBuffApplyAck, kRvaBuffApply, kRvaSkillBuffFind,
-    kOffCompSkill, kOffSkillBuffs, kOffSkillBuffCount, kOffSkillBuffSize, kOffBuffSkill, kOffSkillKey,
-    kRvaBuffInfo, kRvaBuffInfoCheck, kOffBuffInfo, kOffBuffInfoKey;
 void resolve_addresses();
 
 } // namespace om
