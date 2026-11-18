@@ -2,11 +2,11 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
-## Unreleased
+## 0.8.2 (2026-11-18)
 
 - New: on controllers, the Outfit Arc has a Helmet entry right above No Outfit: letting go of L1 / LB on it, or pressing A / Cross, does what the helmet key does - your helmet comes off or goes on with its animation, and the Arc closes. Its name says what it does now, Hide Helmet or Show Helmet; its icon is the game's empty helmet slot. With mouse and keyboard there's no such entry: the helmet key does it. Thanks for the idea, Youseff2204!
-- Fixed: a save the game made right as you hid or showed your helmet kept the helmet as it was before.
-- Fixed: with a PlayStation controller, the Outfit Arc (L1 + down) only opened after the outfits menu had been opened once.
+- Fix: a save the game made right as you hid or showed your helmet kept the helmet as it was before.
+- Fix: with a PlayStation controller, the Outfit Arc (L1 + down) only opened after the outfits menu had been opened once.
 - Fix: after an outfit with no visibility settings went on, getting out of the water (or waking up, or a fight ending) could leave the swimwear, sleepwear or combat outfit on: Outfit Manager waited for the outfit change to finish, and noticed it had only when another piece changed. It now follows the game's own loading state.
 - Fix: loading another save no longer gives your character the previous save's look (hairstyle, beard...) when the loaded save has none of its own stored, or a different one. Outfit Manager applied the look before switching to the loaded save's outfits.
 - New: a Swimming activity (#54). Set an outfit's Activity to Swimming and it goes on when you get into the water (with several, one at random); what you wore before comes back once you're back on dry land - standing, walking or running on ground, a boat's deck or a dock, or running across the water with the WaterMove skill (that counts as land). Jumping out of the water, falling, gliding or the rocket pack change nothing, so jumping out and dropping back in keeps your swimwear on. Combat and Sleeping win over it: after a fight your swimwear comes back if you're still in the water, and if you reached land meanwhile, what you wore before the swim comes back instead. An outfit you put on yourself during a swim stays (nothing is swapped back later). Its badge is the game's wave. Thanks for the idea, keksdieb101!
