@@ -9,12 +9,14 @@
 // 54 of basic_lower_crouch's 60. None of them is a swim / underwater / glide state; the same hashes elsewhere are upper
 // layers, monsters' charts and the carriage's idle. Generated from game 2.05's charts (2026-11-18). Sorted for binary
 // search.
+// Not 26107D3C (basic_lower's stand_idle_004): the game also passes it while the character is in the air - jumping /
+// flying out of the water swapped back in the user's test, 2026-11-18 - so it doesn't mean "on ground".
 constexpr U32 kGroundStates[] = {
     0x005D1301, 0x02AF49A6, 0x036E6568, 0x03A85F35, 0x03F52131, 0x047E7102, 0x0906F3EA, 0x0B52A2AA,
     0x0B6F8FBE, 0x0E70A346, 0x0E772190, 0x0EE43C7B, 0x0F2F5BBC, 0x0FE23E85, 0x104474F9, 0x10BA7BDA,
     0x10E1DAA9, 0x13E0823A, 0x13FC7FC6, 0x14D4F036, 0x14DE223F, 0x15E15301, 0x178FDF5F, 0x18024DEF,
     0x1901F489, 0x1B1F9B5F, 0x1B4DE0E0, 0x1BB64C25, 0x1C683394, 0x1DB05010, 0x1E0BBFA6, 0x1EF8FEAE,
-    0x1FA9D7D3, 0x20B70E5C, 0x23827BC4, 0x23BCD5CC, 0x244FA211, 0x24BA78EE, 0x25433DB6, 0x26107D3C,
+    0x1FA9D7D3, 0x20B70E5C, 0x23827BC4, 0x23BCD5CC, 0x244FA211, 0x24BA78EE, 0x25433DB6,
     0x2611BEC6, 0x273BF5B5, 0x283BB878, 0x28E221D8, 0x28FE08B8, 0x29351E5F, 0x299DF890, 0x2A8BCCEC,
     0x2B966422, 0x2BF565D1, 0x2C1CA931, 0x2C22EA90, 0x2C41205F, 0x2DE603B9, 0x2E0E5D10, 0x2F19B026,
     0x30D3BA86, 0x311D3B27, 0x31AB5C49, 0x330981CC, 0x333C8CC8, 0x34FF3103, 0x35091124, 0x356FE586,
