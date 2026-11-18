@@ -297,6 +297,10 @@ peek.weapons_label = WEAPON SETS
 peek.outfits = Outfits
 peek.to_weapons = Weapon Sets
 peek.to_outfits = Switch
+# (the last entry on controllers: the helmet key's press - pads have no helmet key; the name says what it does now)
+peek.helmet_label = HELMET
+peek.helmet_hide = Hide Helmet
+peek.helmet_show = Show Helmet
 toast.released = "{outfit}" unequipped: your gear stays on, its visibility settings are off until you load or save an outfit
 setting.helmetkey = Helmet key
 desc.helmetkey.off = Click, then press a key (with Ctrl, Alt or Shift if you like) to show or hide your helmet with it while you play, whatever your outfit says.

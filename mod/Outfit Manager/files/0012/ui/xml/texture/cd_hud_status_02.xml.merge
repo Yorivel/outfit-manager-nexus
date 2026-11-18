@@ -13,6 +13,7 @@
 <Texture Name="outfitmanager_peek_back" Filename="UI/texture/image/customizeimage/outfitmanager_peek_back.dds" Type="Image" GetRect="1,1,252,252"/>
 <Texture Name="outfitmanager_peek_none" Filename="UI/texture/image/customizeimage/outfitmanager_peek_none.dds" Type="Image" GetRect="1,1,252,252"/>
 <Texture Name="outfitmanager_peek_outfits" Filename="UI/texture/image/customizeimage/outfitmanager_peek_outfits.dds" Type="Image" GetRect="1,1,252,252"/>
+<Texture Name="outfitmanager_peek_helmet" Filename="UI/texture/image/customizeimage/outfitmanager_peek_helmet.dds" Type="Image" GetRect="1,1,252,252"/>
 <Texture Name="outfitmanager_peek_key_a" Filename="UI/texture/image/customizeimage/outfitmanager_peek_key_a.dds" Type="Image" GetRect="1,1,80,80"/>
 <Texture Name="outfitmanager_peek_key_cross" Filename="UI/texture/image/customizeimage/outfitmanager_peek_key_cross.dds" Type="Image" GetRect="1,1,80,80"/>
 </__dmm_root__>
