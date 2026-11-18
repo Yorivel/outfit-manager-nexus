@@ -345,6 +345,113 @@ std::string slot_list(const Outfit& o, const std::vector<U16>& slots)
     return s;
 }
 
+// --- A weapon set's weapon selected (#53) -------------------------------------------------------
+// Once a weapon set is on (its load done, or it was worn already), the piece its icon shows is picked as the weapons tab
+// picks it: the tab's click on a slot showing its worn piece calls kRvaQuickSlotChange(inventory, err, 0xFFFF, 0xFFFF,
+// slot). That changes the weapon in hand only for a hand weapon (its equip type's flag) outside the group in hand - for
+// anything else it runs the item's own actions instead, so OM calls it only then (the group in hand: nothing to do).
+QuickSlotChangeFn g_quickslot_change = nullptr; // (null: the selection is off)
+RecordGetFn g_equip_type_info = nullptr;
+WeaponGroupSlotsFn g_weapon_group_slots = nullptr;
+
+namespace {
+int call_quickslot_change(U64 inv, U16 slot)
+{
+    int err = kFault;
+    __try {
+        g_quickslot_change(inv, &err, 0xFFFF, 0xFFFF, static_cast<short>(slot));
+    } __except (note_fault(GetExceptionInformation())) {
+        err = kFault;
+    }
+    return err;
+}
+// The piece's equip type flag: 1 a hand weapon, 0 not, -1 unreadable.
+int hand_weapon(U16 key)
+{
+    __try {
+        U64 info = g_item_info ? by_key(g_item_info, key) : 0;
+        U64 type = info ? g_equip_type_info(reinterpret_cast<const U16*>(info + kOffItemEquipType)) : 0;
+        return type ? (*reinterpret_cast<std::uint8_t*>(type + kOffEquipTypeHand) ? 1 : 0) : -1;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return -1;
+    }
+}
+// The weapon group in hand (0: none) and whether `slot` is one of its slots; false: unreadable.
+struct SlotList {
+    U16* p;
+    U32 n, cap;
+    U16 inline_slots[64]; // (the game grows the list past cap with its own allocator: never with 64)
+};
+bool in_hand_group(U64 inv, U16 slot, int& group, bool& in_group)
+{
+    in_group = false;
+    __try {
+        group = *reinterpret_cast<int*>(inv + kOffInvWeaponGroup);
+        if (!group) return true;
+        SlotList l{};
+        l.p = l.inline_slots, l.cap = 64;
+        g_weapon_group_slots(inv, &group, &l);
+        if (l.p != l.inline_slots) return false;
+        for (U32 i = 0; i < l.n && i < 64; ++i) in_group |= l.p[i] == slot;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+} // namespace
+
+void select_set_weapon(U64 self, const Outfit& o)
+{
+    if (!g_quickslot_change) return;
+    const OutfitItem* p = weapon_set_icon_piece(o);
+    if (!p) {
+        LOG("select \"%s\": no weapon to select (the set holds none)", o.name.c_str());
+        report(self, lang::f("report.select_none", {{"outfit", o.name}}));
+        return;
+    }
+    const std::string label = piece_label(o, p->slot);
+    // where it is worn now (two one-handed weapons may be in each other's hands: hands_crossed)
+    WornRaw w[kWornMax];
+    const int n = read_worn(self, w, kWornMax);
+    int at = -1;
+    for (int i = 0; i < n; ++i)
+        if (is_weapon_slot(w[i].slot) && w[i].key == p->key && w[i].uid == p->uid) at = i;
+    if (at < 0) {
+        LOG("select \"%s\": its icon's piece (equipment-%u key %u uid %llX) is not worn; not selected", o.name.c_str(),
+            p->slot, p->key, p->uid);
+        report(self, lang::f("report.select_not_worn", {{"outfit", o.name}, {"piece", label}}));
+        return;
+    }
+    const U16 slot = w[at].slot;
+    const int hand = hand_weapon(p->key);
+    if (hand != 1) {
+        LOG("select \"%s\": equipment-%u \"%s\" is %s; not selected", o.name.c_str(), slot, item_name(p->key).c_str(),
+            hand ? "of an unreadable equip type" : "no hand weapon (its equip type)");
+        report(self, lang::f("report.select_cant", {{"outfit", o.name}, {"piece", label}}));
+        return;
+    }
+    U64 ctx[4] = {};
+    U64 actor = acquire_player(ctx);
+    U64 inv = actor ? rp(rp(actor + kOffActorComp) + kOffCompInventory) : 0;
+    int group = 0;
+    bool in_group = false;
+    if (!inv || !in_hand_group(inv, slot, group, in_group)) {
+        if (ctx[0]) release_player(ctx);
+        LOG("select \"%s\": the weapon in hand is unreadable (inventory %llX); not selected", o.name.c_str(), inv);
+        return;
+    }
+    if (in_group) {
+        if (ctx[0]) release_player(ctx);
+        LOG("select \"%s\": equipment-%u is in the weapon group in hand (%d) already", o.name.c_str(), slot, group);
+        return;
+    }
+    const int err = call_quickslot_change(inv, slot);
+    if (ctx[0]) release_player(ctx);
+    LOG("select \"%s\": equipment-%u \"%s\" (group in hand %d): %s", o.name.c_str(), slot, item_name(p->key).c_str(),
+        group, error_text(err).c_str());
+    if (err) report(self, lang::f("report.select_cant", {{"outfit", o.name}, {"piece", label}}));
+}
+
 // leave: the outfit's piece can't be put on there (a worn piece that isn't the outfit's still comes off);
 // keep: untouched (a piece taken from another character is on its way there).
 
@@ -427,6 +534,7 @@ void load_outfit(U64 self, U32 index, const std::vector<U16>& leave = {}, const 
         LOG("load \"%s\": already worn", o.name.c_str());
         look_hold(false);
         look_refresh();
+        if (is_weapon_set(o)) select_set_weapon(self, o); // (#53: worn already - its weapon is still picked)
         return;
     }
     LOG("load \"%s\": %zu to take off, %zu to put on", o.name.c_str(), off.size(), on.size());
@@ -669,6 +777,7 @@ void pump_async(U64 self)
         g_async = {};
         look_settled();
         stash_pieces(self, &*it);
+        if (is_weapon_set(*it)) select_set_weapon(self, *it); // (#53: the load is done - its pieces are on)
     }
 }
 
@@ -707,6 +816,20 @@ void prepare_outfits()
     pull_active();
     if (U16 ch = current_character(); ch != kNoCharacter) switch_character(ch);
     repair_keys();
+}
+
+// #53: the selection's game functions (the weapons tab's own change function, called directly).
+void weapon_select_install()
+{
+    if (!have({kRvaQuickSlotChange, kRvaEquipTypeInfo, kRvaWeaponGroupSlots, kOffItemEquipType, kOffEquipTypeHand,
+               kOffInvWeaponGroup}) ||
+        !g_item_info) {
+        feature_off("feature.weapon_select");
+        return;
+    }
+    g_equip_type_info = reinterpret_cast<RecordGetFn>(g_base + kRvaEquipTypeInfo);
+    g_weapon_group_slots = reinterpret_cast<WeaponGroupSlotsFn>(g_base + kRvaWeaponGroupSlots);
+    g_quickslot_change = reinterpret_cast<QuickSlotChangeFn>(g_base + kRvaQuickSlotChange);
 }
 
 } // namespace om

@@ -399,7 +399,9 @@ void resolve_addresses()
                            &kOffSaveReqWrites, &kOffSaveReqDeletes,
                            // (what tells the end of a bed's stage chart: unsure = sleepwear off, never stuck on)
                            &kOffStageProcChart, &kOffStageChartStates, &kOffStageChartCount, &kOffStageProcState,
-                           &kOffStageBranches, &kOffStageBranchCount, &kOffStageBranchTarget};
+                           &kOffStageBranches, &kOffStageBranchCount, &kOffStageBranchTarget,
+                           // (what decides whether a weapon set's weapon is picked as the weapons tab does: #53)
+                           &kOffItemEquipType, &kOffEquipTypeHand, &kOffInvWeaponGroup};
     for (std::size_t i = 0; i < kOffsetCount; ++i) {
         *kOffsetVars[i] = values[i];
         bool unsure = status[i] == resolver::OffsetStatus::Doubtful ||
@@ -590,5 +592,22 @@ U64 kOffStageProcState = 0x38;       // stage chart processor: the state it is i
 U64 kOffStageBranches = 0x8;         // stage chart state: its branches (array of pointers)
 U64 kOffStageBranchCount = 0x10;     // stage chart state: u32 the number of branches
 U64 kOffStageBranchTarget = 0x10;    // stage chart branch: u32 the name of the state it goes to (interned: kRvaClassNames)
+
+// A weapon set selects the weapon its icon shows (#53; game 2.05), as the weapons tab does when that weapon is picked:
+// the slot script's click on a slot showing its worn piece (+10F1360, item quickslot type 2) calls kRvaQuickSlotChange
+// (inventory, err, 0xFFFF, 0xFFFF, equip slot). There, a piece whose equip type is a hand weapon (the type's
+// +kOffEquipTypeHand set; looked up from the item info's +kOffItemEquipType through kRvaEquipTypeInfo) and whose slot is
+// not in the weapon group in hand (the inventory's +kOffInvWeaponGroup; its slots from kRvaWeaponGroupSlots) is asked
+// for: TrocTrReserveToChangeEquipFromQuickSlotReq (bag 0xFF, slot); the server's answer reserves the change, the
+// character changes weapons (ChangeEquipByQuickSlot frame event) and TrocTrChangedEquipByQuickSlotAck ends it. A piece
+// that is no hand weapon, or one in the group in hand, takes another way there (the item's own actions): never called.
+U64 kRvaQuickSlotChange = 0xac4260;  // (inventory, int* err, u16 bag, u16 pos, short slot) -> err: change to that
+                                     // slot's piece (bag 0xFFFF: the worn one) - called
+U64 kRvaEquipTypeInfo = 0x531ea0;    // (const u16* equip type) -> equip type info; unknown types -> the default info
+U64 kRvaWeaponGroupSlots = 0x22fab00; // (inventory, const int* group, {u16* p, u32 n, u32 cap, inline}*): that weapon
+                                     // group's equip slots (from the character's equip slot info) - called
+U64 kOffItemEquipType = 0x4a;        // item info: u16 its equip type
+U64 kOffEquipTypeHand = 0xf;         // equip type info: u8 a hand weapon (picking it changes the weapon in hand)
+U64 kOffInvWeaponGroup = 0xb0;       // inventory: int the weapon group in hand (0: none)
 
 } // namespace om

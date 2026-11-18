@@ -423,6 +423,18 @@ HelmetPress helmet_press_plan(U16 character)
     return p;
 }
 
+std::atomic<U32> g_helmet_pending{~0u};
+void record_helmet_for_save(Store& s)
+{
+    const U32 p = g_helmet_pending.load();
+    if (p == ~0u) return;
+    for (CharacterOutfits& c : s)
+        if (c.character == U16(p >> 8)) {
+            c.helmet_pin = std::uint8_t(p & 0xFF);
+            LOG("helmet key: the save gets character %u's helmet as the press sets it (its animation still plays)", c.character);
+        }
+}
+
 void helmet_set(U16 character, std::uint8_t pin) // (then save_outfits: it binds it to the next save, publishes it)
 {
     {
@@ -1048,6 +1060,21 @@ void look_pending()
                     LOG("working parts: equipment-%u's working part %s", s, (now >> s) & 1 ? "is in use: shown" : "is put away: its look again");
             look_refresh();
         }
+    }
+    { // (a load's hold whose last part came in after the last part swap: let go once the game's model says nothing is
+      // loading - before, only a later part swap re-checked it, so an outfit with no visibility flags (no take-offs
+      // after its load, no swaps) kept the hold for good: Damiane's swim end waited on it, 2026-11-18. The game's own
+      // state, read each frame, as the release at the load's end reads it.)
+        const U64 inv = player_inventory(), actor = inv ? rp(inv + 8) : 0, model = actor ? look_model(actor) : 0;
+        bool release = false;
+        if (model) {
+            std::lock_guard<std::mutex> lock(g_appear_mu);
+            if (g_look_hold.count(inv) && g_look_steps_in.count(inv) && !model_loading(model)) {
+                g_look_hold.erase(inv), g_look_swap_seen.erase(inv), g_look_steps_in.erase(inv);
+                release = true;
+            }
+        }
+        if (release) look_refresh();
     }
     if (working_parts_dirty()) { // (a piece's working part found or ruled out: into the outfits file now)
         std::lock_guard<std::mutex> lock(g_store_mu);

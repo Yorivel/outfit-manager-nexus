@@ -249,6 +249,7 @@ const char* climate_badge(const Outfit& o)
 {
     if (o.activity == kActivityCombat) return "om-combat-c"; // (Activity: Combat: the swords, #45)
     if (o.activity == kActivitySleep) return "om-sleep-c"; // (Activity: Sleeping: the bed, in the thermometer's spot)
+    if (o.activity == kActivitySwim) return "om-swim-c"; // (Activity: Swimming: the wave, #54)
     return climate_only(o);
 }
 

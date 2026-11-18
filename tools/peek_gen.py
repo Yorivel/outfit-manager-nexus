@@ -204,7 +204,7 @@ def frame(selected):
     return im
 
 
-BADGE_PX = 252  # the Arc's own badges (Edit Pins, Back, No Outfit, Outfits): drawn at ~4x their 46px box (crisp)
+BADGE_PX = 252  # the Arc's own badges (Edit Pins, Back, No Outfit, Outfits, Helmet): drawn at ~4x their 46px box (crisp)
 
 
 def arc_badge(src, extent, seed):
@@ -234,13 +234,15 @@ def arc_badge(src, extent, seed):
 
 def arc_badges():
     """name: image - the badges the Arc shows as entries (the wheel's own, redrawn; the armour for the weapon sets'
-    way back to the outfits)."""
+    way back to the outfits; the helmet entry on pads)."""
     import badge_gen as bg, glyphs
     cog = bg.BADGES['outfitmanager_badge_cog']
     return {'outfitmanager_peek_edit': arc_badge(bg.source(cog[0], cog[1]), cog[2], 1),
             'outfitmanager_peek_back': arc_badge(glyphs.as_src(glyphs.return_arrow()), 36, 7),
             'outfitmanager_peek_none': arc_badge(glyphs.as_src(glyphs.slashed_plate_armour()), 36, 8),
-            'outfitmanager_peek_outfits': arc_badge(glyphs.as_src(glyphs.plate_armour()), 36, 41)}
+            'outfitmanager_peek_outfits': arc_badge(glyphs.as_src(glyphs.plate_armour()), 36, 41),
+            # (the helmet entry on pads: the game's empty helmet slot, icon_common_emptyslot_armor_helmet)
+            'outfitmanager_peek_helmet': arc_badge(bg.source('cd_icon_common_00.png', (555, 711, 70, 70)), 36, 43)}
 
 
 def slot_pos(k):

@@ -39,6 +39,10 @@ void note_pad_handle(LPCWSTR path, HANDLE h)
         if (p.h.compare_exchange_strong(none, h)) {
             p.len = len, p.dualsense = ds;
             LOG("Outfit Arc: the game's PlayStation pad handle %p (reports of %lu bytes)", static_cast<void*>(h), len);
+            // (the game just opened a PlayStation pad: our reader looks for it now - before, it looked once on the first
+            // frame (too early: no pad yet) and again only when the gear wheel opened, so the Outfit Arc's L1 + down
+            // did nothing until then, 2026-11-18)
+            if (g_hid_wake) SetEvent(g_hid_wake);
             return;
         }
     }

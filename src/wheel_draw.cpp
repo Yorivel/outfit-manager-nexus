@@ -9,6 +9,7 @@
 #include "looks.h"
 #include "looks_view.h"
 #include "settings.h"
+#include <cctype>
 #include "wheel_hooks.h"
 #include "pads.h"
 #include "arc.h"
@@ -300,6 +301,7 @@ void show_side_badges(U64 root, const char* const kind[2], int where)
         const char* t = kind ? kind[k] : nullptr;
         set_class(b, "om-sb-bed", t && !std::strcmp(t, "bed"));
         set_class(b, "om-sb-combat", t && !std::strcmp(t, "combat"));
+        set_class(b, "om-sb-swim", t && !std::strcmp(t, "swim"));
         set_class(b, "om-sb-look", t && !std::strcmp(t, "look"));
         set_class(b, "om-sb-plain", t && where == 1);
         set_class(b, "om-sb-eye", t && where == 2);
@@ -542,9 +544,12 @@ void apply_outfit_slots(U64 self, U32 only)
             if (!kBadgesInCentre) { // (else the bed and the look: in the centre only)
                 if (ro.activity == kActivitySleep) row[n++] = "om-sleep-c";
                 if (ro.activity == kActivityCombat) row[n++] = "om-combat-c";
+                if (ro.activity == kActivitySwim) row[n++] = "om-swim-c";
                 if (charlook_on(ro)) row[n++] = "om-lookmain-c";
             }
-            for (int k = 1; k < n; ++k) side[k - 1] = !std::strcmp(row[k], "om-sleep-c") ? "bed" : !std::strcmp(row[k], "om-combat-c") ? "combat" : "look";
+            for (int k = 1; k < n; ++k)
+                side[k - 1] = !std::strcmp(row[k], "om-sleep-c") ? "bed" : !std::strcmp(row[k], "om-combat-c") ? "combat"
+                              : !std::strcmp(row[k], "om-swim-c") ? "swim" : "look";
         }
         // (the "+" slot: the worn chest, whatever is worn - what it unequips / what saving would keep)
         const bool set = saved && is_weapon_set(g_outfits[slot_outfit(i)]); // (a weapon set, #27)
@@ -560,8 +565,8 @@ void apply_outfit_slots(U64 self, U32 only)
                            : mode == kModeSettings               ? "om-cog-c"
                            : mode == kModeAppearance             ? "om-eye-c"
                            : empty && g_outfit_count < kMaxOutfits ? (kPlusSlotCentred ? "om-plus-big" : "om-plus-c")
-                           : set ? (int(slot_outfit(i)) == fx_busy_target() ? "om-wset-busy-c" // (loading: pulses)
-                                    : int(slot_outfit(i)) == worn_set ? "om-wset-gold-c" : "om-wset-c") // (#27)
+                           : set ? wset_badge(g_outfits[slot_outfit(i)], int(slot_outfit(i)) == fx_busy_target() ? 2 // (loading: pulses)
+                                              : int(slot_outfit(i)) == worn_set ? 1 : 0) // (#27)
                            : saved ? row[0] // (the badge row's first: its Climate marker, the bed or the look, or none)
                                                                    : nullptr; // (at the cap: no "+")
         g_badge_elem[i] = badge, g_badge_class[i] = want;
@@ -586,7 +591,7 @@ void apply_outfit_slots(U64 self, U32 only)
             if (!kBadgesInCentre && saved && !set && mode == kModeMain) looks |= g_outfits[slot_outfit(i)].underwear_look != kLookDefault;
             bool climate = want && (!std::strncmp(want, "om-cold", 7) || !std::strncmp(want, "om-heat", 7) ||
                                     !std::strcmp(want, "om-sleep-c") || !std::strcmp(want, "om-combat-c") ||
-                                    !std::strcmp(want, "om-lookmain-c"));
+                                    !std::strcmp(want, "om-swim-c") || !std::strcmp(want, "om-lookmain-c"));
             stacked = looks && climate;
             badge_ok &= set_class(mark, "self-center", true);
             badge_ok &= set_class(mark, "om-eye-c", looks && !stacked);
@@ -657,20 +662,54 @@ void apply_outfit_slots(U64 self, U32 only)
     g_slots_logged = true;
 }
 
-// A weapon set's picture (#27): its main weapon (equipment-0, else its first weapon) - saved with it, else from the item.
-std::string weapon_set_picture(const Outfit& o)
+// A weapon set's badge (#27): its kind by the piece its picture shows - ranged (bows, crossbows, guns, cannons,
+// throwers: the item icon's PHM_04..08 / 13 / 14 groups, or the names), tool (life-skill gear, T0000_ axe / pickaxe /
+// saw / broom / hammer / hoe / shovel / fishing rod / lantern / torch...) or melee (everything else); state 0 saved, 1 worn (gold),
+// 2 loading (pulsing gold). (2026-11-17, chosen with the user: crossed swords, offense bow, axe.)
+const char* wset_badge(const Outfit& o, int state)
+{
+    static const char* const kClass[3][3] = {
+        {"om-wset-melee-c", "om-wset-melee-gold-c", "om-wset-melee-busy-c"},
+        {"om-wset-ranged-c", "om-wset-ranged-gold-c", "om-wset-ranged-busy-c"},
+        {"om-wset-tool-c", "om-wset-tool-gold-c", "om-wset-tool-busy-c"}};
+    std::string pic = weapon_set_picture(o);
+    for (char& c : pic) c = char(std::tolower(static_cast<unsigned char>(c)));
+    auto has = [&](const char* s) { return pic.find(s) != std::string::npos; };
+    int kind = 0;
+    if (has("_t0000_")) {
+        for (const char* t : {"_axe", "pickaxe", "_saw", "broom", "hammer", "_hoe", "shovel", "fishingrod", "chainsaw", "sickle", "lantern", "torch"})
+            if (has(t)) kind = 2;
+    }
+    if (!kind)
+        for (const char* r : {"_phm_04_", "_phm_05_", "_phm_06_", "_phm_07_shotgun", "_phm_08_", "_phm_13_cannon", "_phm_14_",
+                              "_bow_", "crossbow", "musket", "pistol", "shotgun", "_cannon_", "thrower", "greekfire"})
+            if (has(r)) kind = 1;
+    return kClass[kind][state < 0 ? 0 : state > 2 ? 2 : state];
+}
+
+// The piece a weapon set's icon shows (#27; #53 selects it after a load): its Icon setting's weapon, else its main-hand
+// weapon (equipment-0), else its first weapon. nullptr: it holds no weapon.
+const OutfitItem* weapon_set_icon_piece(const Outfit& o)
 {
     if (o.icon_slot) // (its Icon setting: the weapon chosen)
         for (const OutfitItem& it : o.items)
-            if (it.slot + 1 == o.icon_slot && it.key != 0xFFFF) return piece_icon(it);
-    if (!o.weapon_icon.empty()) return o.weapon_icon;
+            if (it.slot + 1 == o.icon_slot && it.key != 0xFFFF) return &it;
     const OutfitItem* first = nullptr;
     for (const OutfitItem& it : o.items)
         if (is_weapon_slot(it.slot) && it.key != 0xFFFF) {
-            if (it.slot == kHandR) return piece_icon(it);
+            if (it.slot == kHandR) return &it;
             if (!first) first = &it;
         }
-    return first ? piece_icon(*first) : o.chest_icon;
+    return first;
+}
+
+// A weapon set's picture (#27): its icon piece's - the main weapon's saved with it, else from the item.
+std::string weapon_set_picture(const Outfit& o)
+{
+    const OutfitItem* p = weapon_set_icon_piece(o);
+    if (p && o.icon_slot && p->slot + 1 == o.icon_slot) return piece_icon(*p); // (the Icon setting's: from the item)
+    if (!o.weapon_icon.empty()) return o.weapon_icon;
+    return p ? piece_icon(*p) : o.chest_icon;
 }
 int g_worn_set = -1; // (the weapon set worn when the slots were last drawn)
 
@@ -963,7 +1002,7 @@ void center_show(U64 self)
 U64 g_cb_row = 0, g_cb_host = 0; // (the row, and the caption holding it)
 std::vector<const char*> g_cb_kinds;
 const char* const kCbAll[] = {"om-cbi-eye", "om-cbi-cold", "om-cbi-heat", "om-cbi-cold2", "om-cbi-heat2", "om-cbi-bed",
-                              "om-cbi-combat", "om-cbi-look"};
+                              "om-cbi-combat", "om-cbi-swim", "om-cbi-look"};
 
 void keep_center_badges()
 {
@@ -998,6 +1037,7 @@ bool show_center_badges(U64 te, const Outfit* o)
                             : !std::strcmp(c, "om-cold2-c") ? "om-cbi-cold2" : "om-cbi-heat2");
         if (o->activity == kActivitySleep) kinds.push_back("om-cbi-bed");
         if (o->activity == kActivityCombat) kinds.push_back("om-cbi-combat");
+        if (o->activity == kActivitySwim) kinds.push_back("om-cbi-swim");
         if (charlook_on(*o)) kinds.push_back("om-cbi-look");
     }
     if (kinds != g_cb_kinds) {

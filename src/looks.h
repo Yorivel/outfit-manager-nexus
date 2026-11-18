@@ -57,6 +57,10 @@ struct HelmetPress {
 };
 HelmetPress helmet_press_plan(U16 character);
 void helmet_set(U16 character, std::uint8_t pin);
+// A press waiting for its animation's moment (character << 8 | pin; ~0 none): a save the game writes meanwhile gets the
+// pin the press is heading for - the game saves right at the press, before the hand reaches the helmet (2026-11-18)
+extern std::atomic<U32> g_helmet_pending;
+void record_helmet_for_save(Store& s);
 bool lantern_lit(); // (sound.cpp: the played character's lantern burns)
 // present.cpp: a slot's piece taken off the game's presentation (model, physics, part rules) while it stays equipped
 bool present_on();

@@ -26,7 +26,7 @@ import pngread, tex
 ROOT = r'F:\MyProjects\CDInventory'
 VAN = os.path.join(ROOT, 're', 'omring', 'vanilla')
 GEN = os.path.join(ROOT, 're', 'omring', 'gen')
-MOD = r'F:\MyProjects\CDInventory\mod\Outfit Manager\files\0012'   # the mod's source (DMM's copy is an install)
+MOD = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'mod', 'Outfit Manager', 'files', '0012')  # (this repo's mod, the source since 0.5.0; CDInventory's copy is the old one)
 IMG_DIR = 'ui/texture/image/customizeimage'   # DMM routes new DDS here (as Barber Unlocked's)
 
 S = 900                 # ring image size (and generated canvases)
@@ -636,6 +636,8 @@ CSS_HEAD = """/* Outfit Manager: Outfits tab looks (classes set by OutfitManager
 .self-center.om-sleep-c { display: block; opacity: 1; left: 50%; top: 50%; width: 28px; height: 28px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(cd_uitexture_tab_icon_housing_Bed); }
 /* Combat (#45): the game's dual swords skill tab icon, white, in the same spot. */
 .self-center.om-combat-c { display: block; opacity: 1; left: 50%; top: 50%; width: 28px; height: 28px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(cd_uitexture_tab_icon_skilltree_SwordDualWeapon); }
+/* Swimming (#54): the game's water movement skill icon (a white wave), in the same spot. */
+.self-center.om-swim-c { display: block; opacity: 1; left: 50%; top: 50%; width: 28px; height: 28px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(cd_icon_skill_WaterMove_Enhanced); }
 /* Appearance. om-eye-c: the eye (badge spot): the eye scroll mode on the occupancy-chain element, and the marker of a
    saved outfit with looks set (main mode) on its charge-count wrap (a second badge element, given self-center by the
    plugin); om-eye2-c: that marker above the climate thermometer (same centre as the badges, one badge up). In the
@@ -646,11 +648,18 @@ CSS_HEAD = """/* Outfit Manager: Outfits tab looks (classes set by OutfitManager
 .self-center.om-look-hidden-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_hidden); }
 /* The "+" slot's Unequip Outfit dot (#21): the plate armour, slashed. */
 .self-center.om-unequip-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_unequip); }
-/* A weapon set (#27): sword and shield in the climate thermometer's style, in its spot (weapon sets have no climate);
-   gold while exactly its weapons are worn, pulsing gold while it loads (wset_badge_gen.py). */
-.self-center.om-wset-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset); }
-.self-center.om-wset-gold-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_gold); }
-.self-center.om-wset-busy-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
+/* A weapon set (#27): its kind's badge - melee (crossed swords), ranged (a bow), tool (an axe), by the piece its
+   picture shows - in the climate thermometer's style, in its spot (weapon sets have no climate); gold while exactly
+   its weapons are worn, pulsing gold while it loads (wset_badge_gen.py). */
+.self-center.om-wset-melee-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_melee); }
+.self-center.om-wset-melee-gold-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_melee_gold); }
+.self-center.om-wset-melee-busy-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_melee_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
+.self-center.om-wset-ranged-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_ranged); }
+.self-center.om-wset-ranged-gold-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_ranged_gold); }
+.self-center.om-wset-ranged-busy-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_ranged_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
+.self-center.om-wset-tool-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_tool); }
+.self-center.om-wset-tool-gold-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_tool_gold); }
+.self-center.om-wset-tool-busy-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_tool_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
 .self-center.om-look-combat-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_combat); }
 .self-center.om-look-peace-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_peace); }
 .self-center.om-return-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_return); }

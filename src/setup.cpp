@@ -258,6 +258,7 @@ bool install()
     if (have({kRvaItemInfo, kRvaDefaultItemInfo}))
         g_item_info = reinterpret_cast<ItemInfoFn>(g_base + kRvaItemInfo);
     LOG("item names %s", g_item_info ? "ready" : "unavailable (messages name the slot only)");
+    weapon_select_install(); // (#53: a weapon set's weapon picked after its load)
     if (have({kRvaItemMove, kRvaBagInfo})) {
         g_item_move = reinterpret_cast<ItemMoveFn>(g_base + kRvaItemMove);
         g_bag_info = reinterpret_cast<BagInfoFn>(g_base + kRvaBagInfo);

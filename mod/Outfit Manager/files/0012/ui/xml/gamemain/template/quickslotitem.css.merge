@@ -29,6 +29,8 @@
 .self-center.om-sleep-c { display: block; opacity: 1; left: 50%; top: 50%; width: 28px; height: 28px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(cd_uitexture_tab_icon_housing_Bed); }
 /* Combat (#45): the game's dual swords skill tab icon, white, in the same spot. */
 .self-center.om-combat-c { display: block; opacity: 1; left: 50%; top: 50%; width: 28px; height: 28px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(cd_uitexture_tab_icon_skilltree_SwordDualWeapon); }
+/* Swimming (#54): the game's water movement skill icon (a white wave), in the same spot. */
+.self-center.om-swim-c { display: block; opacity: 1; left: 50%; top: 50%; width: 28px; height: 28px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(cd_icon_skill_WaterMove_Enhanced); }
 /* Appearance. om-eye-c: the eye (badge spot): the eye scroll mode on the occupancy-chain element, and the marker of a
    saved outfit with looks set (main mode) on its charge-count wrap (a second badge element, given self-center by the
    plugin); om-eye2-c: that marker above the climate thermometer (same centre as the badges, one badge up). In the
@@ -39,11 +41,18 @@
 .self-center.om-look-hidden-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_hidden); }
 /* The "+" slot's Unequip Outfit dot (#21): the plate armour, slashed. */
 .self-center.om-unequip-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_unequip); }
-/* A weapon set (#27): sword and shield in the climate thermometer's style, in its spot (weapon sets have no climate);
-   gold while exactly its weapons are worn, pulsing gold while it loads (wset_badge_gen.py). */
-.self-center.om-wset-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset); }
-.self-center.om-wset-gold-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_gold); }
-.self-center.om-wset-busy-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
+/* A weapon set (#27): its kind's badge - melee (crossed swords), ranged (a bow), tool (an axe), by the piece its
+   picture shows - in the climate thermometer's style, in its spot (weapon sets have no climate); gold while exactly
+   its weapons are worn, pulsing gold while it loads (wset_badge_gen.py). */
+.self-center.om-wset-melee-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_melee); }
+.self-center.om-wset-melee-gold-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_melee_gold); }
+.self-center.om-wset-melee-busy-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_melee_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
+.self-center.om-wset-ranged-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_ranged); }
+.self-center.om-wset-ranged-gold-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_ranged_gold); }
+.self-center.om-wset-ranged-busy-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_ranged_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
+.self-center.om-wset-tool-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_tool); }
+.self-center.om-wset-tool-gold-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_tool_gold); }
+.self-center.om-wset-tool-busy-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(outfitmanager_wset_tool_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
 .self-center.om-look-combat-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_combat); }
 .self-center.om-look-peace-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_peace); }
 .self-center.om-return-c { display: block; opacity: 1; left: 50%; top: 50%; width: 50px; height: 50px; rotate-z: 0deg; translate-x: -12px; translate-y: 4px; background-image: textureid(outfitmanager_badge_return); }
@@ -594,6 +603,7 @@
 .self-center.om-lookmain-c { display: block; opacity: 1; left: 50%; top: 50%; width: 26px; height: 26px; rotate-z: 0deg; translate-x: 0px; translate-y: 16px; background-image: textureid(cd_icon_map_beauty); }
 .om-sb.om-sb-bed { background-image: textureid(cd_uitexture_tab_icon_housing_Bed); }
 .om-sb.om-sb-combat { background-image: textureid(cd_uitexture_tab_icon_skilltree_SwordDualWeapon); }
+.om-sb.om-sb-swim { background-image: textureid(cd_icon_skill_WaterMove_Enhanced); }
 .om-sb.om-sb-look { background-image: textureid(cd_icon_map_beauty); }
 .om-cb-row { position: relative; width: 250px; height: 38px; margin-top: 2px; display: flex; flex-direction: row; justify-content: center; align-items: center; }
 .om-cb { position: relative; width: 34px; height: 34px; margin-left: 3px; margin-right: 3px; background-image: textureid(cd_slot_bg_small_abyssgear_socket); }
@@ -605,6 +615,7 @@
 .om-cb-icon.om-cbi-heat2 { background-image: textureid(cd_icon_temperature_burn_phase_00); }
 .om-cb-icon.om-cbi-bed { background-image: textureid(cd_uitexture_tab_icon_housing_Bed); }
 .om-cb-icon.om-cbi-combat { background-image: textureid(cd_uitexture_tab_icon_skilltree_SwordDualWeapon); }
+.om-cb-icon.om-cbi-swim { background-image: textureid(cd_icon_skill_WaterMove_Enhanced); }
 .om-cb-icon.om-cbi-look { background-image: textureid(cd_icon_map_beauty); }
 .om-cb-icon.om-cbi-eye { left: -1px; top: -1px; width: 36px; height: 36px; }
 .om-hk-caps-eye2 { left: -78px; top: 62px; }
@@ -631,6 +642,8 @@
 .self-center.om-sleep-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 22.4px; height: 22.4px; rotate-z: 0deg; translate-x: 2.8px; translate-y: 18.8px; background-image: textureid(cd_uitexture_tab_icon_housing_Bed); }
 .self-center.om-combat-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 25.2px; height: 25.2px; rotate-z: 0deg; translate-x: 1.4px; translate-y: 17.4px; background-image: textureid(cd_uitexture_tab_icon_skilltree_SwordDualWeapon); }
 .self-center.om-combat-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 22.4px; height: 22.4px; rotate-z: 0deg; translate-x: 2.8px; translate-y: 18.8px; background-image: textureid(cd_uitexture_tab_icon_skilltree_SwordDualWeapon); }
+.self-center.om-swim-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 25.2px; height: 25.2px; rotate-z: 0deg; translate-x: 1.4px; translate-y: 17.4px; background-image: textureid(cd_icon_skill_WaterMove_Enhanced); }
+.self-center.om-swim-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 22.4px; height: 22.4px; rotate-z: 0deg; translate-x: 2.8px; translate-y: 18.8px; background-image: textureid(cd_icon_skill_WaterMove_Enhanced); }
 .self-center.om-eye-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: 6.5px; background-image: textureid(outfitmanager_badge_eye); }
 .self-center.om-eye-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 40px; height: 40px; rotate-z: 0deg; translate-x: -7px; translate-y: 9px; background-image: textureid(outfitmanager_badge_eye); }
 .self-center.om-eye2-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: -17.5px; background-image: textureid(outfitmanager_badge_eye); }
@@ -641,12 +654,24 @@
 .self-center.om-look-hidden-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 40px; height: 40px; rotate-z: 0deg; translate-x: -7px; translate-y: 9px; background-image: textureid(outfitmanager_badge_hidden); }
 .self-center.om-unequip-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: 6.5px; background-image: textureid(outfitmanager_badge_unequip); }
 .self-center.om-unequip-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 40px; height: 40px; rotate-z: 0deg; translate-x: -7px; translate-y: 9px; background-image: textureid(outfitmanager_badge_unequip); }
-.self-center.om-wset-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(outfitmanager_wset); }
-.self-center.om-wset-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(outfitmanager_wset); }
-.self-center.om-wset-gold-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(outfitmanager_wset_gold); }
-.self-center.om-wset-gold-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(outfitmanager_wset_gold); }
-.self-center.om-wset-busy-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(outfitmanager_wset_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
-.self-center.om-wset-busy-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(outfitmanager_wset_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
+.self-center.om-wset-melee-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(outfitmanager_wset_melee); }
+.self-center.om-wset-melee-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(outfitmanager_wset_melee); }
+.self-center.om-wset-melee-gold-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(outfitmanager_wset_melee_gold); }
+.self-center.om-wset-melee-gold-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(outfitmanager_wset_melee_gold); }
+.self-center.om-wset-melee-busy-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(outfitmanager_wset_melee_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
+.self-center.om-wset-melee-busy-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(outfitmanager_wset_melee_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
+.self-center.om-wset-ranged-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(outfitmanager_wset_ranged); }
+.self-center.om-wset-ranged-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(outfitmanager_wset_ranged); }
+.self-center.om-wset-ranged-gold-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(outfitmanager_wset_ranged_gold); }
+.self-center.om-wset-ranged-gold-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(outfitmanager_wset_ranged_gold); }
+.self-center.om-wset-ranged-busy-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(outfitmanager_wset_ranged_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
+.self-center.om-wset-ranged-busy-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(outfitmanager_wset_ranged_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
+.self-center.om-wset-tool-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(outfitmanager_wset_tool); }
+.self-center.om-wset-tool-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(outfitmanager_wset_tool); }
+.self-center.om-wset-tool-gold-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(outfitmanager_wset_tool_gold); }
+.self-center.om-wset-tool-gold-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(outfitmanager_wset_tool_gold); }
+.self-center.om-wset-tool-busy-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 23.4px; height: 23.4px; rotate-z: 0deg; translate-x: 1.3px; translate-y: 17.3px; background-image: textureid(outfitmanager_wset_tool_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
+.self-center.om-wset-tool-busy-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 20.8px; height: 20.8px; rotate-z: 0deg; translate-x: 2.6px; translate-y: 18.6px; background-image: textureid(outfitmanager_wset_tool_gold); animation-name: om-busy-pulse; animation-duration: 1s; animation-iteration-count: infinite; animation-timing-function: Linear; }
 .self-center.om-look-combat-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: 6.5px; background-image: textureid(outfitmanager_badge_combat); }
 .self-center.om-look-combat-c.om-z12 { display: block; opacity: 1; left: 50%; top: 50%; width: 40px; height: 40px; rotate-z: 0deg; translate-x: -7px; translate-y: 9px; background-image: textureid(outfitmanager_badge_combat); }
 .self-center.om-look-peace-c.om-z11 { display: block; opacity: 1; left: 50%; top: 50%; width: 45px; height: 45px; rotate-z: 0deg; translate-x: -9.5px; translate-y: 6.5px; background-image: textureid(outfitmanager_badge_peace); }

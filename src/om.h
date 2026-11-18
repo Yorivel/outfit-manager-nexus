@@ -103,6 +103,10 @@ using BagInfoFn = RecordGetFn; // (key)
 // equip takes an item copy {200-byte item, u16 +0xc8, u16 bag position +0xca} (its bag comes from the item type).
 using EquipRequestFn = int*(__fastcall*)(U64, int*, const void*, short);
 using UnequipRequestFn = int*(__fastcall*)(U64, int*, short);
+// #53: the weapons tab's change to a slot's piece (inventory, err, bag, pos, slot; bag 0xFFFF: the worn piece), and the
+// slots of a weapon group (inventory, group*, {u16* p, u32 n, u32 cap, u16 inline[]}*).
+using QuickSlotChangeFn = int*(__fastcall*)(U64, int*, U16, U16, short);
+using WeaponGroupSlotsFn = void(__fastcall*)(U64, const int*, void*);
 using ToastFn = void(__fastcall*)(U64, const char*, U32);
 using FindViewFn = U64(__fastcall*)(U64, const char*);
 using OpenTextModalFn = U64(__fastcall*)(U64, U64, unsigned char*, int);
@@ -150,8 +154,9 @@ struct Outfit {
     // Activity (2026-11-09): what the outfit is worn for, put on when the character starts it (several: one at random),
     // the outfit or items worn before back when it ends. kActivitySleep: in bed (sleep.cpp); its own looks win over the
     // game's in-bed hiding. (The first build's "Sleepwear: On" reads as Sleeping.) kActivityCombat (#45, 2026-11-16): while
-    // the played character is in combat; it wins over Sleeping.
-    std::uint8_t activity = 0; // kActivityNone / kActivitySleep / kActivityCombat
+    // the played character is in combat; it wins over Sleeping. kActivitySwim (#54, 2026-11-18): from getting into the
+    // water until he is dry again (the game's own wetness); Combat and Sleeping win over it.
+    std::uint8_t activity = 0; // kActivityNone / kActivitySleep / kActivityCombat / kActivitySwim
     // A temporary outfit (sleep.cpp: the pieces worn before a sleep, going back on): loaded like any other, never saved.
     bool temp = false;
     // Its hotkey (the outfit's settings, 2026-11-06): a key or mouse button (virtual-key code; 0 = none) and the
@@ -184,7 +189,7 @@ struct Outfit {
     std::uint8_t char_look = 0;
     std::string look_snap; // (raw bytes; empty: none taken)
 };
-constexpr std::uint8_t kActivityNone = 0, kActivitySleep = 1, kActivityCombat = 2, kActivityCount = 3;
+constexpr std::uint8_t kActivityNone = 0, kActivitySleep = 1, kActivityCombat = 2, kActivitySwim = 3, kActivityCount = 4;
 constexpr U16 kBackShieldSlot = 23;
 // The display slots (the game's equip slot table, CDInventory/tools/equipslots.py): on no wheel, each shows a carried
 // weapon on the body, mirroring a weapon slot - Kliff 22 sword, 23 shield, 24 bow; Damiane 22 rapier, 23 right-hand
@@ -275,8 +280,10 @@ using ItemInfoFn = RecordGetFn; // (key)
 const char* const kBadges[] = {"om-plus-big", "om-cog-big", "om-plus-c", "om-cog-c", "om-flag-c", "om-cold-c", "om-heat-c",
                                "om-cold2-c", "om-heat2-c", "om-eye-c", "om-look-shown-c", "om-look-hidden-c",
                                "om-look-combat-c", "om-look-peace-c", "om-return-c", "om-prompt-c", "om-cross-c",
-                               "om-abtn-c", "om-unequip-c", "om-wset-c", "om-wset-gold-c", "om-wset-busy-c",
-                               "om-sleep-c", "om-combat-c", "om-lookmain-c"};
+                               "om-abtn-c", "om-unequip-c", "om-wset-melee-c", "om-wset-melee-gold-c", "om-wset-melee-busy-c",
+                               "om-wset-ranged-c", "om-wset-ranged-gold-c", "om-wset-ranged-busy-c", "om-wset-tool-c",
+                               "om-wset-tool-gold-c", "om-wset-tool-busy-c",
+                               "om-sleep-c", "om-combat-c", "om-swim-c", "om-lookmain-c"};
 // The game's slot refresh (after every equipment change) re-selects every slot's dots with its own count (0 for ours:
 // no items) and -1: the select is hooked, and for our slots' selectors it gets our count and mode instead, so the dots
 // never go blank. Our own calls pass through it as well. Our slots are looked up live (the Outfits menu's slot list).
