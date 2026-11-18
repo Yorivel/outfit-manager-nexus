@@ -183,7 +183,6 @@ constexpr int kInWater = 1, kOnGround = 2;
 std::atomic<int> g_lower_place{0};
 std::atomic<U32> g_player_id{0}; // (the played character's actor id, actor +0x60: swim_tick)
 bool g_swim_ok = false;          // (the evaluator hooked: sleep_install)
-std::atomic<bool> g_swim_trace{false}; // DIAG (his lower layer's states from leaving the water to the water or ground)
 
 // A branch of an action chart layer passed (comp: the chart's control component, +8 its actor; layer 1: the lower body)
 // to the state `to`: into the water or onto ground, if it is the played character's. Any other state: nothing changes.
@@ -194,18 +193,11 @@ void swim_branch(U64 comp, U32 layer, U32 to)
                     : std::binary_search(std::begin(kGroundStates), std::end(kGroundStates), to) ? kOnGround
                                                                                                     : 0;
     const int was = g_lower_place.load();
-    const bool trace = g_swim_trace.load() || (was == kInWater && place != kInWater); // DIAG
-    if (!trace) // DIAG (guards the next line: tracing, every state of his is read)
     if (!place || place == was) return; // (no change: the common case, nothing read)
     U64 actor = 0;
     U32 id = 0;
     const U32 player = g_player_id.load();
     if (!player || !rd(comp + 8, actor) || !plausible(actor) || !rd(actor + 0x60, id) || id != player) return;
-    if (trace) { // DIAG
-        g_swim_trace = !place; // DIAG (until the water or ground)
-        LOG("DIAG swim: lower layer -> %08X (%s)", to, place == kInWater ? "water" : place == kOnGround ? "ground" : "-"); // DIAG
-    } // DIAG
-    if (!place || place == was) return; // DIAG (a traced state that changes nothing)
     g_lower_place = place;
     post();
 }
@@ -463,7 +455,6 @@ void swim_tick(U64 self)
         g_swim_session = g_swim_dropped = g_swim_waiting = false;
         g_swim_swap.swapped = g_swim_swap.pending_end = g_swim_swap.have_items = false;
         g_lower_place = 0;
-        g_swim_trace = false; // DIAG
     }
     U64 ctx[4] = {};
     const U64 actor = acquire_player(ctx);
