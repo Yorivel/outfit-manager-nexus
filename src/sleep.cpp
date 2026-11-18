@@ -513,6 +513,16 @@ void diag_buffs(U64 actor) // DIAG
         const U64 b = buffs + i * kOffSkillBuffSize; // DIAG
         U16 row = 0xFFFF, info = 0xFFFF; // DIAG
         rd(b + kOffBuffSkill, row), rd(b + kOffBuffInfo, info); // DIAG
+        static std::unordered_map<U32, bool> shown; // DIAG (each row's record once: its key and its first bytes)
+        for (const U32 id : {info != 0xFFFF ? U32(info) | 0x10000u : 0u, row != 0xFFFF ? U32(row) | 0x20000u : 0u}) { // DIAG
+            if (!id || shown[id]) continue; // DIAG
+            shown[id] = true; // DIAG
+            const bool is_info = id & 0x10000u; // DIAG
+            const U64 rec = info_record(is_info ? kRvaBuffInfo : kRvaSkillInfo, U16(id & 0xFFFF)); // DIAG
+            LOG("DIAG swim: %s row %u -> record %llX: key (+%llX) %u, +4 %u, first bytes %s", is_info ? "buff info" : "skill", // DIAG
+                id & 0xFFFF, rec, is_info ? kOffBuffInfoKey : kOffSkillKey, is_info ? buff_info_key(U16(id)) : skill_key(U16(id)), // DIAG
+                plausible(rec) ? r32(rec + 4) : 0, plausible(rec) ? hex(rec, 16).c_str() : "-"); // DIAG
+        } // DIAG
         char x[128]; // DIAG
         std::snprintf(x, sizeof x, " [info %u key %u #%u | skill %u key %u lv %u | serial %08X]", info, // DIAG
                       info != 0xFFFF ? buff_info_key(info) : 0, r32(b + 0x134), row, row != 0xFFFF ? skill_key(row) : 0, // DIAG

@@ -633,18 +633,18 @@ U64 kRvaBuffApply = 0xb55f90;        // (witness only) the skill component's app
                                      // looks it up in its buffs by serial, adds it there
 U64 kRvaSkillBuffFind = 0x2433d30;   // (witness only) (component, u16 skill row, int level, ...): whether its buffs hold
                                      // every buff of that skill level - reads each buff's skill row
-U64 kRvaSkillRowOfKey = 0x1799470;   // (witness only) a skill key read from a stream -> its row: the record of that key
-                                     // (its +kOffSkillKey compared) gives its row
 U64 kOffCompSkill = 0xf0;            // actor component -> the skill component (the character's buffs)
 U64 kOffSkillBuffs = 0x58;           // skill component: its active buffs (an array of kOffSkillBuffSize-byte records)
 U64 kOffSkillBuffCount = 0x60;       // skill component: u32 the number of active buffs
 U64 kOffSkillBuffSize = 0x150;       // an active buff's size
 U64 kOffBuffSkill = 0xe8;            // active buff: u16 its skill's row (0xFFFF: none - an item's buff)
-U64 kOffSkillKey = 0x4;              // skill record: u32 its key (skill.staticinfo's)
+U64 kOffSkillKey = 0x8;              // skill record (what kRvaSkillInfo gives): u32 its key (skill.staticinfo's) - +4 was
+                                     // the key's place in the key index's entries, another object (no key read, 2026-11-18)
 U64 kRvaBuffInfo = 0x76a9f0;         // (const u16* buff info row) -> the buff info's record; an unknown row: the default - called
-U64 kRvaBuffRowOfKey = 0x1744250;    // (witness only) a buff info key read from a stream -> its row: the record of that
-                                     // key (its +kOffBuffInfoKey compared) gives its row
+U64 kRvaBuffInfoCheck = 0xb55b40;   // (witness only) the skill component's check of a buff's buff info against its list:
+                                     // reads the buff info record's key (+kOffBuffInfoKey) after kRvaBuffInfo
 U64 kOffBuffInfo = 0xea;             // active buff: u16 its buff info's row (0xFFFF: none - a skill's buff)
-U64 kOffBuffInfoKey = 0x4;           // buff info record: u32 its key (buffinfo.staticinfo's)
+U64 kOffBuffInfoKey = 0x8;           // buff info record (what kRvaBuffInfo gives): u32 its key (buffinfo.staticinfo's);
+                                     // (+4 held 1341 on every one of them in game, 2026-11-18: not the key)
 
 } // namespace om
