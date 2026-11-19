@@ -266,6 +266,14 @@ void anim_install()
     }
     g_ok = true;
     g_dye_ok = have({kRvaBagFind, kRvaBagItem, kRvaPropBuild});
+    if (g_dye_ok) { // (the prop build's two calls go where they should: its recipe pins where they are, not where they go)
+        auto calls = [](U64 at, U64 to) {
+            std::uint8_t op = 0;
+            std::int32_t rel = 0;
+            return rd(g_base + at, op) && op == 0xE8 && rd(g_base + at + 1, rel) && at + 5 + std::int64_t(rel) == std::int64_t(to);
+        };
+        g_dye_ok = calls(kRvaPropBuild + kPropInfoRet - 5, kRvaItemInfo) && calls(kRvaPropBuild + kPropFindRet - 5, kRvaBagFind);
+    }
     LOG("helmet animations: on (hooked only while one plays)%s", g_dye_ok ? "" : "; the bag functions weren't found: the helmet in the hand shows without its dye");
 }
 
