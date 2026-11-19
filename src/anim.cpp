@@ -227,7 +227,9 @@ const AnimHook kAnimHooks[] = {
     {&kRvaBagItem, reinterpret_cast<void*>(&bagitem_hook), reinterpret_cast<void**>(&g_bagitem_orig), true},
 };
 
-// Puts the animation's hooks in place (on) or takes them away. A failed install takes back what it had put in.
+// Puts the animation's hooks in place (on) or takes them away, all at once: MinHook freezes every game thread for each
+// hook it switches, and one by one the six made the game stutter at the animation's start and end (2026-11-19). A
+// failed install takes back what it had put in.
 bool anim_hooks(bool on)
 {
     for (size_t i = 0; i < std::size(kAnimHooks); ++i) {
@@ -235,16 +237,20 @@ bool anim_hooks(bool on)
         if (h.dye && !g_dye_ok) continue;
         void* t = reinterpret_cast<void*>(g_base + *h.rva);
         if (!on) {
-            MH_RemoveHook(t);
-        } else if (MH_CreateHook(t, h.fn, h.orig) != MH_OK || MH_EnableHook(t) != MH_OK) {
-            MH_RemoveHook(t);
+            MH_QueueDisableHook(t);
+        } else if (MH_CreateHook(t, h.fn, h.orig) != MH_OK || MH_QueueEnableHook(t) != MH_OK) {
             LOG("helmet animation: hook at +%llX failed", *h.rva);
-            for (size_t j = 0; j < i; ++j) // (the ones put in before it; one never put in just isn't found)
+            for (size_t j = 0; j <= i; ++j) // (none enabled yet: removing them frees them, nothing switched)
                 MH_RemoveHook(reinterpret_cast<void*>(g_base + *kAnimHooks[j].rva));
             return false;
         }
     }
-    return true;
+    const bool applied = MH_ApplyQueued() == MH_OK;
+    if (on && !applied) LOG("helmet animation: its hooks could not be switched on");
+    if (!on || !applied) // (switched off in one go: removing a disabled hook switches nothing)
+        for (const AnimHook& h : kAnimHooks)
+            if (!h.dye || g_dye_ok) MH_RemoveHook(reinterpret_cast<void*>(g_base + *h.rva));
+    return !on || applied;
 }
 
 void anim_install()
