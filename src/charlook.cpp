@@ -79,15 +79,30 @@ bool read_vec(U64 at, Vec& v)
     return true;
 }
 
-std::string read_look(U64 actor)
+// The character's look record (16 mesh choices, 250 values), or empty; `why` says what was missing (for the log).
+std::string read_look(U64 actor, std::string* why = nullptr)
 {
-    const U64 look = actor ? rp(look_component(actor) + kOffCompLook) : 0;
+    const U64 comp = actor ? look_component(actor) : 0;
+    const U64 look = comp ? rp(comp + kOffCompLook) : 0;
     Vec m{}, v{};
-    if (!look || !read_vec(look, m) || !read_vec(look + 0x10, v) || m.n != kMeshCount || v.n != kValueCount) return {};
+    const bool got_m = look && read_vec(look, m), got_v = look && read_vec(look + 0x10, v);
+    if (!got_m || !got_v || m.n != kMeshCount || v.n != kValueCount) {
+        if (why) {
+            char b[160];
+            std::snprintf(b, sizeof b, "%s%s%s, mesh %s %u, values %s %u (expected %u / %u)", actor ? "" : "no actor",
+                          actor && !comp ? "no look component" : "", comp && !look ? "no look record" : "",
+                          got_m ? "count" : "unreadable", m.n, got_v ? "count" : "unreadable", v.n, kMeshCount, kValueCount);
+            *why = b;
+        }
+        return {};
+    }
     std::string out(kLookBytes, '\0');
     for (U32 i = 0; i < kLookBytes; ++i) {
         std::uint8_t b = 0;
-        if (!rd(reinterpret_cast<U64>(i < kMeshCount ? m.p + i : v.p + (i - kMeshCount)), b)) return {};
+        if (!rd(reinterpret_cast<U64>(i < kMeshCount ? m.p + i : v.p + (i - kMeshCount)), b)) {
+            if (why) *why = "a byte of the record unreadable";
+            return {};
+        }
         out[i] = static_cast<char>(b);
     }
     return out;
@@ -171,7 +186,9 @@ void follow(U64 actor, U16 character)
             return;
         }
         tries = 0;
-        LOG("character look: can't read character %u's look - left as it is", character);
+        std::string why;
+        read_look(actor, &why);
+        LOG("character look: can't read character %u's look - left as it is (%s)", character, why.c_str());
         return;
     }
     const char* what = "";
