@@ -128,6 +128,7 @@ toast.no_weapons = "{outfit}" foi salvo sem armas: substitua-o para adicioná-la
 toast.look_taken = "{outfit}" agora traz sua aparência atual
 toast.look_off = "{outfit}" não traz mais uma aparência
 toast.look_failed = Não foi possível ler a aparência do seu personagem: nada foi salvo
+toast.look_none = Este personagem ainda não tem uma aparência do barbeiro: visite um barbeiro uma vez e depois tire o retrato
 report.not_put_on = "{outfit}": não foi possível equipar {piece} (outra peça ocupa o espaço)
 report.not_taken = "{outfit}": não foi possível pegar {piece} de {who}
 report.select_none = "{outfit}": it holds no weapon to pick

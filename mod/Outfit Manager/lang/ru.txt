@@ -134,6 +134,7 @@ toast.no_weapons = «{outfit}» сохранён без оружия: перез
 toast.look_taken = «{outfit}» теперь возвращает вашу текущую внешность
 toast.look_off = «{outfit}» больше не возвращает внешность
 toast.look_failed = Не удалось прочитать внешность персонажа: ничего не сохранено
+toast.look_none = У этого персонажа ещё нет внешности от цирюльника: загляните к цирюльнику один раз, затем сделайте снимок
 report.not_put_on = «{outfit}»: не удалось надеть: {piece} (место занято другой частью)
 report.not_taken = «{outfit}»: не удалось забрать: {piece} (у персонажа {who})
 report.select_none = "{outfit}": it holds no weapon to pick

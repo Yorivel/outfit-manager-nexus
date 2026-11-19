@@ -125,6 +125,7 @@ toast.no_weapons = 「{outfit}」儲存時沒有武器：覆蓋它即可加入�
 toast.look_taken = 「{outfit}」現在會帶上你目前的外觀
 toast.look_off = 「{outfit}」不再帶上外觀
 toast.look_failed = 無法讀取角色的外觀：未儲存任何內容
+toast.look_none = 此角色還沒有理髮店外觀：先去一次理髮店，再拍攝快照
 report.not_put_on = 「{outfit}」：無法裝備{piece}（另一部位佔用了欄位）
 report.not_taken = 「{outfit}」：無法從{who}處拿取{piece}
 report.select_none = "{outfit}": it holds no weapon to pick

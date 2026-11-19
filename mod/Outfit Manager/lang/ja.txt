@@ -125,6 +125,7 @@ toast.no_weapons = 「{outfit}」は武器なしで保存されています。�
 toast.look_taken = 「{outfit}」は今の外見を反映するようになりました
 toast.look_off = 「{outfit}」は外見を反映しなくなりました
 toast.look_failed = キャラクターの外見を読み取れませんでした。何も保存されていません
+toast.look_none = このキャラクターにはまだ理髪店での外見がありません。一度理髪店を訪れてから、スナップショットを撮ってください
 report.not_put_on = 「{outfit}」：{piece}を装備できませんでした（別の部位がスロットを使用中）
 report.not_taken = 「{outfit}」：{who}から{piece}を取れませんでした
 report.select_none = "{outfit}": it holds no weapon to pick

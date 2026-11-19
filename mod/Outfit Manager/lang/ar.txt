@@ -136,6 +136,7 @@ toast.no_weapons = حُفظ "{outfit}" بلا أسلحة: استبدله لإض�
 toast.look_taken = «{outfit}» يجلب الآن مظهرك الحالي
 toast.look_off = «{outfit}» لم يعد يجلب مظهرًا
 toast.look_failed = تعذّرت قراءة مظهر شخصيتك: لم يُحفظ شيء
+toast.look_none = لا يملك هذا الشخص مظهرًا من الحلاق بعد: زُر حلاقًا مرة واحدة، ثم التقط اللقطة
 report.not_put_on = "{outfit}": تعذَّر ارتداء {piece} (قطعة أخرى تشغل خانتها)
 report.not_taken = "{outfit}": تعذَّر أخذ {piece} من {who}
 report.select_none = "{outfit}": it holds no weapon to pick

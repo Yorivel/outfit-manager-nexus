@@ -128,6 +128,7 @@ toast.no_weapons = "{outfit}" è stato salvato senza armi: sovrascrivilo per agg
 toast.look_taken = "{outfit}" ora porta il tuo aspetto attuale
 toast.look_off = "{outfit}" non porta più un aspetto
 toast.look_failed = Impossibile leggere l'aspetto del personaggio: nulla è stato salvato
+toast.look_none = Questo personaggio non ha ancora un aspetto del barbiere: visita un barbiere una volta, poi scatta l'istantanea
 report.not_put_on = "{outfit}": {piece} non è stato equipaggiato (un altro pezzo occupa il suo slot)
 report.not_taken = "{outfit}": non è stato possibile prendere {piece} da {who}
 report.select_none = "{outfit}": it holds no weapon to pick

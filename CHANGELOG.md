@@ -4,6 +4,7 @@ Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods
 
 ## Unreleased
 
+- Fix: Character Look on a character who has never been to a barber (Oongka, until his first visit) said "your character's look couldn't be read". The game gives a character a barber look only at their first visit, so there is nothing to read until then; it now says so ("This character has no barber look yet: visit a barber once, then take the snapshot"), and Outfit Manager stops trying to read it every second for half a minute after each outfit change.
 - Fix: on the game update of 2026-11-19 (build 26776744) the outfit effect's particle budget wasn't found at start-up, so busy scenes could flicker while a glow played. Outfit Manager now checks the value when a glow starts instead of at start-up (the game sets it later), and searches once more at the first glow if the search at start-up found nothing.
 
 ## 0.8.2 (2026-11-18)

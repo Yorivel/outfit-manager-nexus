@@ -128,6 +128,7 @@ toast.no_weapons = « {outfit} » a été enregistrée sans armes : remplacez-la
 toast.look_taken = « {outfit} » apporte désormais votre apparence actuelle
 toast.look_off = « {outfit} » n'apporte plus d'apparence
 toast.look_failed = L'apparence de votre personnage n'a pas pu être lue : rien n'a été enregistré
+toast.look_none = Ce personnage n'a pas encore d'apparence de barbier : passe une fois chez un barbier, puis prends l'instantané
 report.not_put_on = « {outfit} » : {piece} n'a pas pu être équipé(e) (une autre pièce occupe son emplacement)
 report.not_taken = « {outfit} » : {piece} n'a pas pu être pris(e) à {who}
 report.select_none = "{outfit}": it holds no weapon to pick

@@ -6,8 +6,9 @@
 
 namespace om {
 
-// The played character's look now (raw: 16 mesh options + 250 values; empty when it can't be read).
-std::string charlook_read();
+// The played character's look now (raw: 16 mesh options + 250 values; empty when it can't be read). `none`: empty
+// because the character has no barber look yet (never at a barber).
+std::string charlook_read(bool* none = nullptr);
 // The applied outfit changed (mark_worn): its snapshot goes on, or the character's own look comes back (on a HUD frame,
 // once the outfit's gear has settled).
 void charlook_follow();
@@ -22,8 +23,9 @@ void charlook_install();
 extern std::atomic<U64> g_hud_root;
 
 // The settings' Character look: Snapshot clicked (takes / retakes it; the outfit brings it from now on) or Off clicked
-// (the outfit stops bringing it; the snapshot is kept). `applied`: the outfit is the one applied now. False: not done.
-bool charlook_take(Outfit& o, bool applied);
+// (the outfit stops bringing it; the snapshot is kept). `applied`: the outfit is the one applied now.
+enum class LookTake { Taken, NoLook, Unreadable }; // (NoLook: the character has no barber look yet)
+LookTake charlook_take(Outfit& o, bool applied);
 void charlook_off(Outfit& o, bool applied);
 // The outfit brings a snapshot (its setting is Snapshot and it has one).
 bool charlook_on(const Outfit& o);

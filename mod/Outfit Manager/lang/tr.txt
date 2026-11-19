@@ -128,6 +128,7 @@ toast.no_weapons = "{outfit}" silahsız kaydedildi: eklemek için üzerine yaz
 toast.look_taken = "{outfit}" artık şu anki görünümünü getiriyor
 toast.look_off = "{outfit}" artık bir görünüm getirmiyor
 toast.look_failed = Karakterinin görünümü okunamadı: hiçbir şey kaydedilmedi
+toast.look_none = Bu karakterin henüz berber görünümü yok: bir kez berbere uğra, sonra anlık görüntüyü al
 report.not_put_on = "{outfit}": {piece} kuşanılamadı (yuvasını başka bir parça tutuyor)
 report.not_taken = "{outfit}": {piece}, {who} karakterinden alınamadı
 report.select_none = "{outfit}": it holds no weapon to pick

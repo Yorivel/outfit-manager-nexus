@@ -134,6 +134,7 @@ toast.no_weapons = „{outfit}” zapisano bez broni: nadpisz go, aby ją dodać
 toast.look_taken = „{outfit}” przywraca teraz twój obecny wygląd
 toast.look_off = „{outfit}” nie przywraca już wyglądu
 toast.look_failed = Nie udało się odczytać wyglądu postaci: nic nie zapisano
+toast.look_none = Ta postać nie ma jeszcze wyglądu od fryzjera: odwiedź raz fryzjera, a potem zrób migawkę
 report.not_put_on = „{outfit}”: nie udało się założyć: {piece} (inna część zajmuje miejsce)
 report.not_taken = „{outfit}”: nie udało się zabrać: {piece} (od: {who})
 report.select_none = "{outfit}": it holds no weapon to pick

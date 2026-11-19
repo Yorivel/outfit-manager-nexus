@@ -23,6 +23,7 @@
 #include "mem.h"
 #include "prompts.h"
 #include "store.h"
+#include <set>
 #include "wheel_hooks.h"
 
 #include <MinHook.h>
@@ -80,12 +81,15 @@ bool read_vec(U64 at, Vec& v)
 }
 
 // The character's look record (16 mesh choices, 250 values), or empty; `why` says what was missing (for the log).
-std::string read_look(U64 actor, std::string* why = nullptr)
+// `none`: the character has no barber look yet - the record is missing or empty. The game fills it at the character's
+// first barber visit (2026-11-19: Oongka's controller had 0 / 0 entries until then; Kliff's and Damiane's 16 / 250).
+std::string read_look(U64 actor, std::string* why = nullptr, bool* none = nullptr)
 {
     const U64 comp = actor ? look_component(actor) : 0;
     const U64 look = comp ? rp(comp + kOffCompLook) : 0;
     Vec m{}, v{};
     const bool got_m = look && read_vec(look, m), got_v = look && read_vec(look + 0x10, v);
+    if (none) *none = comp && (!look || (got_m && got_v && m.n == 0 && v.n == 0));
     if (!got_m || !got_v || m.n != kMeshCount || v.n != kValueCount) {
         if (why) {
             char b[160];
@@ -146,14 +150,16 @@ std::string brief(const std::string& l) // (hairstyle, beard, hair colour: for t
 // Pending work for the HUD frame: the look to follow the applied outfit (after an outfit change, a load, a character
 // switch); the barber's change to sort out (once out of it).
 U16 g_follow_char = kNoCharacter;
+int g_follow_tries = 0; // (reads that found the character still being built, for this attempt)
 U64 g_follow_at = 0, g_follow_wait = 0;
 std::atomic<U64> g_barber_at{0};
 std::atomic<U32> g_barber_gen{0}; // (the load the confirmation came in: a load since = it was the login's, not the barber's)
 std::string g_barber_look; // (the change asked about; its outfit's name: g_barber_outfit)
 std::string g_barber_outfit;
 
-void schedule(U16 character, U64 wait)
+void schedule(U16 character, U64 wait, bool retry = false)
 {
+    if (!retry) g_follow_tries = 0; // (a new attempt: its own tries)
     g_follow_char = character, g_follow_at = GetTickCount64(), g_follow_wait = wait;
 }
 
@@ -178,16 +184,20 @@ void follow(U64 actor, U16 character)
     // (the loaded save's outfits first: right after a load the active set can still be the save before's, and its own
     // look went onto another save's character - 2026-11-18, slot 106 got slot 0's hairstyle)
     prepare_outfits();
-    const std::string live = read_look(actor);
-    if (live.empty()) { // (right after a character switch the game fills it in a little later)
-        static int tries = 0;
-        if (++tries <= 30) {
-            schedule(character, 1000);
+    std::string why;
+    bool none = false;
+    const std::string live = read_look(actor, &why, &none);
+    if (live.empty()) {
+        if (none) { // (never at a barber: nothing to read or change - said once per character)
+            static std::set<U16> told;
+            if (told.insert(character).second)
+                LOG("character look: character %u has no barber look yet (never at a barber) - left as it is", character);
             return;
         }
-        tries = 0;
-        std::string why;
-        read_look(actor, &why);
+        if (++g_follow_tries <= 30) { // (right after a character switch the game fills it in a little later)
+            schedule(character, 1000, true);
+            return;
+        }
         LOG("character look: can't read character %u's look - left as it is (%s)", character, why.c_str());
         return;
     }
@@ -324,11 +334,11 @@ U64 __fastcall ack_hook(U64 a, U64 b, U64 c, U64 d)
 
 bool charlook_on(const Outfit& o) { return o.char_look == 1 && o.look_snap.size() == kLookBytes; }
 
-std::string charlook_read()
+std::string charlook_read(bool* none)
 {
     U64 ctx[4] = {};
     const U64 actor = acquire_player(ctx);
-    std::string l = actor ? read_look(actor) : std::string();
+    std::string l = actor ? read_look(actor, nullptr, none) : std::string();
     if (ctx[0]) release_player(ctx);
     return l;
 }
@@ -494,18 +504,20 @@ void charlook_barber_answer(bool to_outfit)
     save_outfits();
 }
 
-bool charlook_take(Outfit& o, bool applied)
+LookTake charlook_take(Outfit& o, bool applied)
 {
     (void)applied;
-    if (!usable()) return false;
-    const std::string live = charlook_read();
+    if (!usable()) return LookTake::Unreadable;
+    bool none = false;
+    const std::string live = charlook_read(&none);
     if (live.empty()) {
-        LOG("character look: \"%s\": can't read the character's look - no snapshot", o.name.c_str());
-        return false;
+        LOG("character look: \"%s\": %s - no snapshot", o.name.c_str(),
+            none ? "the character has no barber look yet (never at a barber)" : "can't read the character's look");
+        return none ? LookTake::NoLook : LookTake::Unreadable;
     }
     o.look_snap = live, o.char_look = 1;
     LOG("character look: \"%s\": snapshot taken (%s)", o.name.c_str(), brief(live).c_str());
-    return true;
+    return LookTake::Taken;
 }
 
 void charlook_off(Outfit& o, bool applied)

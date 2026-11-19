@@ -439,8 +439,8 @@ void look_pressed(U64 self, U32 o)
     Outfit& out = g_outfits[o];
     const bool applied = anchor_outfit() == int(o);
     if (g_look_pick == 1) {
-        if (!charlook_take(out, applied)) {
-            notify(self, lang::t("toast.look_failed"));
+        if (const LookTake r = charlook_take(out, applied); r != LookTake::Taken) {
+            notify(self, lang::t(r == LookTake::NoLook ? "toast.look_none" : "toast.look_failed"));
             return;
         }
         notify(self, lang::f("toast.look_taken", {{"outfit", out.name}}));
