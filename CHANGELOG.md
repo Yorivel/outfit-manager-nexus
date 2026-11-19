@@ -2,6 +2,10 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
+## Unreleased
+
+- Fix: on the game update of 2026-11-19 (build 26776744) the outfit effect's particle budget wasn't found at start-up, so busy scenes could flicker while a glow played. Outfit Manager now checks the value when a glow starts instead of at start-up (the game sets it later), and searches once more at the first glow if the search at start-up found nothing.
+
 ## 0.8.2 (2026-11-18)
 
 - New: on controllers, the Outfit Arc has a Helmet entry right above No Outfit: letting go of L1 / LB on it, or pressing A / Cross, does what the helmet key does - your helmet comes off or goes on with its animation, and the Arc closes. Its name says what it does now, Hide Helmet or Show Helmet; its icon is the game's empty helmet slot. With mouse and keyboard there's no such entry: the helmet key does it. Thanks for the idea, Youseff2204!

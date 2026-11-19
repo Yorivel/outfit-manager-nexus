@@ -278,51 +278,67 @@ void glow_named(const Player& p, const std::vector<U32>& names) // the parts wit
 
 float g_budget_saved = -1.0f; // (UI thread)
 std::atomic<U64> g_budget_until{0};
-U64 g_budget_at = 0;          // (the value's address; found once)
+U64 g_budget_at = 0;          // (the value's address)
+bool g_budget_retried = false; // (searched again at the first glow, when the search at install found nothing)
 // gv_effect_totalParticleCountRatio: no code reads it by address (only through its object), so it is found as the game
-// registers it - `lea rdx, [name]` then `lea rcx, [object]` (2976 0x26850e, build 26480954 +0x2a190e); the value is
-// the object's float at +0x38. Searched once, at install.
-U64 find_budget()
+// registers it - `lea rdx, [name]` then `lea rcx, [object]` (2976 0x26850e, build 26480954 +0x2a190e, 20261119
+// +0x2a494e); the value is the object's float at +0x38. Searched at install, and once more at the first glow if that
+// found nothing (2026-11-19: on build 26776744 the install-time search came up empty in game, while the same search on
+// the running game later found it). Each page is searched under its own guard, so an unreadable page only skips itself.
+template <class Fn>
+U64 scan_pages(bool code, Fn&& at_page) // (calls at_page(bytes, size) on each 4 KB page of the code or data sections)
 {
     const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(g_base);
     const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(g_base + dos->e_lfanew);
     const IMAGE_SECTION_HEADER* sec = IMAGE_FIRST_SECTION(nt);
-    static const char kName[] = "gv_effect_totalParticleCountRatio";
-    U64 name = 0;
-    for (int i = 0; i < nt->FileHeader.NumberOfSections && !name; ++i) {
-        if (sec[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) continue;
-        const U8* b = reinterpret_cast<const U8*>(g_base + sec[i].VirtualAddress);
-        const size_t n = sec[i].Misc.VirtualSize;
-        __try {
-            for (size_t k = 0; k + sizeof kName <= n; ++k)
-                if (b[k] == 'g' && std::memcmp(b + k, kName, sizeof kName) == 0) { name = reinterpret_cast<U64>(b + k); break; }
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-        }
-    }
-    if (!name) return 0;
+    constexpr size_t kPage = 0x1000, kOverlap = 64; // (a match may cross into the next page)
     for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
-        if (!(sec[i].Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+        if (bool(sec[i].Characteristics & IMAGE_SCN_MEM_EXECUTE) != code) continue;
         const U8* b = reinterpret_cast<const U8*>(g_base + sec[i].VirtualAddress);
         const size_t n = sec[i].Misc.VirtualSize;
-        __try {
-            for (size_t k = 0; k + 14 <= n; ++k) {
-                if (b[k] != 0x48 || b[k + 1] != 0x8D || b[k + 2] != 0x15) continue;
-                const U64 at = reinterpret_cast<U64>(b + k);
-                if (at + 7 + *reinterpret_cast<const int*>(b + k + 3) != name) continue;
-                if (b[k + 7] != 0x48 || b[k + 8] != 0x8D || b[k + 9] != 0x0D) continue;
-                return at + 14 + *reinterpret_cast<const int*>(b + k + 10) + 0x38;
+        for (size_t p = 0; p < n; p += kPage) {
+            U64 hit = 0;
+            __try {
+                hit = at_page(b + p, std::min(kPage + kOverlap, n - p));
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
             }
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            if (hit) return hit;
         }
     }
     return 0;
 }
+U64 find_budget()
+{
+    static const char kName[] = "gv_effect_totalParticleCountRatio";
+    const U64 name = scan_pages(false, [](const U8* b, size_t n) -> U64 {
+        for (size_t k = 0; k + sizeof kName <= n; ++k)
+            if (b[k] == 'g' && std::memcmp(b + k, kName, sizeof kName) == 0) return reinterpret_cast<U64>(b + k);
+        return 0;
+    });
+    if (!name) return 0;
+    return scan_pages(true, [name](const U8* b, size_t n) -> U64 {
+        for (size_t k = 0; k + 14 <= n; ++k) {
+            if (b[k] != 0x48 || b[k + 1] != 0x8D || b[k + 2] != 0x15) continue;
+            const U64 at = reinterpret_cast<U64>(b + k);
+            if (at + 7 + *reinterpret_cast<const int*>(b + k + 3) != name) continue;
+            if (b[k + 7] != 0x48 || b[k + 8] != 0x8D || b[k + 9] != 0x0D) continue;
+            return at + 14 + *reinterpret_cast<const int*>(b + k + 10) + 0x38;
+        }
+        return 0;
+    });
+}
 void budget(bool raise)
 {
+    if (!g_budget_at && raise && !g_budget_retried) {
+        g_budget_retried = true;
+        g_budget_at = find_budget();
+        LOG("transition: particle budget %s at the first glow", g_budget_at ? "found" : "still not found");
+    }
     if (!g_budget_at) return;
     const U64 at = g_budget_at;
     float v = 0.0f;
-    if (!rd(at, v)) return;
+    // (the value is checked when it is used, not at install: the game may not have set it yet then)
+    if (!rd(at, v) || !(v > 0.0f && v < 100.0f)) return;
     if (raise) {
         if (g_budget_saved < 0.0f) g_budget_saved = v, wr<float>(at, v * 2.0f);
     } else if (g_budget_saved >= 0.0f) {
@@ -675,9 +691,9 @@ bool install_transition()
               MH_EnableHook(t) == MH_OK;
     g_budget_at = find_budget();
     float v = 0.0f;
-    if (g_budget_at && !(rd(g_budget_at, v) && v > 0.0f && v < 100.0f)) g_budget_at = 0; // (not a ratio: not that)
+    const bool set = g_budget_at && rd(g_budget_at, v) && v > 0.0f && v < 100.0f;
     LOG("transition: %s; particle budget %s", ok ? "ready" : "hook failed, the outfit effects are off",
-        g_budget_at ? "found" : "not found (busy scenes may flicker)");
+        set ? "found" : g_budget_at ? "found, not set yet (checked at each glow)" : "not found yet (searched again at the first glow)");
     if (!ok) g_faulted = true;
     return ok;
 }
