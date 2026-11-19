@@ -570,10 +570,10 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
         if (!h) { state += " no model part"; continue; }
         wanted.insert(h);
         bool shown = p.look == kLookShown || (p.look == kLookCombat && in_battle) || (p.look == kLookPeace && !in_battle);
-        // (the worn Visione in use - a memory read through it, its own gimmick's effect on: sound.cpp - shows meanwhile, as
-        // the Visione the game puts on for a memory over another helmet does)
+        // (a memory read through the worn Visione: shown from its take-on to its take-off, as the Visione the game puts on
+        // for a memory over another helmet - arc.cpp)
         if (!shown && p.slot == kHelmetSlot && key != 0xFFFF && inv == player_inventory() && pid_of(key) == kPidVisionePropItem &&
-            visione_in_use())
+            memory_visione_shown())
             shown = true, state += " (the Visione in use)";
         bool case_shown = shown; // (a weapon's case: with its look, and while the weapon is drawn)
         bool drawn = false;
