@@ -115,7 +115,7 @@ FILES
   OutfitManager.log in the game's bin64 folder records what the plugin did; please attach it to bug reports.
 
 NOTES
-  Tested on Crimson Desert 1.0.0.3732 (with the Charting the Unknown expansion) and DMM 5.0.2.
+  Tested on Crimson Desert 2.05.01 (1.0.0.3732, with the Charting the Unknown expansion) and DMM 5.0.2.
   Controllers: tested on a DualSense, both directly and through Steam Input (Xbox layout).
   The mod ships none of the game's own files: the plugin adds the Outfits tab to the gear wheel while the game loads
   it, onto whatever copy it loads (the game's, or another mod's), and DMM merges the mod's CSS and texture list into
