@@ -256,6 +256,9 @@ peek.weapons_label = مجموعات الأسلحة
 peek.outfits = الأزياء
 peek.to_weapons = مجموعات الأسلحة
 peek.to_outfits = تبديل
+peek.helmet_label = الخوذة
+peek.helmet_hide = إخفاء الخوذة
+peek.helmet_show = إظهار الخوذة
 toast.released = نُزع "{outfit}": تبقى معداتك عليك، وإعدادات الظهور الخاصة به متوقفة حتى تحمّل زيًا أو تحفظه
 
 # next version: weapon sets, underwear

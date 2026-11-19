@@ -245,6 +245,9 @@ peek.weapons_label = 무기 세트
 peek.outfits = 의상
 peek.to_weapons = 무기 세트
 peek.to_outfits = 전환
+peek.helmet_label = 투구
+peek.helmet_hide = 투구 숨기기
+peek.helmet_show = 투구 표시
 toast.released = '{outfit}' 해제됨: 장비는 그대로이며, 의상을 불러오거나 저장할 때까지 표시 설정이 꺼집니다
 
 # next version: weapon sets, underwear

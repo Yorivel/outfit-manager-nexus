@@ -245,6 +245,9 @@ peek.weapons_label = 武器套组
 peek.outfits = 套装
 peek.to_weapons = 武器套组
 peek.to_outfits = 切换
+peek.helmet_label = 头盔
+peek.helmet_hide = 隐藏头盔
+peek.helmet_show = 显示头盔
 toast.released = 已卸下“{outfit}”：装备保持穿戴，在你加载或保存套装前，其显示设置处于关闭状态
 
 # next version: weapon sets, underwear

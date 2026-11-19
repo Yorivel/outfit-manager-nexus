@@ -262,6 +262,9 @@ peek.weapons_label = НАБОРЫ ОРУЖИЯ
 peek.outfits = Наряды
 peek.to_weapons = Наборы оружия
 peek.to_outfits = Переключить
+peek.helmet_label = ШЛЕМ
+peek.helmet_hide = Скрыть шлем
+peek.helmet_show = Показать шлем
 toast.released = «{outfit}» снят: снаряжение остаётся на вас, его настройки видимости отключены, пока вы не загрузите или не сохраните наряд
 
 # next version: weapon sets, underwear

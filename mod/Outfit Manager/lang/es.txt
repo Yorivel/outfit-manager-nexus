@@ -248,6 +248,9 @@ peek.weapons_label = JUEGOS DE ARMAS
 peek.outfits = Atuendos
 peek.to_weapons = Juegos de armas
 peek.to_outfits = Cambiar
+peek.helmet_label = CASCO
+peek.helmet_hide = Ocultar casco
+peek.helmet_show = Mostrar casco
 toast.released = "{outfit}" quitado: tu equipo se queda puesto y sus ajustes de visibilidad se desactivan hasta que cargues o guardes un atuendo
 
 # next version: weapon sets, underwear

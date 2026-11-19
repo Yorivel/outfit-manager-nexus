@@ -248,6 +248,9 @@ peek.weapons_label = JEUX D'ARMES
 peek.outfits = Tenues
 peek.to_weapons = Jeux d'armes
 peek.to_outfits = Changer
+peek.helmet_label = CASQUE
+peek.helmet_hide = Masquer le casque
+peek.helmet_show = Afficher le casque
 toast.released = « {outfit} » retirée : votre équipement reste porté, ses réglages de visibilité sont désactivés jusqu'à ce que vous chargiez ou enregistriez une tenue
 
 # next version: weapon sets, underwear

@@ -248,6 +248,9 @@ peek.weapons_label = SİLAH SETLERİ
 peek.outfits = Kıyafetler
 peek.to_weapons = Silah Setleri
 peek.to_outfits = Değiştir
+peek.helmet_label = MİĞFER
+peek.helmet_hide = Miğferi gizle
+peek.helmet_show = Miğferi göster
 toast.released = "{outfit}" çıkarıldı: ekipmanın üstünde kalır, bir kıyafet yükleyene ya da kaydedene kadar görünürlük ayarları kapalıdır
 
 # next version: weapon sets, underwear

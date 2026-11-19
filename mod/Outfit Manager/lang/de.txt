@@ -248,6 +248,9 @@ peek.weapons_label = WAFFENSETS
 peek.outfits = Outfits
 peek.to_weapons = Waffensets
 peek.to_outfits = Wechseln
+peek.helmet_label = HELM
+peek.helmet_hide = Helm ausblenden
+peek.helmet_show = Helm einblenden
 toast.released = „{outfit}“ abgelegt: deine Ausrüstung bleibt an, seine Sichtbarkeitseinstellungen sind aus, bis du ein Outfit lädst oder speicherst
 
 # next version: weapon sets, underwear

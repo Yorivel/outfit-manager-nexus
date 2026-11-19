@@ -245,6 +245,9 @@ peek.weapons_label = 武器セット
 peek.outfits = 衣装
 peek.to_weapons = 武器セット
 peek.to_outfits = 切り替え
+peek.helmet_label = 兜
+peek.helmet_hide = 兜を非表示
+peek.helmet_show = 兜を表示
 toast.released = 「{outfit}」を外しました：装備はそのままで、衣装を読み込むか保存するまで表示設定はオフになります
 
 # next version: weapon sets, underwear
