@@ -232,6 +232,8 @@ const AnimHook kAnimHooks[] = {
 // failed install takes back what it had put in.
 bool anim_hooks(bool on)
 {
+    LARGE_INTEGER t0{}, t1{}, hz{};
+    QueryPerformanceCounter(&t0);
     for (size_t i = 0; i < std::size(kAnimHooks); ++i) {
         const AnimHook& h = kAnimHooks[i];
         if (h.dye && !g_dye_ok) continue;
@@ -250,6 +252,9 @@ bool anim_hooks(bool on)
     if (!on || !applied) // (switched off in one go: removing a disabled hook switches nothing)
         for (const AnimHook& h : kAnimHooks)
             if (!h.dye || g_dye_ok) MH_RemoveHook(reinterpret_cast<void*>(g_base + *h.rva));
+    QueryPerformanceCounter(&t1);
+    QueryPerformanceFrequency(&hz);
+    LOG("helmet animation: hooks %s in %.1f ms", on ? "in" : "out", 1000.0 * double(t1.QuadPart - t0.QuadPart) / double(hz.QuadPart));
     return !on || applied;
 }
 
