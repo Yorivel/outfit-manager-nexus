@@ -125,6 +125,7 @@ toast.no_weapons = 「{outfit}」儲存時沒有武器：覆蓋它即可加入�
 toast.look_taken = 「{outfit}」現在會帶上你目前的外觀
 toast.look_off = 「{outfit}」不再帶上外觀
 toast.look_failed = 無法讀取角色的外觀：未儲存任何內容
+toast.look_none = 此角色還沒有理髮店外觀：先去一次理髮店，再拍攝快照
 report.not_put_on = 「{outfit}」：無法裝備{piece}（另一部位佔用了欄位）
 report.not_taken = 「{outfit}」：無法從{who}處拿取{piece}
 report.select_none = "{outfit}": it holds no weapon to pick
@@ -244,6 +245,9 @@ peek.weapons_label = 武器套組
 peek.outfits = 套裝
 peek.to_weapons = 武器套組
 peek.to_outfits = 切換
+peek.helmet_label = 頭盔
+peek.helmet_hide = 隱藏頭盔
+peek.helmet_show = 顯示頭盔
 toast.released = 已卸下「{outfit}」：裝備保持穿戴，在你載入或儲存套裝前，其顯示設定處於關閉狀態
 
 # next version: weapon sets, underwear

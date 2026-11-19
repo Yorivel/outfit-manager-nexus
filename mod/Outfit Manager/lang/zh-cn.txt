@@ -125,6 +125,7 @@ toast.no_weapons = “{outfit}”保存时没有武器：覆盖它即可加入�
 toast.look_taken = “{outfit}”现在会带上你当前的外观
 toast.look_off = “{outfit}”不再带上外观
 toast.look_failed = 无法读取角色的外观：未保存任何内容
+toast.look_none = 该角色还没有理发店外观：先去一次理发店，再拍摄快照
 report.not_put_on = “{outfit}”：无法装备{piece}（另一部位占用了栏位）
 report.not_taken = “{outfit}”：无法从{who}处拿取{piece}
 report.select_none = "{outfit}": it holds no weapon to pick
@@ -244,6 +245,9 @@ peek.weapons_label = 武器套组
 peek.outfits = 套装
 peek.to_weapons = 武器套组
 peek.to_outfits = 切换
+peek.helmet_label = 头盔
+peek.helmet_hide = 隐藏头盔
+peek.helmet_show = 显示头盔
 toast.released = 已卸下“{outfit}”：装备保持穿戴，在你加载或保存套装前，其显示设置处于关闭状态
 
 # next version: weapon sets, underwear

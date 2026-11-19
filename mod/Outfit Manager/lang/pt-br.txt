@@ -128,6 +128,7 @@ toast.no_weapons = "{outfit}" foi salvo sem armas: substitua-o para adicioná-la
 toast.look_taken = "{outfit}" agora traz sua aparência atual
 toast.look_off = "{outfit}" não traz mais uma aparência
 toast.look_failed = Não foi possível ler a aparência do seu personagem: nada foi salvo
+toast.look_none = Este personagem ainda não tem uma aparência do barbeiro: visite um barbeiro uma vez e depois tire o retrato
 report.not_put_on = "{outfit}": não foi possível equipar {piece} (outra peça ocupa o espaço)
 report.not_taken = "{outfit}": não foi possível pegar {piece} de {who}
 report.select_none = "{outfit}": it holds no weapon to pick
@@ -247,6 +248,9 @@ peek.weapons_label = CONJUNTOS DE ARMAS
 peek.outfits = Trajes
 peek.to_weapons = Conjuntos de armas
 peek.to_outfits = Trocar
+peek.helmet_label = CAPACETE
+peek.helmet_hide = Esconder capacete
+peek.helmet_show = Mostrar capacete
 toast.released = "{outfit}" desequipado: seu equipamento continua, as configurações de visibilidade dele ficam desligadas até você carregar ou salvar um traje
 
 # next version: weapon sets, underwear

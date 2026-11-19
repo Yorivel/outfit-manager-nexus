@@ -191,6 +191,7 @@ toast.no_weapons = "{outfit}" was saved without weapons: Overwrite it to add the
 toast.look_taken = "{outfit}" now brings your current look
 toast.look_off = "{outfit}" no longer brings a look
 toast.look_failed = Your character's look couldn't be read: nothing was saved
+toast.look_none = This character has no barber look yet: visit a barber once, then take the snapshot
 report.not_put_on = "{outfit}": {piece} could not be put on (another piece holds its slot)
 report.not_taken = "{outfit}": {piece} could not be taken from {who}
 report.select_none = "{outfit}": it holds no weapon to pick

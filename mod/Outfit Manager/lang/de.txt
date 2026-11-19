@@ -128,6 +128,7 @@ toast.no_weapons = „{outfit}“ wurde ohne Waffen gespeichert: überschreibe e
 toast.look_taken = „{outfit}“ bringt jetzt dein aktuelles Aussehen mit
 toast.look_off = „{outfit}“ bringt kein Aussehen mehr mit
 toast.look_failed = Das Aussehen deines Charakters konnte nicht gelesen werden: nichts gespeichert
+toast.look_none = Dieser Charakter hat noch kein Aussehen vom Barbier: besuche einmal einen Barbier und nimm dann die Momentaufnahme
 report.not_put_on = „{outfit}“: {piece} konnte nicht angelegt werden (ein anderes Teil belegt seinen Platz)
 report.not_taken = „{outfit}“: {piece} konnte nicht von {who} genommen werden
 report.select_none = "{outfit}": it holds no weapon to pick
@@ -247,6 +248,9 @@ peek.weapons_label = WAFFENSETS
 peek.outfits = Outfits
 peek.to_weapons = Waffensets
 peek.to_outfits = Wechseln
+peek.helmet_label = HELM
+peek.helmet_hide = Helm ausblenden
+peek.helmet_show = Helm einblenden
 toast.released = „{outfit}“ abgelegt: deine Ausrüstung bleibt an, seine Sichtbarkeitseinstellungen sind aus, bis du ein Outfit lädst oder speicherst
 
 # next version: weapon sets, underwear

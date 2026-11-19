@@ -125,6 +125,7 @@ toast.no_weapons = '{outfit}'은(는) 무기 없이 저장되었습니다. 추�
 toast.look_taken = "{outfit}"이(가) 이제 현재 외모를 함께 적용합니다
 toast.look_off = "{outfit}"은(는) 더 이상 외모를 적용하지 않습니다
 toast.look_failed = 캐릭터의 외모를 읽을 수 없어 아무것도 저장하지 않았습니다
+toast.look_none = 이 캐릭터는 아직 이발소 외모가 없습니다. 이발소를 한 번 방문한 뒤 스냅샷을 찍으세요
 report.not_put_on = '{outfit}': {piece}을(를) 장착하지 못했습니다 (다른 부위가 슬롯을 차지함)
 report.not_taken = '{outfit}': {who}에게서 {piece}을(를) 가져오지 못했습니다
 report.select_none = "{outfit}": it holds no weapon to pick
@@ -244,6 +245,9 @@ peek.weapons_label = 무기 세트
 peek.outfits = 의상
 peek.to_weapons = 무기 세트
 peek.to_outfits = 전환
+peek.helmet_label = 투구
+peek.helmet_hide = 투구 숨기기
+peek.helmet_show = 투구 표시
 toast.released = '{outfit}' 해제됨: 장비는 그대로이며, 의상을 불러오거나 저장할 때까지 표시 설정이 꺼집니다
 
 # next version: weapon sets, underwear
