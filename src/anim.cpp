@@ -201,7 +201,7 @@ int* __fastcall ev_hook(U64 self, int* out, U64 data, U64 x, U64 ctx)
             const bool cue = take_off ? on == 0 : on != 0;
             LOG("helmet animation %08X: its helmet %s%s", g_want.load(), on ? "put on" : "taken off",
                 cue ? ": the moment" : "");
-            if (cue) g_cue = true;
+            if (cue) g_cue = true, helmet_post(); // (shown / hidden now, even with the HUD away)
             *out = 0;
             return out;
         }

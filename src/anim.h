@@ -18,5 +18,8 @@ enum class AnimOutcome { Running, Played, Failed };
 AnimOutcome anim_outcome();
 // (sleep.cpp's evaluator hook asks first: the evaluator can only be hooked once)
 bool anim_branch_passes(const U64* candidate);
+// (arc.cpp) The helmet's work now, on the game window's thread: its messages keep coming while a memory hides the HUD
+// and the HUD frames stop. Posted from the game's threads: the animation's moment, the worn Visione's effect.
+void helmet_post();
 
 } // namespace om

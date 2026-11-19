@@ -40,6 +40,7 @@
 #include "load.h"
 #include "looks.h"
 #include "log.h"
+#include "anim.h"
 #include <MinHook.h>
 #include <atomic>
 #include <cstring>
@@ -255,10 +256,10 @@ U64 __fastcall effsw_hook(U64 data, U64 res, U64 a3, U64 actor, U64 a5, U64 a6)
         const U64 comp = actor ? rp(rp(actor + kOffActorComp) + kOffHolderGimmick) : 0;
         const U32 me = g_player_id.load();
         if (st == kVisioneInUse && comp && me && rd(comp + kOffGimmickParent, parent) && parent == me) {
-            if (g_visione_comp.exchange(comp) != comp) g_visione_changed = true;
+            if (g_visione_comp.exchange(comp) != comp) g_visione_changed = true, helmet_post();
         } else if (st == kGimmickBack && comp) {
             U64 was = comp;
-            if (g_visione_comp.compare_exchange_strong(was, 0)) g_visione_changed = true;
+            if (g_visione_comp.compare_exchange_strong(was, 0)) g_visione_changed = true, helmet_post();
         }
     }
     if (data && rd(data + kOffSwitchEvent, ev) && (ev == kEvNearDetected || ev == kEvNearAllExit)) {

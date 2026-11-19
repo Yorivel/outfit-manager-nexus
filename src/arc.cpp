@@ -696,7 +696,7 @@ void mem_show(bool on, const char* why)
     LOG("helmet: the worn Visione %s%s", on ? "shown for the memory" : "hidden again", why);
     look_refresh();
 }
-void memory_visione_tick()
+void memory_visione_step()
 {
     const bool in_use = visione_in_use();
     switch (g_mem_visione) {
@@ -739,7 +739,31 @@ void memory_visione_tick()
     }
 }
 
-void helmet_tick() // (every HUD frame: a press's animation followed)
+// The helmet's work on the game window's thread (kWmHelmet), when that is the UI thread: a memory hides the HUD, and
+// with it the HUD frames that run helmet_tick - the worn Visione showed only after the memory (2026-11-19).
+extern std::atomic<HWND> g_game_hwnd; // (input.cpp)
+constexpr UINT kWmHelmet = WM_APP + 0x52;
+void helmet_post()
+{
+    if (HWND w = g_game_hwnd.load()) PostMessageW(w, kWmHelmet, 0, 0);
+}
+void helmet_tick();
+bool helmet_message()
+{
+    if (g_ui_thread && GetCurrentThreadId() == g_ui_thread) helmet_tick();
+    return true;
+}
+
+void memory_visione_tick() // (step by step until it rests: a memory over before the take-on was seen through takes it off now)
+{
+    for (int i = 0; i < 4; ++i) {
+        const MemVisione was = g_mem_visione;
+        memory_visione_step();
+        if (g_mem_visione == was) break;
+    }
+}
+
+void helmet_tick() // (every HUD frame, and kWmHelmet: a press's animation followed)
 {
     anim_tick();
     if (g_helmet_pend_char == kNoCharacter) {
