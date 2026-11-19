@@ -62,6 +62,7 @@ void helmet_set(U16 character, std::uint8_t pin);
 extern std::atomic<U32> g_helmet_pending;
 void record_helmet_for_save(Store& s);
 bool lantern_lit(); // (sound.cpp: the played character's lantern burns)
+bool visione_in_use(); // (sound.cpp: the Visione he wears is in use - a memory read through it)
 // present.cpp: a slot's piece taken off the game's presentation (model, physics, part rules) while it stays equipped
 bool present_on();
 void present_request(U64 inv, U16 slot, bool take_off);

@@ -7,9 +7,9 @@ namespace om {
 void anim_install();
 // Once per UI frame: the played character, the running animation's end.
 void anim_tick();
-// Starts the take-off (or take-on) animation with this helmet in his hand. False: it can't play now (hooks missing,
-// another one running, no character).
-bool anim_helmet_start(bool take_off, U16 helmet_key);
+// Starts the take-off (or take-on) animation with this helmet in his hand (its key; the item, for its dye). False: it
+// can't play now (hooks missing, another one running, no character).
+bool anim_helmet_start(bool take_off, U16 helmet_key, U64 helmet_item);
 // True once when the animation reaches the helmet (the hand lifts it off / puts it on): the moment to hide / show it.
 bool anim_cue();
 enum class AnimOutcome { Running, Played, Failed };

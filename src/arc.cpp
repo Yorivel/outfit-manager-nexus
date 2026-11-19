@@ -701,9 +701,10 @@ void helmet_press()
     prepare_outfits(); // (as the outfit hotkeys: a save just loaded is taken over, its pin decides)
     const HelmetPress plan = helmet_press_plan(ch);
     U16 key = 0xFFFF;
-    if (const U64 e = display_item(kHelmetSlot)) rd(e + 8, key);
+    const U64 e = display_item(kHelmetSlot);
+    if (e) rd(e + 8, key);
     // (mounted: none - the animation is on foot only, the game would get him off the horse for it)
-    if (plan.shown_before != plan.shown_after && key != 0xFFFF && !riding_mount() && anim_helmet_start(!plan.shown_after, key))
+    if (plan.shown_before != plan.shown_after && key != 0xFFFF && !riding_mount() && anim_helmet_start(!plan.shown_after, key, e))
         g_helmet_pend_char = ch, g_helmet_pend_pin = plan.pin, g_helmet_pending = U32(ch) << 8 | plan.pin;
     else
         helmet_apply(ch, plan.pin, "");

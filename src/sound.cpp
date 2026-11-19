@@ -236,11 +236,31 @@ constexpr U32 kEvNearAllExit = 0xCC908146;  // hashlittle("onlevelgimmickallexit
 // (the offsets: addrs.cpp, kOffSwitchEvent / kOffHolderGimmick / kOffGimmickParent, in the resolver)
 std::atomic<U32> g_player_id{0};            // (actor +0x60 of the played character)
 std::atomic<bool> g_near_changed{false};
+// The worn Visione in use (2026-11-19): a memory read through a Visione he already wears plays no take-on (nothing is put
+// on the helmet slot for OM to see) - he touches it, and the Visione's own gimmick (gimmick_equip_visione, docked to him)
+// switches its effect on: an EffectSwitch whose data names, 4 bytes before its event, the Visione's state 0x31B02410
+// (only in that gimmick's chart). As the memory ends the same gimmick switches to 0x150B14D0 (the equipment gimmicks'
+// common one). Seen in play, with and without the lantern: one burst of three at each end. While it is on, a hidden
+// Visione shows, as the one the game puts on over another helmet does (looks.cpp).
+constexpr U32 kVisioneInUse = 0x31B02410, kGimmickBack = 0x150B14D0;
+std::atomic<U64> g_visione_comp{0}; // (his Visione's gimmick component while its effect is on, else 0)
+std::atomic<bool> g_visione_changed{false};
+bool visione_in_use() { return g_visione_comp.load() != 0; }
 using EffSwFn = U64(__fastcall*)(U64, U64, U64, U64, U64, U64);
 EffSwFn g_effsw_orig = nullptr;
 U64 __fastcall effsw_hook(U64 data, U64 res, U64 a3, U64 actor, U64 a5, U64 a6)
 {
-    U32 ev = 0, parent = 0;
+    U32 ev = 0, parent = 0, st = 0;
+    if (data && rd(data + kOffSwitchEvent - 4, st) && (st == kVisioneInUse || st == kGimmickBack)) {
+        const U64 comp = actor ? rp(rp(actor + kOffActorComp) + kOffHolderGimmick) : 0;
+        const U32 me = g_player_id.load();
+        if (st == kVisioneInUse && comp && me && rd(comp + kOffGimmickParent, parent) && parent == me) {
+            if (g_visione_comp.exchange(comp) != comp) g_visione_changed = true;
+        } else if (st == kGimmickBack && comp) {
+            U64 was = comp;
+            if (g_visione_comp.compare_exchange_strong(was, 0)) g_visione_changed = true;
+        }
+    }
     if (data && rd(data + kOffSwitchEvent, ev) && (ev == kEvNearDetected || ev == kEvNearAllExit)) {
         const U64 comp = actor ? rp(rp(actor + kOffActorComp) + kOffHolderGimmick) : 0;
         const U32 me = g_player_id.load();
@@ -346,7 +366,21 @@ void sound_tick()
         }
         { // the fragment pulse: whose lantern counts (a new character drops it), still docked to him (else it is over)
             const U32 id = actor ? r32(actor + 0x60) : 0;
-            if (g_player_id.exchange(id) != id && g_near_comp.exchange(0)) g_near_changed = true;
+            if (g_player_id.exchange(id) != id) {
+                if (g_near_comp.exchange(0)) g_near_changed = true;
+                if (g_visione_comp.exchange(0)) g_visione_changed = true;
+            }
+            if (const U64 vc = g_visione_comp.load()) { // (no longer docked to him - taken off, another character: over)
+                U32 parent = 0;
+                U64 was = vc;
+                if ((!rd(vc + kOffGimmickParent, parent) || parent != id) && g_visione_comp.compare_exchange_strong(was, 0))
+                    g_visione_changed = true;
+            }
+            if (g_visione_changed.exchange(false)) {
+                const bool on = g_visione_comp.load() != 0;
+                LOG("sounds: his Visione %s", on ? "is in use: it shows" : "is no longer in use: its look decides again");
+                look_refresh();
+            }
             if (const U64 nc = g_near_comp.load()) {
                 U32 parent = 0;
                 if ((!rd(nc + kOffGimmickParent, parent) || parent != id) && g_near_comp.exchange(0)) g_near_changed = true;

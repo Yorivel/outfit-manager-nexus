@@ -185,6 +185,11 @@ U64 kRvaSetVisualEquipEv = 0x7d5ce0;  // its slot 1: the frame event run (this, 
                                       // put on / taken off an equip slot mid-animation (anim.cpp)
 U64 kRvaItemCharges = 0x266e420;      // (item data*, ...): an item's charges now, recharged over time - divides by its
                                       // recharge time; its kRvaItemInfo call is within kItemChargesSize (anim.cpp)
+U64 kRvaBagFind = 0x236a410;          // a bag's find (bag, x, permanent id holder*, bag kind) -> u16 index, 0xFFFF none (1.0.0.3732;
+                                      // anim.cpp: the hand prop's lookup)
+U64 kRvaPropBuild = 0xb9e750;         // in the build of the helmet animations' hand prop (the drawn one of the two): its
+                                      // item info call for the bag lookup returns at +kPropInfoRet, the lookup itself at
+                                      // +kPropFindRet (1.0.0.3732; anim.cpp)
 U64 kRvaCharCtrlVt = 0x59c1660;       // ClientCharacterControlActorComponent
 U64 kRvaCtrlAck = 0x976730;           // ClientCharacterControlActorComponent slot 43: the server's start-action
                                       // acknowledgement applied (comp, ctx*, records[2]*, x) -> int* (anim.cpp)

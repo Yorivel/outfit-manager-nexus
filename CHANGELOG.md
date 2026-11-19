@@ -2,6 +2,12 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
+## Unreleased
+
+- Fix: the helmet in Kliff's hand during the helmet animations keeps its dye. It showed its original colours until it was back on his head; the same went for a worn Visione.
+- Fix: viewing a memory while wearing a hidden Visione now shows it while the memory plays. The game plays no take-on then (Kliff only touches the Visione he wears), so Outfit Manager didn't notice and kept it hidden; it now follows the Visione's own effect, which switches on for the memory and off once it ends.
+- Technical: the hand prop the game draws comes from a Visione it looks up in the bag. With the worn helmet's info that lookup searched for the helmet, found nothing and built an undyed one; it now searches with the Visione's own info, and the item it gets is the worn helmet (when the bag holds no Visione, the lookup is answered as found and the worn helmet is handed over all the same). The game's other prop, never seen, is left alone: made the helmet too, its shadow fell on his face. New addresses: the bag lookup and the prop build's call site (the item at a bag index was already known). The worn Visione's use: an EffectSwitch from the gimmick docked to him naming the Visione's state 0x31B02410 (gimmick_equip_visione) starts it; the same gimmick's 0x150B14D0 ends it.
+
 ## 0.8.3 (2026-11-19)
 
 - Works on the game update of 2026-11-19 (1.0.0.3732): every game address found again and checked; the game's code that Outfit Manager calls is unchanged apart from two internals that don't affect it.

@@ -15,8 +15,15 @@
 //    helmet slot as a visual item: some 30 call sites (the equipment component, a frame event, a bag scan, logged
 //    2026-11-13) all need the helmet - except the item's charges (kRvaItemCharges): the Visione's recharge, divided by
 //    a recharge time a helmet's info doesn't have (a crash with the Plate Helm of the Shadows).
+//  - Its colours: a dye lives on the item itself (item +0x78: a part table, one colour per dyed part - seen to change
+//    with a dye, 2026-11-19), not in its info. The game builds two props, each from a Visione it looks up in the bag
+//    (kRvaBagFind, then the item there, kRvaBagItem); only the second (kRvaPropBuild) is drawn - the first, made
+//    the helmet too, cast its shadow on his face. With the helmet's info that lookup searched the bag for the worn
+//    helmet, found nothing and built an undyed one: it now asks with the Visione's own info, and the item it gets is
+//    the worn helmet - its model and its dye. When the bag holds no Visione (the worn helmet is the Visione itself),
+//    the lookup is answered as found: the index only goes to the item call, which hands over the worn helmet.
 // The caller (the helmet key, arc.cpp) hides / shows the helmet when the state is left (anim_outcome).
-// The four hooks are in place only while an animation is asked for or plays (anim_helmet_start .. anim_outcome): the
+// The hooks (four, six with the bag functions) are in place only while an animation is asked for or plays (anim_helmet_start .. anim_outcome): the
 // item info lookup is the iteminfo table's getter, which other mods find by its bytes (Master Looter's table scan
 // missed both tables with OM's hook over it, 2026-11-15), and the other three are game code others may scan as well.
 // Created each time from the bytes there then (another mod's hook over the same function stays chained) and removed
@@ -60,6 +67,9 @@ std::atomic<U64> g_asked_at{0}, g_started_at{0};
 std::atomic<bool> g_seen{false};         // (the upper layer was in the state)
 std::atomic<int> g_outcome{0};           // (AnimOutcome once kEnded)
 std::atomic<U16> g_prop_from{0xFFFF}, g_prop_to{0xFFFF};
+std::atomic<U64> g_prop_item{0};         // the worn helmet (its dye): the drawn prop's item
+bool g_dye_ok = false;                    // (the bag functions found: the prop gets the helmet's dye)
+thread_local U64 t_prop_bag = 0;          // (the drawn prop's lookup just answered: its next item call is ours)
 std::atomic<bool> g_injecting{false};
 thread_local bool t_inject = false;
 
@@ -136,9 +146,37 @@ U64 __fastcall info_hook(const U16* key)
     if ((p == kRequested || p == kPlaying) && key && *key == g_prop_from.load()) {
         const U16 to = g_prop_to.load();
         const U64 from = reinterpret_cast<U64>(_ReturnAddress()) - g_base;
-        if (to != 0xFFFF && from - kRvaItemCharges >= kItemChargesSize) return g_info_orig(&to);
+        // (the drawn prop's bag lookup asks the Visione's own info: where to look, for what)
+        const bool lookup = g_dye_ok && from == kRvaPropBuild + kPropInfoRet;
+        if (to != 0xFFFF && from - kRvaItemCharges >= kItemChargesSize && !lookup) return g_info_orig(&to);
     }
     return g_info_orig(key);
+}
+
+using BagFindFn = U64(__fastcall*)(U64, U64, U64, U64, U64, U64, U64, U64);
+BagFindFn g_bagfind_orig = nullptr;
+U64 __fastcall bagfind_hook(U64 bag, U64 a2, U64 id_holder, U64 kind, U64 a5, U64 a6, U64 a7, U64 a8)
+{
+    U64 r = g_bagfind_orig(bag, a2, id_holder, kind, a5, a6, a7, a8);
+    const int p = g_phase.load();
+    U32 id = 0;
+    if ((p == kRequested || p == kPlaying) && reinterpret_cast<U64>(_ReturnAddress()) - g_base == kRvaPropBuild + kPropFindRet &&
+        rd(id_holder, id) && id == kPidVisionePropItem && plausible(g_prop_item.load())) {
+        if (U16(r) == 0xFFFF) r = (r & ~0xFFFFull); // (none in the bag: found at 0 - the item call hands over the helmet)
+        t_prop_bag = bag;
+    }
+    return r;
+}
+using BagItemFn = U64(__fastcall*)(U64, U64, U64, U64);
+BagItemFn g_bagitem_orig = nullptr;
+U64 __fastcall bagitem_hook(U64 bag, U64 index, U64 a3, U64 a4)
+{
+    const U64 r = g_bagitem_orig(bag, index, a3, a4);
+    if (!t_prop_bag) return r;
+    const bool ours = bag == t_prop_bag;
+    t_prop_bag = 0;
+    const U64 item = g_prop_item.load();
+    return ours && plausible(item) ? item : r;
 }
 
 // The animation's own moment for the helmet (ClientFrameEventSetVisualEquipItem, kRvaSetVisualEquipEv: this, int* out,
@@ -179,30 +217,31 @@ bool anim_branch_passes(const U64* candidate)
     return t_inject && candidate && rd(reinterpret_cast<U64>(candidate), b) && b == reinterpret_cast<U64>(g_branch);
 }
 
-struct AnimHook { const U64* rva; void* fn; void** orig; };
+struct AnimHook { const U64* rva; void* fn; void** orig; bool dye = false; }; // (dye: only with the bag functions)
 const AnimHook kAnimHooks[] = {
     {&kRvaBranchTry, reinterpret_cast<void*>(&try_hook), reinterpret_cast<void**>(&g_try_orig)},
     {&kRvaCtrlAck, reinterpret_cast<void*>(&ack_hook), reinterpret_cast<void**>(&g_ack_orig)},
     {&kRvaItemInfo, reinterpret_cast<void*>(&info_hook), reinterpret_cast<void**>(&g_info_orig)},
     {&kRvaSetVisualEquipEv, reinterpret_cast<void*>(&ev_hook), reinterpret_cast<void**>(&g_ev_orig)},
+    {&kRvaBagFind, reinterpret_cast<void*>(&bagfind_hook), reinterpret_cast<void**>(&g_bagfind_orig), true},
+    {&kRvaBagItem, reinterpret_cast<void*>(&bagitem_hook), reinterpret_cast<void**>(&g_bagitem_orig), true},
 };
 
 // Puts the animation's hooks in place (on) or takes them away. A failed install takes back what it had put in.
 bool anim_hooks(bool on)
 {
-    size_t done = 0;
-    for (const auto& h : kAnimHooks) {
+    for (size_t i = 0; i < std::size(kAnimHooks); ++i) {
+        const AnimHook& h = kAnimHooks[i];
+        if (h.dye && !g_dye_ok) continue;
         void* t = reinterpret_cast<void*>(g_base + *h.rva);
-        if (on) {
-            if (MH_CreateHook(t, h.fn, h.orig) != MH_OK || MH_EnableHook(t) != MH_OK) {
-                MH_RemoveHook(t);
-                LOG("helmet animation: hook at +%llX failed", *h.rva);
-                for (size_t i = 0; i < done; ++i) MH_RemoveHook(reinterpret_cast<void*>(g_base + *kAnimHooks[i].rva));
-                return false;
-            }
-            ++done;
-        } else {
+        if (!on) {
             MH_RemoveHook(t);
+        } else if (MH_CreateHook(t, h.fn, h.orig) != MH_OK || MH_EnableHook(t) != MH_OK) {
+            MH_RemoveHook(t);
+            LOG("helmet animation: hook at +%llX failed", *h.rva);
+            for (size_t j = 0; j < i; ++j) // (the ones put in before it; one never put in just isn't found)
+                MH_RemoveHook(reinterpret_cast<void*>(g_base + *kAnimHooks[j].rva));
+            return false;
         }
     }
     return true;
@@ -215,7 +254,8 @@ void anim_install()
         return;
     }
     g_ok = true;
-    LOG("helmet animations: on (hooked only while one plays)");
+    g_dye_ok = have({kRvaBagFind, kRvaBagItem, kRvaPropBuild});
+    LOG("helmet animations: on (hooked only while one plays)%s", g_dye_ok ? "" : "; the bag functions weren't found: the helmet in the hand shows without its dye");
 }
 
 void anim_tick()
@@ -252,13 +292,14 @@ void anim_tick()
     }
 }
 
-bool anim_helmet_start(bool take_off, U16 helmet_key)
+bool anim_helmet_start(bool take_off, U16 helmet_key, U64 helmet_item)
 {
     if (!g_ok.load() || !g_player_id.load() || g_phase.load() != kIdle) return false;
     if (!anim_hooks(true)) return false;
     static const U16 visione = key_of_pid(kPidVisionePropItem);
     g_prop_from = visione;
     g_prop_to = helmet_key;
+    g_prop_item = helmet_item;
     g_want = take_off ? kStateTakeOff : kStateTakeOn;
     g_cue = false;
     g_asked_at = GetTickCount64();
