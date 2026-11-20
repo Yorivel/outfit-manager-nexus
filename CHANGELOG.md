@@ -2,7 +2,7 @@
 
 Outfit Manager for Crimson Desert. Downloads: [Nexus Mods](https://www.nexusmods.com/crimsondesert/mods/4029) or this repository's [releases](https://github.com/Yorivel/outfit-manager-nexus/releases).
 
-## Unreleased
+## 0.8.4 (2026-11-20)
 
 - Fix: the helmet in Kliff's hand during the helmet animations keeps its dye. It showed its original colours until it was back on his head; the same went for a worn Visione.
 - Fix: viewing a memory while wearing a hidden Visione now looks the same as without one: Kliff takes the Visione on, the memory plays, and he takes it off again. The game plays no take-on when the Visione is already worn (Kliff only touches it), so Outfit Manager kept it hidden; it now plays the helmet animations itself, following the Visione's own effect, which switches on for the memory and off once it ends. Your helmet's visibility setting stays as it is. On a mount it simply shows for the memory. In a very short memory the Visione can appear only near its end: the take-on takes about three seconds (#57).
