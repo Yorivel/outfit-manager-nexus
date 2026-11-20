@@ -69,7 +69,10 @@ std::atomic<int> g_outcome{0};           // (AnimOutcome once kEnded)
 std::atomic<U16> g_prop_from{0xFFFF}, g_prop_to{0xFFFF};
 std::atomic<U64> g_prop_item{0};         // the worn helmet (its dye): the drawn prop's item
 bool g_dye_ok = false;                    // (the bag functions found: the prop gets the helmet's dye)
-thread_local U64 t_prop_bag = 0;          // (the drawn prop's lookup just answered: its next item call is ours)
+thread_local U64 t_prop_bag = 0;          // (the drawn prop's lookup just answered: its next item call is ours ..
+thread_local bool t_prop_lend = false;    // .. it found a Visione in the bag: that one is copied, with the helmet's dye lent)
+thread_local U64 t_lend_src = 0;          // (the bag Visione the prop's item copy is about to read)
+bool g_lend_off = false;                  // (the copy took the table's pointer instead of copying it: no lending)
 std::atomic<bool> g_injecting{false};
 thread_local bool t_inject = false;
 
@@ -162,6 +165,7 @@ U64 __fastcall bagfind_hook(U64 bag, U64 a2, U64 id_holder, U64 kind, U64 a5, U6
     U32 id = 0;
     if ((p == kRequested || p == kPlaying) && reinterpret_cast<U64>(_ReturnAddress()) - g_base == kRvaPropBuild + kPropFindRet &&
         rd(id_holder, id) && id == kPidVisionePropItem && plausible(g_prop_item.load())) {
+        t_prop_lend = U16(r) != 0xFFFF && !g_lend_off;
         if (U16(r) == 0xFFFF) r = (r & ~0xFFFFull); // (none in the bag: found at 0 - the item call hands over the helmet)
         t_prop_bag = bag;
     }
@@ -176,7 +180,42 @@ U64 __fastcall bagitem_hook(U64 bag, U64 index, U64 a3, U64 a4)
     const bool ours = bag == t_prop_bag;
     t_prop_bag = 0;
     const U64 item = g_prop_item.load();
-    return ours && plausible(item) ? item : r;
+    if (!ours || !plausible(item)) return r;
+    if (t_prop_lend && plausible(r)) { // (the bag's own Visione: a plain item - the worn helmet's ability stays out of the prop)
+        t_lend_src = r;
+        return r;
+    }
+    return item;
+}
+// The prop's item copy (kRvaItemCopy: to, from) reading the bag Visione: for that one copy the Visione carries the worn
+// helmet's dye table (item +0x78: pointer, count, capacity - 16 bytes), then gets its own back. Only the dye crosses: the
+// helmet itself, with an ability's gimmick (Helm of Knowledge, Poporin...), cast a shadow on his face before it was on.
+constexpr U64 kOffItemDye = 0x78;
+using ItemCopyHookFn = U64(__fastcall*)(U64, U64, U64, U64);
+ItemCopyHookFn g_itemcopy_orig = nullptr;
+U64 __fastcall itemcopy_hook(U64 to, U64 from, U64 a3, U64 a4)
+{
+    const U64 src = t_lend_src;
+    const U64 helmet = g_prop_item.load();
+    if (!src || from != src || !plausible(helmet)) return g_itemcopy_orig(to, from, a3, a4);
+    t_lend_src = 0;
+    U64 own[2] = {}, lent[2] = {}; // (pointer; count + capacity)
+    if (!rd(from + kOffItemDye, own[0]) || !rd(from + kOffItemDye + 8, own[1]) || !rd(helmet + kOffItemDye, lent[0]) ||
+        !rd(helmet + kOffItemDye + 8, lent[1]))
+        return g_itemcopy_orig(to, from, a3, a4);
+    std::memcpy(reinterpret_cast<void*>(from + kOffItemDye), lent, 16);
+    const U64 r = g_itemcopy_orig(to, from, a3, a4);
+    std::memcpy(reinterpret_cast<void*>(from + kOffItemDye), own, 16);
+    U64 got = 0;
+    rd(to + kOffItemDye, got);
+    LOG("helmet animation: dye lent to the prop's copy (the helmet's table %llX, %u entries; the copy's +0x78: %llX%s)", lent[0],
+        unsigned(lent[1] & 0xFFFFFFFF), got, got == lent[0] ? " - the same pointer" : got ? " - its own" : "");
+    if (got == lent[0] && lent[0]) { // (the pointer taken, not the table copied: undone)
+        std::memcpy(reinterpret_cast<void*>(to + kOffItemDye), own, 16);
+        g_lend_off = true;
+        LOG("helmet animation: the item copy keeps the dye table's pointer - no dye lent from now on");
+    }
+    return r;
 }
 
 // The animation's own moment for the helmet (ClientFrameEventSetVisualEquipItem, kRvaSetVisualEquipEv: this, int* out,
@@ -225,6 +264,7 @@ const AnimHook kAnimHooks[] = {
     {&kRvaSetVisualEquipEv, reinterpret_cast<void*>(&ev_hook), reinterpret_cast<void**>(&g_ev_orig)},
     {&kRvaBagFind, reinterpret_cast<void*>(&bagfind_hook), reinterpret_cast<void**>(&g_bagfind_orig), true},
     {&kRvaBagItem, reinterpret_cast<void*>(&bagitem_hook), reinterpret_cast<void**>(&g_bagitem_orig), true},
+    {&kRvaItemCopy, reinterpret_cast<void*>(&itemcopy_hook), reinterpret_cast<void**>(&g_itemcopy_orig), true},
 };
 
 // Puts the animation's hooks in place (on) or takes them away, all at once: MinHook freezes every game thread for each
@@ -265,7 +305,7 @@ void anim_install()
         return;
     }
     g_ok = true;
-    g_dye_ok = have({kRvaBagFind, kRvaBagItem, kRvaPropBuild});
+    g_dye_ok = have({kRvaBagFind, kRvaBagItem, kRvaPropBuild, kRvaItemCopy});
     if (g_dye_ok) { // (the prop build's two calls go where they should: its recipe pins where they are, not where they go)
         auto calls = [](U64 at, U64 to) {
             std::uint8_t op = 0;
