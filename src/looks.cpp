@@ -570,6 +570,11 @@ void look_sync(U64 inv, bool in_battle, bool swapped = false)
         if (!h) { state += " no model part"; continue; }
         wanted.insert(h);
         bool shown = p.look == kLookShown || (p.look == kLookCombat && in_battle) || (p.look == kLookPeace && !in_battle);
+        // (a memory read through the worn Visione: shown from its take-on to its take-off, as the Visione the game puts on
+        // for a memory over another helmet - arc.cpp)
+        if (!shown && p.slot == kHelmetSlot && key != 0xFFFF && inv == player_inventory() && pid_of(key) == kPidVisionePropItem &&
+            memory_visione_shown())
+            shown = true, state += " (the Visione in use)";
         bool case_shown = shown; // (a weapon's case: with its look, and while the weapon is drawn)
         bool drawn = false;
         // (a working part in use - the Tech Gloves' arm out - shows like a lit lantern, in any slot; parts.cpp)

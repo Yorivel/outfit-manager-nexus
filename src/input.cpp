@@ -23,6 +23,7 @@ WNDPROC g_game_wndproc = nullptr;
 std::atomic<HWND> g_game_hwnd{nullptr}; // (sleep.cpp posts kWmSleep to it: the window's messages keep coming while the
                                          // HUD is hidden, as in the sleep's fade)
 bool sleep_message(); // (sleep.cpp: kWmSleep handled)
+bool helmet_message(); // (arc.cpp: kWmHelmet - the helmet's work while the HUD is away)
 bool sleep_fx_timer(WPARAM id); // (sleep.cpp: its effect timer)
 
 // The wheel hook is in (the arc open): it alone counts the notches. The window and raw input routes then only keep
@@ -49,6 +50,7 @@ bool hotkey_held_now(U32 vk)
 LRESULT CALLBACK name_wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
 {
     if (m == WM_APP + 0x51 && sleep_message()) return 0; // (kWmSleep: a sleep began or ended)
+    if (m == WM_APP + 0x52 && helmet_message()) return 0; // (kWmHelmet: the helmet's moment, the Visione's use)
     if (m == WM_TIMER && sleep_fx_timer(wp)) return 0;
     if ((m == WM_KEYDOWN || m == WM_KEYUP || m == WM_SYSKEYDOWN || m == WM_SYSKEYUP) && hotkey_held_now(U32(wp)))
         return 0; // (an outfit's hotkey: its key does nothing else in play)

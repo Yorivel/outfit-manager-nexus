@@ -680,10 +680,96 @@ void helmet_apply(U16 c, std::uint8_t pin, const char* how)
     look_refresh();
 }
 
-void helmet_tick() // (every HUD frame: a press's animation followed)
+// A memory read through the worn Visione while its look hides it: the game plays no take-on then (he only touches the
+// Visione he wears), so Outfit Manager plays them, keyed on the Visione's own effect (sound.cpp's visione_in_use): its
+// take-on as the memory begins - shown once the hand has it on - and its take-off as it ends - hidden as the hand lifts
+// it off; the same as a memory without a Visione worn. The pin is left as it is. No animation possible (mounted, one
+// already playing): shown for the memory, hidden after.
+enum class MemVisione { Off, TakingOn, On, TakingOff };
+MemVisione g_mem_visione = MemVisione::Off;
+bool g_mem_shown = false;
+bool memory_visione_shown() { return g_mem_shown; }
+void mem_show(bool on, const char* why)
+{
+    if (g_mem_shown == on) return;
+    g_mem_shown = on;
+    LOG("helmet: the worn Visione %s%s", on ? "shown for the memory" : "hidden again", why);
+    look_refresh();
+}
+void memory_visione_step()
+{
+    const bool in_use = visione_in_use();
+    switch (g_mem_visione) {
+    case MemVisione::Off: {
+        if (!in_use) return;
+        const U16 ch = current_character();
+        U16 key = 0xFFFF;
+        const U64 e = display_item(kHelmetSlot);
+        if (e) rd(e + 8, key);
+        if (ch == kNoCharacter || key == 0xFFFF || pid_of(key) != kPidVisionePropItem || helmet_press_plan(ch).shown_before) return;
+        if (!riding_mount() && anim_helmet_start(false, key, e)) g_mem_visione = MemVisione::TakingOn;
+        else mem_show(true, " (no animation)"), g_mem_visione = MemVisione::On;
+        return;
+    }
+    case MemVisione::TakingOn: {
+        if (anim_cue()) mem_show(true, " (the hand is at it)");
+        const AnimOutcome o = anim_outcome();
+        if (o == AnimOutcome::Running) return;
+        mem_show(true, o == AnimOutcome::Played ? " (its animation is over)" : " (no animation)");
+        g_mem_visione = MemVisione::On;
+        return;
+    }
+    case MemVisione::On: {
+        if (in_use) return;
+        U16 key = 0xFFFF;
+        const U64 e = display_item(kHelmetSlot);
+        if (e) rd(e + 8, key);
+        if (g_mem_shown && key != 0xFFFF && !riding_mount() && anim_helmet_start(true, key, e)) g_mem_visione = MemVisione::TakingOff;
+        else mem_show(false, ""), g_mem_visione = MemVisione::Off;
+        return;
+    }
+    case MemVisione::TakingOff: {
+        if (anim_cue()) mem_show(false, " (the hand is at it)");
+        const AnimOutcome o = anim_outcome();
+        if (o == AnimOutcome::Running) return;
+        mem_show(false, o == AnimOutcome::Played ? " (its animation is over)" : " (no animation)");
+        g_mem_visione = MemVisione::Off;
+        return;
+    }
+    }
+}
+
+// The helmet's work on the game window's thread (kWmHelmet), when that is the UI thread: a memory hides the HUD, and
+// with it the HUD frames that run helmet_tick - the worn Visione showed only after the memory (2026-11-19).
+extern std::atomic<HWND> g_game_hwnd; // (input.cpp)
+constexpr UINT kWmHelmet = WM_APP + 0x52;
+void helmet_post()
+{
+    if (HWND w = g_game_hwnd.load()) PostMessageW(w, kWmHelmet, 0, 0);
+}
+void helmet_tick();
+bool helmet_message()
+{
+    if (g_ui_thread && GetCurrentThreadId() == g_ui_thread) helmet_tick();
+    return true;
+}
+
+void memory_visione_tick() // (step by step until it rests: a memory over before the take-on was seen through takes it off now)
+{
+    for (int i = 0; i < 4; ++i) {
+        const MemVisione was = g_mem_visione;
+        memory_visione_step();
+        if (g_mem_visione == was) break;
+    }
+}
+
+void helmet_tick() // (every HUD frame, and kWmHelmet: a press's animation followed)
 {
     anim_tick();
-    if (g_helmet_pend_char == kNoCharacter) return;
+    if (g_helmet_pend_char == kNoCharacter) {
+        memory_visione_tick();
+        return;
+    }
     if (!g_helmet_pend_done && anim_cue())
         helmet_apply(g_helmet_pend_char, g_helmet_pend_pin, " (the hand is at it)"), g_helmet_pend_done = true;
     const AnimOutcome o = anim_outcome();
@@ -701,9 +787,10 @@ void helmet_press()
     prepare_outfits(); // (as the outfit hotkeys: a save just loaded is taken over, its pin decides)
     const HelmetPress plan = helmet_press_plan(ch);
     U16 key = 0xFFFF;
-    if (const U64 e = display_item(kHelmetSlot)) rd(e + 8, key);
+    const U64 e = display_item(kHelmetSlot);
+    if (e) rd(e + 8, key);
     // (mounted: none - the animation is on foot only, the game would get him off the horse for it)
-    if (plan.shown_before != plan.shown_after && key != 0xFFFF && !riding_mount() && anim_helmet_start(!plan.shown_after, key))
+    if (plan.shown_before != plan.shown_after && key != 0xFFFF && !riding_mount() && anim_helmet_start(!plan.shown_after, key, e))
         g_helmet_pend_char = ch, g_helmet_pend_pin = plan.pin, g_helmet_pending = U32(ch) << 8 | plan.pin;
     else
         helmet_apply(ch, plan.pin, "");

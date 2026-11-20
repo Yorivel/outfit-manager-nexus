@@ -7,9 +7,9 @@ namespace om {
 void anim_install();
 // Once per UI frame: the played character, the running animation's end.
 void anim_tick();
-// Starts the take-off (or take-on) animation with this helmet in his hand. False: it can't play now (hooks missing,
-// another one running, no character).
-bool anim_helmet_start(bool take_off, U16 helmet_key);
+// Starts the take-off (or take-on) animation with this helmet in his hand (its key; the item, for its dye). False: it
+// can't play now (hooks missing, another one running, no character).
+bool anim_helmet_start(bool take_off, U16 helmet_key, U64 helmet_item);
 // True once when the animation reaches the helmet (the hand lifts it off / puts it on): the moment to hide / show it.
 bool anim_cue();
 enum class AnimOutcome { Running, Played, Failed };
@@ -18,5 +18,8 @@ enum class AnimOutcome { Running, Played, Failed };
 AnimOutcome anim_outcome();
 // (sleep.cpp's evaluator hook asks first: the evaluator can only be hooked once)
 bool anim_branch_passes(const U64* candidate);
+// (arc.cpp) The helmet's work now, on the game window's thread: its messages keep coming while a memory hides the HUD
+// and the HUD frames stop. Posted from the game's threads: the animation's moment, the worn Visione's effect.
+void helmet_post();
 
 } // namespace om

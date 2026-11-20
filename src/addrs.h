@@ -135,13 +135,15 @@ extern U64 kRvaHudVt;
 extern U64 kRvaSlotScript164;
 extern U64 kRvaBranchEval;
 extern U64 kRvaBranchTry, kRvaCtrlAck, kRvaCharCtrlVt, kRvaSetVisualEquipVt, kRvaSetVisualEquipEv, kRvaItemCharges;
+extern U64 kRvaBagFind, kRvaBagItem, kRvaPropBuild; // (kRvaBagItem: the item at a bag index, already resolved)
+constexpr U64 kPropInfoRet = 0xC, kPropFindRet = 0x3E; // (kRvaPropBuild: its item info call's / bag lookup's return)
 constexpr U64 kItemChargesSize = 0x9e; // (kRvaItemCharges' length)
 // the action chart component: its layers (+0x88, upper layer first) -> the state played (+0x10) -> its name hash (+0x18)
 constexpr U64 kOffChartLayers = 0x88, kOffLayerState = 0x10, kOffStateName = 0x18;
 constexpr U32 kPidVisionePropItem = 14510; // Marni_Devotee_PlateArmor_Helm: the helmet animations' hand prop
-extern U64 kRvaEffectSwitchVt, kRvaEffectSwitchRun, kRvaGimmickLightRun, kRvaGimmickCompSlot167, kRvaGimmickCompSlot169, kRvaEffectSwitchSlot2, kRvaHandlerRunCheck, kRvaSearchNearVt, kRvaSearchNearRun, kRvaSendGimEvVt,
+extern U64 kRvaEffectSwitchVt, kRvaEffectSwitchRun, kRvaGimmickLightRun, kRvaGimmickCompSlot167, kRvaGimmickCompSlot169, kRvaEffectSwitchSlot2, kRvaHandlerRunCheck, kRvaHandlerDataLoad, kRvaSearchNearVt, kRvaSearchNearRun, kRvaSendGimEvVt,
     kRvaSendGimEvRun, kRvaGimmickCompVt, kRvaGimmickCompLoad, kRvaGimmickCompSave;
-extern U64 kOffSwitchEvent, kOffHolderGimmick, kOffGimmickParent, kOffSceneObjPart, kRvaSceneObjInit;
+extern U64 kOffSwitchEvent, kOffSwitchState, kOffHolderGimmick, kOffGimmickParent, kOffSceneObjPart, kRvaSceneObjInit;
 extern U64 kRvaLanternLight, kRvaLanternDim, kRvaLanternCheck, kRvaGearSounds, kRvaGearSoundsFrom, kRvaCollideSound;
 extern U64 kRvaPlayRequest, kRvaEventLookup, kRvaEventPost, kRvaContactCopy, kRvaSceneObjVt;
 extern U64 kOffCompLantern, kOffLanternLit, kOffCompEffects, kOffEffectsSound, kOffSoundHandle, kOffHandleObject,
