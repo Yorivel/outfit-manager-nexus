@@ -234,15 +234,16 @@ bool lantern_lit() { return g_lantern_lit.load() || g_near_comp.load(); }
 // If an offset moves with a game update and cannot be found again, the watch stays off and the lantern follows its look.
 constexpr U32 kEvNearDetected = 0x9B28835C; // hashlittle("onlevelgimmickdetected", 0xC5EDE) - chart event names
 constexpr U32 kEvNearAllExit = 0xCC908146;  // hashlittle("onlevelgimmickallexit", 0xC5EDE)
-// (the offsets: addrs.cpp, kOffSwitchEvent / kOffHolderGimmick / kOffGimmickParent, in the resolver)
+// (the offsets: addrs.cpp, kOffSwitchEvent / kOffSwitchState / kOffHolderGimmick / kOffGimmickParent, in the resolver)
 std::atomic<U32> g_player_id{0};            // (actor +0x60 of the played character)
 std::atomic<bool> g_near_changed{false};
 // The worn Visione in use (2026-11-19): a memory read through a Visione he already wears plays no take-on (nothing is put
 // on the helmet slot for OM to see) - he touches it, and the Visione's own gimmick (gimmick_equip_visione, docked to him)
-// switches its effect on: an EffectSwitch whose data names, 4 bytes before its event, the Visione's state 0x31B02410
-// (only in that gimmick's chart). As the memory ends the same gimmick switches to 0x150B14D0 (the equipment gimmicks'
-// common one). Seen in play, with and without the lantern: one burst of three at each end. While it is on, a hidden
-// Visione shows, as the one the game puts on over another helmet does (looks.cpp).
+// switches its effect on: an EffectSwitch whose data names, in its state field (kOffSwitchState, the field before its
+// event), the Visione's state 0x31B02410 (only in that gimmick's chart). As the memory ends the same gimmick switches to
+// 0x150B14D0 (the equipment gimmicks' common one). Seen in play, with and without the lantern: one burst of three at each
+// end. While it is on, a hidden Visione shows, as the one the game puts on over another helmet does (looks.cpp). The state
+// offset unsure after a game update (kOffSwitchState 0): this watch stays off, the lantern's keeps working.
 constexpr U32 kVisioneInUse = 0x31B02410, kGimmickBack = 0x150B14D0;
 std::atomic<U64> g_visione_comp{0}; // (his Visione's gimmick component while its effect is on, else 0)
 std::atomic<bool> g_visione_changed{false};
@@ -252,7 +253,7 @@ EffSwFn g_effsw_orig = nullptr;
 U64 __fastcall effsw_hook(U64 data, U64 res, U64 a3, U64 actor, U64 a5, U64 a6)
 {
     U32 ev = 0, parent = 0, st = 0;
-    if (data && rd(data + kOffSwitchEvent - 4, st) && (st == kVisioneInUse || st == kGimmickBack)) {
+    if (data && kOffSwitchState && rd(data + kOffSwitchState, st) && (st == kVisioneInUse || st == kGimmickBack)) {
         const U64 comp = actor ? rp(rp(actor + kOffActorComp) + kOffHolderGimmick) : 0;
         const U32 me = g_player_id.load();
         if (st == kVisioneInUse && comp && me && rd(comp + kOffGimmickParent, parent) && parent == me) {
@@ -262,7 +263,7 @@ U64 __fastcall effsw_hook(U64 data, U64 res, U64 a3, U64 actor, U64 a5, U64 a6)
             if (g_visione_comp.compare_exchange_strong(was, 0)) g_visione_changed = true, helmet_post();
         }
     }
-    if (data && rd(data + kOffSwitchEvent, ev) && (ev == kEvNearDetected || ev == kEvNearAllExit)) {
+    if (data && kOffSwitchEvent && rd(data + kOffSwitchEvent, ev) && (ev == kEvNearDetected || ev == kEvNearAllExit)) {
         const U64 comp = actor ? rp(rp(actor + kOffActorComp) + kOffHolderGimmick) : 0;
         const U32 me = g_player_id.load();
         if (comp && me && rd(comp + kOffGimmickParent, parent) && parent == me) {
@@ -304,10 +305,16 @@ void sound_install()
                           MH_EnableHook(t) == MH_OK;
         if (!g_light_watched) LOG("sounds: the light action could not be watched (a fire near him shows a hidden lantern)");
     }
-    if (have({kRvaEffectSwitchRun}) && kOffSwitchEvent && kOffHolderGimmick && kOffGimmickParent) { // (the lantern's pulse near a memory fragment)
+    // (the lantern's pulse near a memory fragment: kOffSwitchEvent; the worn Visione's use: kOffSwitchState - either alone works)
+    if (have({kRvaEffectSwitchRun}) && (kOffSwitchEvent || kOffSwitchState) && kOffHolderGimmick && kOffGimmickParent) {
         void* t = reinterpret_cast<void*>(g_base + kRvaEffectSwitchRun);
         if (MH_CreateHook(t, reinterpret_cast<void*>(&effsw_hook), reinterpret_cast<void**>(&g_effsw_orig)) != MH_OK || MH_EnableHook(t) != MH_OK)
-            LOG("sounds: the lantern's fragment pulse could not be watched (a hidden lantern stays hidden near fragments)");
+            LOG("sounds: the gimmick effect switches could not be watched (a hidden lantern stays hidden near fragments, a hidden "
+                "Visione stays hidden for a memory read through it)");
+        else if (!kOffSwitchEvent)
+            LOG("sounds: the lantern's fragment pulse is not watched (its event offset is unsure)");
+        else if (!kOffSwitchState)
+            LOG("sounds: the worn Visione's use is not watched (its state offset is unsure)");
     }
     const bool post = hook_export(
         "?PostEvent@SoundEngine@AK@@YAII_KIP6AXW4AkCallbackType@@PEAUAkCallbackInfo@@@ZPEAXIPEAUAkExternalSourceInfo@@I@Z",

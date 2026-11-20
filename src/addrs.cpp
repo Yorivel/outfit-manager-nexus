@@ -392,7 +392,7 @@ void resolve_addresses()
                            // (not written, but what the game plays and shows follows them: off rather than wrong)
                            &kOffCompLantern, &kOffLanternLit, &kOffCompEffects, &kOffEffectsSound, &kOffSoundHandle,
                            &kOffHandleObject, &kOffContactBody, &kOffEventId, &kOffEventAlt, &kOffCompModel, &kOffModelScenes,
-                           &kOffSwitchEvent, &kOffHolderGimmick, &kOffGimmickParent, &kOffSceneObjPart,
+                           &kOffSwitchEvent, &kOffSwitchState, &kOffHolderGimmick, &kOffGimmickParent, &kOffSceneObjPart,
                            // (Visibility Extras calls game functions with them; their witnesses also hold the call shapes)
                            &kOffInvActor, &kOffPartsComp, &kOffPartsBodyArg, &kOffPartsBodyId, &kOffEquipListEntries,
                            &kOffEquipListCount, &kOffEquipEntrySize, &kOffEntryShownKey, &kOffEntryKey, &kOffPartsG,
@@ -431,6 +431,8 @@ U64 kRvaEffectSwitchRun = 0x2658390; // its slot 4: runs a gimmick chart's Effec
                                      // hooked (sound.cpp: the lantern's pulse near a memory fragment)
 U64 kRvaEffectSwitchSlot2 = 0x26581d0; // (its slot 2: a witness below slot 4, which is only a jump - places it)
 U64 kRvaHandlerRunCheck = 0x2572370; // (every handler's slot 7: runs it only if its event, data +kOffSwitchEvent, matches)
+U64 kRvaHandlerDataLoad = 0x2571f70; // (every handler data's common load - slot 2 -> the EffectBase load -> this: reads its
+                                     // fields from the chart, +kOffSwitchState straight before the event +kOffSwitchEvent)
 U64 kRvaSearchNearVt = 0x5db2e20;    // GimmickEventHandlerData_SearchNearLevelGimmick
 U64 kRvaSearchNearRun = 0x26670f0;   // (its slot 4: actor +kOffActorComp -> +kOffHolderGimmick, the gimmick component)
 U64 kRvaSendGimEvVt = 0x5df7fb0;     // GimmickEventHandlerData_SendGimmickEvent
@@ -444,6 +446,7 @@ U64 kRvaGimmickCompSlot169 = 0xa1ad00;
 U64 kRvaGimmickCompLoad = 0x23314a0; // (its slots 11 / 25: read / write its fields, +kOffGimmickParent among them)
 U64 kRvaGimmickCompSave = 0x23305c0;
 U64 kOffSwitchEvent = 0x44;          // gimmick event handler data -> u32 the chart event that runs it (name hash)
+U64 kOffSwitchState = 0x40;          // gimmick event handler data -> u32 the gimmick state it belongs to (name hash)
 U64 kOffHolderGimmick = 0x30;        // actor component -> the gimmick component
 U64 kOffGimmickParent = 0x288;       // gimmick component -> u32 its docking parent's actor id (actor +0x60)
 U64 kRvaGearSounds = 0xbc1cb0;       // (sets the character's armorkey / material_game: its sound handle +0x70, number +0x18)
